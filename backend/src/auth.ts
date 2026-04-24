@@ -441,18 +441,30 @@ export const createAuthRouter = (deps: CreateAuthRouterDeps): express.Router => 
   const getRefreshTokenExpiresAt = (): Date =>
     resolveExpiresAt(config.jwtRefreshExpiresIn, 7 * 24 * 60 * 60 * 1000);
 
-  registerOidcRoutes({
-    router,
-    prisma,
-    ensureAuthEnabled,
-    ensureSystemConfig,
-    sanitizeText,
-    generateTokens,
-    setAuthCookies,
-    getRefreshTokenExpiresAt,
-    isMissingRefreshTokenTableError,
-    config,
-  });
+  if (config.authMode === "proxy") {
+    const disabledRoutes = ["/register", "/login", "/refresh", "/onboarding-choice", "/auth-enabled"];
+    router.use((req, res, next) => {
+      if (disabledRoutes.includes(req.path)) {
+        return res.status(404).json({ error: "Not available in proxy auth mode" });
+      }
+      next();
+    });
+  }
+
+  if (config.authMode !== "proxy") {
+    registerOidcRoutes({
+      router,
+      prisma,
+      ensureAuthEnabled,
+      ensureSystemConfig,
+      sanitizeText,
+      generateTokens,
+      setAuthCookies,
+      getRefreshTokenExpiresAt,
+      isMissingRefreshTokenTableError,
+      config,
+    });
+  }
 
   registerCoreRoutes({
     router,

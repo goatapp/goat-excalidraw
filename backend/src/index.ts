@@ -273,28 +273,6 @@ app.use(
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
-app.use((req, res, next) => {
-  const requestId = req.headers["x-request-id"] || "unknown";
-  const contentLength = req.headers["content-length"];
-  const userEmail = req.user?.email || "anonymous";
-  
-  if (contentLength) {
-    const sizeInMB = parseInt(contentLength, 10) / 1024 / 1024;
-    if (sizeInMB > 10) {
-      console.log(
-        `[LARGE REQUEST] ${req.method} ${req.path} - ${sizeInMB.toFixed(
-          2
-        )}MB - User: ${userEmail} - RequestID: ${requestId}`
-      );
-    }
-  }
-  
-  console.log(
-    `[REQUEST] ${req.method} ${req.path} - User: ${userEmail} - IP: ${req.ip} - RequestID: ${requestId}`
-  );
-  
-  next();
-});
 
 const RATE_LIMIT_WINDOW = 15 * 60 * 1000;
 
@@ -314,6 +292,36 @@ const generalRateLimiter = rateLimit({
 });
 
 app.use(generalRateLimiter);
+
+const FRONTEND_DIR = path.resolve(__dirname, "../public");
+const FRONTEND_INDEX = path.join(FRONTEND_DIR, "index.html");
+const hasFrontend = fs.existsSync(FRONTEND_DIR) && fs.existsSync(FRONTEND_INDEX);
+
+if (hasFrontend) {
+  app.use(express.static(FRONTEND_DIR, { index: false }));
+
+  const API_PATH_PREFIXES = [
+    "/api", "/auth", "/health", "/csrf-token", "/socket.io/",
+    "/drawings", "/collections", "/library", "/import", "/export",
+    "/system", "/share", "/admin", "/users",
+  ];
+
+  app.use((req, res, next) => {
+    if (req.method !== "GET") return next();
+    if (API_PATH_PREFIXES.some((p) => req.url === p || req.url.startsWith(p + "/"))) {
+      return next();
+    }
+    if (!req.accepts("html")) return next();
+    return res.sendFile(FRONTEND_INDEX);
+  });
+}
+
+app.use((req, _res, next) => {
+  if (req.url.startsWith("/api/") || req.url === "/api") {
+    req.url = req.url.slice(4) || "/";
+  }
+  next();
+});
 
 registerCsrfProtection({
   app,

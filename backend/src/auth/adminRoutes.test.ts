@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { registerAdminRoutes } from "./adminRoutes";
 
 const buildApp = (options?: {
-  authMode?: "local" | "hybrid" | "oidc_enforced";
+  authMode?: "local" | "hybrid" | "oidc_enforced" | "proxy";
   oidcEnabled?: boolean;
 }) => {
   const router = express.Router();

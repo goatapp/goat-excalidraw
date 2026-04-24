@@ -121,7 +121,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onDrop
 }) => {
   const navigate = useNavigate();
-  const { logout, user, authEnabled } = useAuth();
+  const { logout, user, authEnabled, isProxyAuth } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
   const [isCreating, setIsCreating] = useState(false);
   const [newCollectionName, setNewCollectionName] = useState('');
@@ -352,13 +352,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   </div>
                 </div>
               )}
-              <button
-                onClick={logout}
-                className="w-full flex items-center gap-3 px-3 py-2 text-sm font-bold rounded-xl transition-all duration-200 border-2 border-rose-300 dark:border-rose-700 bg-white dark:bg-neutral-900 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/30 hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:hover:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)] hover:-translate-y-0.5 cursor-pointer"
-              >
-                <LogOut size={18} />
-                <span className="min-w-0 flex-1 text-left">Logout</span>
-              </button>
+              {!isProxyAuth && (
+                <button
+                  onClick={logout}
+                  className="w-full flex items-center gap-3 px-3 py-2 text-sm font-bold rounded-xl transition-all duration-200 border-2 border-rose-300 dark:border-rose-700 bg-white dark:bg-neutral-900 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/30 hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:hover:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)] hover:-translate-y-0.5 cursor-pointer"
+                >
+                  <LogOut size={18} />
+                  <span className="min-w-0 flex-1 text-left">Logout</span>
+                </button>
+              )}
             </div>
           )}
         </div>

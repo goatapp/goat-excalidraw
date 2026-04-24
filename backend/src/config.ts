@@ -26,9 +26,11 @@ interface Config {
   enforceHttpsRedirect: boolean;
   bootstrapSetupCodeTtlMs: number;
   bootstrapSetupCodeMaxAttempts: number;
+  proxyAuthHeader: string;
+  proxyAdminEmails: Set<string>;
 }
 
-export type AuthMode = "local" | "hybrid" | "oidc_enforced";
+export type AuthMode = "local" | "hybrid" | "oidc_enforced" | "proxy";
 
 interface OidcConfig {
   enabled: boolean;
@@ -184,11 +186,11 @@ const getRequiredEnvNumber = (key: string, defaultValue: number): number => {
 
 const parseAuthMode = (rawValue: string | undefined): AuthMode => {
   const normalized = (rawValue || "local").trim().toLowerCase();
-  if (normalized === "local" || normalized === "hybrid" || normalized === "oidc_enforced") {
+  if (normalized === "local" || normalized === "hybrid" || normalized === "oidc_enforced" || normalized === "proxy") {
     return normalized;
   }
   throw new Error(
-    "Invalid AUTH_MODE. Expected one of: local, hybrid, oidc_enforced"
+    "Invalid AUTH_MODE. Expected one of: local, hybrid, oidc_enforced, proxy"
   );
 };
 
@@ -203,7 +205,7 @@ const resolveOidcConfig = (authMode: AuthMode): OidcConfig => {
     OIDC_REDIRECT_URI: redirectUri,
   };
 
-  const enabled = authMode !== "local";
+  const enabled = authMode !== "local" && authMode !== "proxy";
   const missingRequired = Object.entries(requiredWhenEnabled)
     .filter(([, value]) => !value)
     .map(([key]) => key);
@@ -306,6 +308,13 @@ export const config: Config = {
   enforceHttpsRedirect: getOptionalBoolean("ENFORCE_HTTPS_REDIRECT", true),
   bootstrapSetupCodeTtlMs: getRequiredEnvNumber("BOOTSTRAP_SETUP_CODE_TTL_MS", 15 * 60 * 1000),
   bootstrapSetupCodeMaxAttempts: getRequiredEnvNumber("BOOTSTRAP_SETUP_CODE_MAX_ATTEMPTS", 10),
+  proxyAuthHeader: getOptionalEnv("PROXY_AUTH_HEADER", "x-forwarded-email").toLowerCase(),
+  proxyAdminEmails: new Set(
+    (process.env.PROXY_ADMIN_EMAILS || "")
+      .split(",")
+      .map((e) => e.trim().toLowerCase())
+      .filter((e) => e.length > 0)
+  ),
 };
 
 if (config.nodeEnv === "production") {

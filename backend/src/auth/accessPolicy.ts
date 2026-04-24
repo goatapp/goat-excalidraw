@@ -14,6 +14,6 @@ export const getEffectiveOidcJitProvisioning = (
 };
 
 export const getEffectiveRegistrationEnabled = (
-  authMode: "local" | "hybrid" | "oidc_enforced",
+  authMode: "local" | "hybrid" | "oidc_enforced" | "proxy",
   registrationEnabled: boolean
 ): boolean => authMode !== "oidc_enforced" && registrationEnabled;
