@@ -83,7 +83,7 @@ export interface AuthStatusResponse {
   authEnabled?: boolean;
   enabled?: boolean;
   registrationEnabled?: boolean;
-  authMode?: "local" | "hybrid" | "oidc_enforced";
+  authMode?: "local" | "hybrid" | "oidc_enforced" | "proxy";
   oidcEnabled?: boolean;
   oidcEnforced?: boolean;
   oidcProvider?: string;
