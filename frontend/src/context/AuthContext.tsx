@@ -26,13 +26,14 @@ interface AuthContextType {
   authEnabled: boolean | null;
   registrationEnabled: boolean;
   authStatusError: string | null;
-  authMode: 'local' | 'hybrid' | 'oidc_enforced';
+  authMode: 'local' | 'hybrid' | 'oidc_enforced' | 'proxy';
   oidcEnabled: boolean;
   oidcEnforced: boolean;
   oidcProvider: string | null;
   bootstrapRequired: boolean;
   authOnboardingRequired: boolean;
   authOnboardingMode: 'migration' | 'fresh' | null;
+  isProxyAuth: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, name: string, setupCode?: string) => Promise<void>;
   logout: () => void;
@@ -51,7 +52,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [authEnabled, setAuthEnabled] = useState<boolean | null>(null);
   const [registrationEnabled, setRegistrationEnabled] = useState(false);
   const [authStatusError, setAuthStatusError] = useState<string | null>(null);
-  const [authMode, setAuthMode] = useState<'local' | 'hybrid' | 'oidc_enforced'>('local');
+  const [authMode, setAuthMode] = useState<'local' | 'hybrid' | 'oidc_enforced' | 'proxy'>('local');
   const [oidcEnabled, setOidcEnabled] = useState(false);
   const [oidcEnforced, setOidcEnforced] = useState(false);
   const [oidcProvider, setOidcProvider] = useState<string | null>(null);
@@ -78,7 +79,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         localStorage.setItem(AUTH_ENABLED_CACHE_KEY, String(enabled));
         setRegistrationEnabled(Boolean(statusResponse?.registrationEnabled));
         const nextAuthMode =
-          statusResponse?.authMode === 'hybrid' || statusResponse?.authMode === 'oidc_enforced'
+          statusResponse?.authMode === 'hybrid' || statusResponse?.authMode === 'oidc_enforced' || statusResponse?.authMode === 'proxy'
             ? statusResponse.authMode
             : 'local';
         setAuthMode(nextAuthMode);
@@ -266,6 +267,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         bootstrapRequired,
         authOnboardingRequired,
         authOnboardingMode,
+        isProxyAuth: authMode === 'proxy',
         login,
         register,
         logout,
