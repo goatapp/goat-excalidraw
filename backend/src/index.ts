@@ -315,6 +315,36 @@ const generalRateLimiter = rateLimit({
 
 app.use(generalRateLimiter);
 
+const FRONTEND_DIR = path.resolve(__dirname, "../public");
+const FRONTEND_INDEX = path.join(FRONTEND_DIR, "index.html");
+const hasFrontend = fs.existsSync(FRONTEND_DIR) && fs.existsSync(FRONTEND_INDEX);
+
+if (hasFrontend) {
+  app.use(express.static(FRONTEND_DIR, { index: false }));
+
+  const API_PATH_PREFIXES = [
+    "/api", "/auth", "/health", "/csrf-token", "/socket.io/",
+    "/drawings", "/collections", "/library", "/import", "/export",
+    "/system", "/share", "/admin", "/users",
+  ];
+
+  app.use((req, res, next) => {
+    if (req.method !== "GET") return next();
+    if (API_PATH_PREFIXES.some((p) => req.url === p || req.url.startsWith(p + "/"))) {
+      return next();
+    }
+    if (!req.accepts("html")) return next();
+    return res.sendFile(FRONTEND_INDEX);
+  });
+}
+
+app.use((req, _res, next) => {
+  if (req.url.startsWith("/api/") || req.url === "/api") {
+    req.url = req.url.slice(4) || "/";
+  }
+  next();
+});
+
 registerCsrfProtection({
   app,
   isAllowedOrigin,

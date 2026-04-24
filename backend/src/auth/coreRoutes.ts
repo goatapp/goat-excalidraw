@@ -60,7 +60,7 @@ type RegisterCoreRoutesDeps = {
     impersonatorId?: string;
   };
   config: {
-    authMode: "local" | "hybrid" | "oidc_enforced";
+    authMode: "local" | "hybrid" | "oidc_enforced" | "proxy";
     jwtSecret: string;
     jwtAccessExpiresIn: string;
     enableRefreshTokenRotation: boolean;

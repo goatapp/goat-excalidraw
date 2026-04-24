@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
 import { config } from "../config";
 import { PrismaClient } from "../generated/client";
 import { prisma as defaultPrisma } from "../db/prisma";
@@ -105,6 +106,52 @@ export type AuthMiddlewareDeps = {
   authModeService: AuthModeService;
 };
 
+const resolveProxyUser = async (
+  req: Request,
+  prisma: PrismaClient
+): Promise<Express.Request["user"] | null> => {
+  const raw = req.headers[config.proxyAuthHeader];
+  const email = (Array.isArray(raw) ? raw[0] : raw)?.trim().toLowerCase();
+  if (!email) return null;
+
+  const isAdmin = config.proxyAdminEmails.has(email);
+  const targetRole = isAdmin ? "ADMIN" : "USER";
+
+  let user = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true, username: true, email: true, name: true, role: true, isActive: true },
+  });
+
+  if (!user) {
+    const name = email.split("@")[0] || email;
+    user = await prisma.user.create({
+      data: {
+        email,
+        name,
+        passwordHash: crypto.randomBytes(32).toString("hex"),
+        role: targetRole,
+        isActive: true,
+      },
+      select: { id: true, username: true, email: true, name: true, role: true, isActive: true },
+    });
+    console.log(`[proxy-auth] Auto-provisioned user ${email} with role ${targetRole}`);
+  } else if (isAdmin && user.role !== "ADMIN") {
+    await prisma.user.update({ where: { id: user.id }, data: { role: "ADMIN" } });
+    user = { ...user, role: "ADMIN" };
+    console.log(`[proxy-auth] Promoted ${email} to ADMIN`);
+  }
+
+  if (!user.isActive) return null;
+
+  return {
+    id: user.id,
+    username: user.username,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+  };
+};
+
 export const createAuthMiddleware = ({
   prisma,
   authModeService,
@@ -114,6 +161,22 @@ export const createAuthMiddleware = ({
     res: Response,
     next: NextFunction
   ): Promise<void> => {
+    if (config.authMode === "proxy") {
+      try {
+        const user = await resolveProxyUser(req, prisma);
+        if (!user) {
+          res.status(401).json({ error: "Unauthorized", message: "Missing proxy auth header" });
+          return;
+        }
+        req.user = user;
+        return next();
+      } catch (error) {
+        console.error("Error in proxy auth:", error);
+        res.status(500).json({ error: "Internal server error", message: "Failed to resolve proxy user" });
+        return;
+      }
+    }
+
     try {
       const authEnabled = await authModeService.getAuthEnabled();
       if (!authEnabled) {
@@ -213,6 +276,16 @@ export const createAuthMiddleware = ({
     res: Response,
     next: NextFunction
   ): Promise<void> => {
+    if (config.authMode === "proxy") {
+      try {
+        const user = await resolveProxyUser(req, prisma);
+        if (user) req.user = user;
+      } catch (error) {
+        console.error("Error in proxy optional auth:", error);
+      }
+      return next();
+    }
+
     try {
       const authEnabled = await authModeService.getAuthEnabled();
       if (!authEnabled) {

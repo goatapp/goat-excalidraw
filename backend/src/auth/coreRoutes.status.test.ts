@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { registerCoreRoutes } from "./coreRoutes";
 
 const buildApp = (options?: {
-  authMode?: "local" | "hybrid" | "oidc_enforced";
+  authMode?: "local" | "hybrid" | "oidc_enforced" | "proxy";
   registrationEnabled?: boolean;
   oidcJitProvisioningEnabled?: boolean | null;
 }) => {

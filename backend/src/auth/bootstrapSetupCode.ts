@@ -36,7 +36,7 @@ const generateBootstrapSetupCode = (): string => {
 
 const getBootstrapState = async (
   prisma: PrismaClient,
-  options: { authMode: "local" | "hybrid" | "oidc_enforced" }
+  options: { authMode: "local" | "hybrid" | "oidc_enforced" | "proxy" }
 ) => {
   const [systemConfig, bootstrapUser, activeUsers] = await Promise.all([
     prisma.systemConfig.upsert({
@@ -65,7 +65,7 @@ const getBootstrapState = async (
 
 export const shouldRequireBootstrapSetupCode = async (
   prisma: PrismaClient,
-  options: { authMode: "local" | "hybrid" | "oidc_enforced" }
+  options: { authMode: "local" | "hybrid" | "oidc_enforced" | "proxy" }
 ): Promise<boolean> => {
   if (options.authMode === "oidc_enforced") return false;
 
@@ -83,7 +83,7 @@ export const shouldRequireBootstrapSetupCode = async (
 type IssueBootstrapSetupCodeParams = {
   prisma: PrismaClient;
   ttlMs: number;
-  authMode: "local" | "hybrid" | "oidc_enforced";
+  authMode: "local" | "hybrid" | "oidc_enforced" | "proxy";
   reason:
     | "startup"
     | "onboarding_enabled"

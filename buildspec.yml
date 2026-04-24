@@ -1,0 +1,21 @@
+# NOTE: This file is NOT used by cabra. Cabra injects its own buildspec at
+# /codebuild/readonly/buildspec.yml which handles Docker login, buildx setup,
+# and runs: docker buildx build --secret id=github_deploy_token,env=GITHUB_DEPLOY_TOKEN ...
+#
+# This file is kept for reference / manual CodeBuild runs only.
+version: 0.2
+
+phases:
+  pre_build:
+    commands:
+      - echo Logging in to Amazon ECR...
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
+  build:
+    commands:
+      - echo Build started on `date`
+      - docker build --secret id=github_deploy_token,env=GITHUB_DEPLOY_TOKEN -t $IMAGE_REPO_NAME:$IMAGE_TAG .
+      - docker tag $IMAGE_REPO_NAME:$IMAGE_TAG $ECR_REGISTRY/$IMAGE_REPO_NAME:$IMAGE_TAG
+  post_build:
+    commands:
+      - echo Pushing the Docker image...
+      - docker push $ECR_REGISTRY/$IMAGE_REPO_NAME:$IMAGE_TAG
