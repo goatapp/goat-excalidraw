@@ -289,6 +289,21 @@ app.use(
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
+app.use((req, res, next) => {
+  const requestId = req.headers["x-request-id"] || "unknown";
+  const userEmail = req.user?.email || req.headers[config.proxyAuthHeader] as string || "anonymous";
+
+  res.on("finish", () => {
+    if (res.statusCode >= 400) {
+      console.error(
+        `[ERROR] ${req.method} ${req.path} - ${res.statusCode} - User: ${userEmail} - IP: ${req.ip} - RequestID: ${requestId}`
+      );
+    }
+  });
+
+  next();
+});
+
 
 const RATE_LIMIT_WINDOW = 15 * 60 * 1000;
 
