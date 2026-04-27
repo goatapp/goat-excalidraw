@@ -1954,7 +1954,7 @@ export const Editor: React.FC = () => {
                   elements,
                   appState: {
                     ...snapshot.appState,
-                    collaborators: undefined,
+                    collaborators: new Map(),
                   },
                   captureUpdate: CaptureUpdateAction.NEVER,
                 });
