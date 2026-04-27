@@ -33,6 +33,18 @@ export default defineConfig(({ command }) => {
       'import.meta.env.VITE_APP_VERSION': JSON.stringify(appVersion),
       'import.meta.env.VITE_APP_BUILD_LABEL': JSON.stringify(buildLabel),
     },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes("@excalidraw/excalidraw/dist") &&
+                (id.endsWith("chunk-EIO257PC.js") || id.endsWith("chunk-SRAX5OIU.js"))) {
+              return "excalidraw-subset-deps";
+            }
+          },
+        },
+      },
+    },
     optimizeDeps: {
       esbuildOptions: {
         define: processEnvDefines,

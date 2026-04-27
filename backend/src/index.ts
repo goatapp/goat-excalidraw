@@ -261,15 +261,15 @@ app.use(
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'none'"],
-        scriptSrc: ["'self'"],
+        scriptSrc: ["'self'", "'wasm-unsafe-eval'", "'unsafe-eval'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
-        fontSrc: ["'self'"],
+        fontSrc: ["'self'", "https://esm.sh"],
         baseUri: ["'none'"],
         formAction: ["'none'"],
         frameAncestors: ["'none'"],
         objectSrc: ["'none'"],
         imgSrc: ["'self'", "data:", "blob:"],
-        connectSrc: ["'self'", "ws:", "wss:"],
+        connectSrc: ["'self'", "ws:", "wss:", "https://esm.sh"],
         workerSrc: ["'self'", "blob:"],
       },
     },
