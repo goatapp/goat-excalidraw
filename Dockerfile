@@ -1,5 +1,5 @@
 # Stage 1: Build frontend
-FROM node:20-alpine AS frontend-builder
+FROM node:24-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
@@ -17,7 +17,7 @@ ENV VITE_APP_BUILD_LABEL=$VITE_APP_BUILD_LABEL
 RUN npm run build
 
 # Stage 2: Build backend
-FROM node:20-alpine AS backend-builder
+FROM node:24-alpine AS backend-builder
 
 WORKDIR /app
 
@@ -35,7 +35,7 @@ COPY backend/src ./src
 RUN npx tsc
 
 # Stage 3: Production
-FROM node:20-alpine
+FROM node:24-alpine
 
 RUN apk add --no-cache openssl su-exec && \
     addgroup -g 1001 -S nodejs && \
