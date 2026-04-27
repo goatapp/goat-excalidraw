@@ -46,7 +46,7 @@ export default defineConfig(({ command }) => {
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api/, ""),
         },
-        "/socket.io": {
+        "/ws": {
           target: devBackendTarget,
           changeOrigin: true,
           ws: true,
