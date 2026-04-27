@@ -5,6 +5,10 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const frontendRoot = path.resolve(__dirname, "..");
 
+// In 0.18.0 the old excalidraw-assets / excalidraw-assets-dev directories were
+// replaced by dist/prod and dist/dev.  Only the fonts sub-directory needs to be
+// copied to the public / dist output so that Excalidraw can load them at runtime
+// via window.EXCALIDRAW_ASSET_PATH (which is set to "/" in index.html).
 const EXCALIDRAW_DIST_DIR = path.join(
   frontendRoot,
   "node_modules",
@@ -13,7 +17,10 @@ const EXCALIDRAW_DIST_DIR = path.join(
   "dist"
 );
 
-const assetDirs = ["excalidraw-assets", "excalidraw-assets-dev"];
+// src relative to EXCALIDRAW_DIST_DIR  →  dest name inside the target root
+const ASSET_COPIES = [
+  { src: path.join("prod", "fonts"), dest: "fonts" },
+];
 
 const copyDir = async (src, dest) => {
   await fs.rm(dest, { recursive: true, force: true });
@@ -36,9 +43,9 @@ const main = async () => {
     const targetRoot = path.join(frontendRoot, targetName);
     await fs.mkdir(targetRoot, { recursive: true });
 
-    for (const dirName of assetDirs) {
-      const src = path.join(EXCALIDRAW_DIST_DIR, dirName);
-      const destRoot = path.join(targetRoot, dirName);
+    for (const { src: srcRel, dest: destName } of ASSET_COPIES) {
+      const src = path.join(EXCALIDRAW_DIST_DIR, srcRel);
+      const dest = path.join(targetRoot, destName);
 
       try {
         await fs.access(src);
@@ -47,9 +54,9 @@ const main = async () => {
         throw err;
       }
 
-      await copyDir(src, destRoot);
+      await copyDir(src, dest);
 
-      console.log(`[copy-excalidraw-assets] Copied ${dirName} -> ${targetName}`);
+      console.log(`[copy-excalidraw-assets] Copied ${srcRel} -> ${targetName}/${destName}`);
     }
   }
 };

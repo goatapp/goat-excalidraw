@@ -58,6 +58,8 @@ type RegisterCoreRoutesDeps = {
     email: string;
     type: "access" | "refresh";
     impersonatorId?: string;
+    authProvider?: "local" | "oidc";
+    oidcGroups?: string[];
   };
   config: {
     authMode: "local" | "hybrid" | "oidc_enforced" | "proxy";
@@ -77,7 +79,11 @@ type RegisterCoreRoutesDeps = {
   generateTokens: (
     userId: string,
     email: string,
-    options?: { impersonatorId?: string }
+    options?: {
+      impersonatorId?: string;
+      authProvider?: "local" | "oidc";
+      oidcGroups?: string[];
+    }
   ) => { accessToken: string; refreshToken: string };
   getRefreshTokenExpiresAt: () => Date;
   isMissingRefreshTokenTableError: (error: unknown) => boolean;
@@ -636,7 +642,11 @@ export const registerCoreRoutes = (deps: RegisterCoreRoutesDeps) => {
             const { accessToken, refreshToken: newRefreshToken } = generateTokens(
               user.id,
               user.email,
-              { impersonatorId: decoded.impersonatorId }
+              {
+                impersonatorId: decoded.impersonatorId,
+                authProvider: decoded.authProvider,
+                oidcGroups: decoded.oidcGroups,
+              }
             );
 
             const expiresAt = getRefreshTokenExpiresAt();
@@ -713,6 +723,8 @@ export const registerCoreRoutes = (deps: RegisterCoreRoutesDeps) => {
             email: user.email,
             type: "access",
             impersonatorId: decoded.impersonatorId,
+            authProvider: decoded.authProvider,
+            oidcGroups: decoded.oidcGroups,
           },
           config.jwtSecret,
           signOptions

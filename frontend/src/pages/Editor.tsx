@@ -1,13 +1,16 @@
 import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, Download, Loader2, ChevronUp, ChevronDown, Share2 } from 'lucide-react';
+import { ArrowLeft, Download, Loader2, ChevronUp, ChevronDown, Share2, History } from 'lucide-react';
 import clsx from 'clsx';
 import {
   Excalidraw,
+  CaptureUpdateAction,
+  MainMenu,
   convertToExcalidrawElements,
   exportToSvg,
   viewportCoordsToSceneCoords,
 } from '@excalidraw/excalidraw';
+import { getInitialLangCode, LanguageSelector } from '../components/LanguageSelector';
 import debounce from 'lodash/debounce';
 import throttle from 'lodash/throttle';
 import { Toaster, toast } from 'sonner';
@@ -33,6 +36,7 @@ import type { ElementVersionInfo } from './editor/shared';
 import { useEditorChrome } from './editor/useEditorChrome';
 import { useEditorIdentity } from './editor/useEditorIdentity';
 import { ShareModal } from '../components/ShareModal';
+import { HistoryPanel } from '../components/HistoryPanel';
 
 interface Peer extends UserIdentity {
   isActive: boolean;
@@ -206,6 +210,9 @@ export const Editor: React.FC = () => {
   const [isSavingOnLeave, setIsSavingOnLeave] = useState(false);
   const [autoHideEnabled, setAutoHideEnabled] = useState(getStoredAutoHideEnabled);
   const [isShareOpen, setIsShareOpen] = useState(false);
+  const [langCode, setLangCode] = useState(getInitialLangCode);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const previewBackup = useRef<{ elements: readonly any[]; appState: any; files: any } | null>(null);
   const { isHeaderVisible, setIsHeaderVisible } = useEditorChrome({
     drawingName,
     autoHideEnabled,
@@ -1585,7 +1592,7 @@ export const Editor: React.FC = () => {
               imageElements.map((element: any) => [element.id, true])
             ),
           },
-          commitToHistory: true,
+          captureUpdate: CaptureUpdateAction.IMMEDIATELY,
         });
       } catch (err) {
         console.error("[Editor] Failed to import dropped images", err);
@@ -1759,6 +1766,15 @@ export const Editor: React.FC = () => {
               Read-only
             </span>
           ) : null}
+          {canEdit && id ? (
+            <button
+              onClick={() => setIsHistoryOpen(true)}
+              className="p-2 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-lg text-gray-600 dark:text-gray-300 transition-colors"
+              title="Version History"
+            >
+              <History size={20} />
+            </button>
+          ) : null}
           {accessLevel === "owner" && id ? (
             <button
               onClick={() => setIsShareOpen(true)}
@@ -1872,6 +1888,7 @@ export const Editor: React.FC = () => {
           <Excalidraw
             key={id}
             theme={theme === 'dark' ? 'dark' : 'light'}
+            langCode={langCode}
             initialData={initialData}
             onChange={handleCanvasChange}
             onPointerUpdate={onPointerUpdate}
@@ -1879,7 +1896,19 @@ export const Editor: React.FC = () => {
             excalidrawAPI={setExcalidrawAPI}
             UIOptions={UIOptions}
             viewModeEnabled={!canEdit}
-          />
+          >
+            <MainMenu>
+              <MainMenu.DefaultItems.ToggleTheme />
+              <MainMenu.DefaultItems.SaveAsImage />
+              <MainMenu.DefaultItems.ClearCanvas />
+              <MainMenu.DefaultItems.ChangeCanvasBackground />
+              <MainMenu.DefaultItems.Help />
+              <MainMenu.Separator />
+              <MainMenu.ItemCustom>
+                <LanguageSelector langCode={langCode} onChange={setLangCode} />
+              </MainMenu.ItemCustom>
+            </MainMenu>
+          </Excalidraw>
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-gray-500 dark:text-gray-400">
             <span className="text-sm font-medium">
@@ -1891,12 +1920,66 @@ export const Editor: React.FC = () => {
       </div>
 
       {id ? (
-        <ShareModal
-          drawingId={id}
-          drawingName={drawingName}
-          isOpen={isShareOpen}
-          onClose={() => setIsShareOpen(false)}
-        />
+        <>
+          <ShareModal
+            drawingId={id}
+            drawingName={drawingName}
+            isOpen={isShareOpen}
+            onClose={() => setIsShareOpen(false)}
+          />
+          <HistoryPanel
+            drawingId={id}
+            isOpen={isHistoryOpen}
+            onClose={() => {
+              setIsHistoryOpen(false);
+            }}
+            onPreview={(snapshot) => {
+              if (!excalidrawAPI.current) return;
+              if (snapshot) {
+                // Save current state before first preview
+                if (!previewBackup.current) {
+                  previewBackup.current = {
+                    elements: excalidrawAPI.current.getSceneElementsIncludingDeleted(),
+                    appState: excalidrawAPI.current.getAppState(),
+                    files: excalidrawAPI.current.getFiles(),
+                  };
+                }
+                // Show snapshot on canvas (read-only preview)
+                const elements = Array.isArray(snapshot.elements) ? snapshot.elements : [];
+                const files = snapshot.files || {};
+                if (Object.keys(files).length > 0) {
+                  excalidrawAPI.current.addFiles(Object.values(files));
+                }
+                excalidrawAPI.current.updateScene({
+                  elements,
+                  appState: {
+                    ...snapshot.appState,
+                    collaborators: undefined,
+                  },
+                  captureUpdate: CaptureUpdateAction.NEVER,
+                });
+              } else {
+                // Restore original state
+                if (previewBackup.current) {
+                  excalidrawAPI.current.updateScene({
+                    elements: previewBackup.current.elements as any[],
+                    appState: previewBackup.current.appState,
+                    captureUpdate: CaptureUpdateAction.NEVER,
+                  });
+                  if (previewBackup.current.files) {
+                    excalidrawAPI.current.addFiles(Object.values(previewBackup.current.files));
+                  }
+                  previewBackup.current = null;
+                }
+              }
+            }}
+            onRestore={() => {
+              // Clear preview backup and reload page to get fresh state from server
+              previewBackup.current = null;
+              window.location.reload();
+            }}
+          />
+        </>
       ) : null}
     </div>
   );

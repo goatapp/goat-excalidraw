@@ -7,18 +7,22 @@ const discoverMock = vi.fn();
 const callbackMock = vi.fn();
 const clientConfigs: Record<string, unknown>[] = [];
 const issuerMetadata = {
+  issuer: "https://issuer.example",
   token_endpoint_auth_methods_supported: ["client_secret_basic"],
   id_token_signing_alg_values_supported: ["HS256", "RS256"],
 };
+const discoveredIssuer = {
+  metadata: issuerMetadata,
+} as any;
+
+Object.defineProperty(discoveredIssuer, "issuer", {
+  get: () => issuerMetadata.issuer,
+  enumerable: true,
+});
 
 vi.mock("openid-client", () => {
-  const issuer = {
-    issuer: "https://issuer.example",
-    metadata: issuerMetadata,
-  } as any;
-
   class MockClient {
-    issuer = issuer;
+    issuer = discoveredIssuer;
 
     constructor(config: Record<string, unknown>) {
       clientConfigs.push({ ...config });
@@ -37,8 +41,8 @@ vi.mock("openid-client", () => {
     }
   }
 
-  issuer.Client = MockClient;
-  discoverMock.mockResolvedValue(issuer);
+  discoveredIssuer.Client = MockClient;
+  discoverMock.mockResolvedValue(discoveredIssuer);
 
   return {
     Issuer: {
@@ -64,7 +68,7 @@ const base64UrlEncode = (value: Buffer | string): string => {
 
 const signFlowPayload = (encodedPayload: string, secret: string): string =>
   base64UrlEncode(
-    crypto.createHmac("sha256", secret).update(encodedPayload, "utf8").digest()
+    crypto.createHmac("sha256", secret).update(encodedPayload, "utf8").digest(),
   );
 
 const makeFlowCookie = (
@@ -75,7 +79,7 @@ const makeFlowCookie = (
     codeVerifier: string;
     returnTo: string;
     expiresAt: number;
-  }> = {}
+  }> = {},
 ) => {
   const payload = {
     state: "state-fixed",
@@ -90,7 +94,9 @@ const makeFlowCookie = (
   return `${encodedPayload}.${signature}`;
 };
 
-const createPrismaMock = () => {
+const createPrismaMock = (options?: {
+  providerIdentity?: { id: string; issuer: string; subject: string } | null;
+}) => {
   const user = {
     id: "user-1",
     username: null,
@@ -101,9 +107,20 @@ const createPrismaMock = () => {
     isActive: true,
   };
 
+  const providerIdentity = options?.providerIdentity ?? null;
+
   const tx = {
     authIdentity: {
-      findUnique: vi.fn(async () => null),
+      findUnique: vi.fn(async (args?: Record<string, unknown>) => {
+        const where = (args?.where || {}) as Record<string, unknown>;
+        if (where.issuer_subject) {
+          return null;
+        }
+        if (where.provider_userId) {
+          return providerIdentity;
+        }
+        return null;
+      }),
       update: vi.fn(async () => ({})),
       create: vi.fn(async () => ({})),
     },
@@ -120,22 +137,27 @@ const createPrismaMock = () => {
 
   return {
     $transaction: vi.fn(async (runner: (arg: typeof tx) => Promise<unknown>) =>
-      runner(tx)
+      runner(tx),
     ),
     refreshToken: {
       create: vi.fn(async () => ({})),
     },
+    __tx: tx,
   };
 };
 
-const createApp = async (idTokenAlgOverride: string | null) => {
+const createApp = async (
+  idTokenAlgOverride: string | null,
+  issuerUrlOverride: string | null = null,
+  prismaOverride?: Record<string, unknown>,
+) => {
   const { registerOidcRoutes } = await import("./oidcRoutes");
   const app = express();
   const router = express.Router();
   app.use(router);
   registerOidcRoutes({
     router,
-    prisma: createPrismaMock() as any,
+    prisma: (prismaOverride || createPrismaMock()) as any,
     ensureAuthEnabled: vi.fn(async () => true),
     ensureSystemConfig: vi.fn(async () => ({
       id: "default",
@@ -158,7 +180,8 @@ const createApp = async (idTokenAlgOverride: string | null) => {
         enabled: true,
         enforced: true,
         providerName: "Test OIDC",
-        issuerUrl: "https://issuer.example",
+        issuerUrl: issuerUrlOverride || "https://issuer.example",
+        discoveryUrl: null,
         clientId: "client-id",
         clientSecret: "client-secret",
         redirectUri: "https://app.example/api/auth/oidc/callback",
@@ -167,6 +190,8 @@ const createApp = async (idTokenAlgOverride: string | null) => {
         scopes: "openid email profile",
         emailClaim: "email",
         emailVerifiedClaim: "email_verified",
+        groupsClaim: "groups",
+        adminGroups: [],
         requireEmailVerified: true,
         jitProvisioning: true,
         firstUserAdmin: true,
@@ -180,7 +205,28 @@ describe("OIDC callback alg mismatch fallback", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     clientConfigs.length = 0;
+    issuerMetadata.issuer = "https://issuer.example";
     issuerMetadata.id_token_signing_alg_values_supported = ["HS256", "RS256"];
+  });
+
+  it("uses configured issuer when discovery issuer differs in split-horizon setups", async () => {
+    issuerMetadata.issuer = "http://keycloak:8080/realms/excalidash";
+
+    const app = await createApp(null);
+    const response = await request(app).get("/oidc/start");
+
+    expect(response.status).toBe(302);
+    expect(discoveredIssuer.metadata.issuer).toBe("https://issuer.example");
+  });
+
+  it("treats trailing slash issuer differences as equivalent", async () => {
+    issuerMetadata.issuer = "https://issuer.example";
+
+    const app = await createApp(null, "https://issuer.example/");
+    const response = await request(app).get("/oidc/start");
+
+    expect(response.status).toBe(302);
+    expect(discoveredIssuer.metadata.issuer).toBe("https://issuer.example");
   });
 
   it("retries once with observed HS alg when default expected alg mismatches", async () => {
@@ -188,7 +234,9 @@ describe("OIDC callback alg mismatch fallback", () => {
     callbackMock.mockImplementation(async () => {
       callCount += 1;
       if (callCount === 1) {
-        throw new Error("unexpected JWT alg received, expected RS256, got: HS256");
+        throw new Error(
+          "unexpected JWT alg received, expected RS256, got: HS256",
+        );
       }
       return {
         claims: () => ({
@@ -202,9 +250,7 @@ describe("OIDC callback alg mismatch fallback", () => {
     const app = await createApp(null);
     const response = await request(app)
       .get("/oidc/callback?code=test-code&state=state-fixed")
-      .set("Cookie", [
-        `excalidash-oidc-flow=${makeFlowCookie("test-secret")}`,
-      ]);
+      .set("Cookie", [`excalidash-oidc-flow=${makeFlowCookie("test-secret")}`]);
 
     expect(response.status).toBe(302);
     expect(response.headers.location).toBe("/");
@@ -215,19 +261,45 @@ describe("OIDC callback alg mismatch fallback", () => {
 
   it("does not retry when id token alg is explicitly configured", async () => {
     callbackMock.mockRejectedValue(
-      new Error("unexpected JWT alg received, expected RS256, got: HS256")
+      new Error("unexpected JWT alg received, expected RS256, got: HS256"),
     );
 
     const app = await createApp("RS256");
     const response = await request(app)
       .get("/oidc/callback?code=test-code&state=state-fixed")
-      .set("Cookie", [
-        `excalidash-oidc-flow=${makeFlowCookie("test-secret")}`,
-      ]);
+      .set("Cookie", [`excalidash-oidc-flow=${makeFlowCookie("test-secret")}`]);
 
     expect(response.status).toBe(302);
     expect(response.headers.location).toContain("oidcError=callback_failed");
     expect(callbackMock).toHaveBeenCalledTimes(1);
     expect(clientConfigs).toHaveLength(1);
+  });
+
+  it("relinks existing provider identity when same email logs in with a new subject", async () => {
+    const prisma = createPrismaMock({
+      providerIdentity: {
+        id: "identity-1",
+        issuer: "https://issuer.example",
+        subject: "subject-old",
+      },
+    });
+
+    callbackMock.mockResolvedValue({
+      claims: () => ({
+        sub: "subject-new",
+        email: "alice@example.com",
+        email_verified: true,
+      }),
+    });
+
+    const app = await createApp(null, null, prisma as any);
+    const response = await request(app)
+      .get("/oidc/callback?code=test-code&state=state-fixed")
+      .set("Cookie", [`excalidash-oidc-flow=${makeFlowCookie("test-secret")}`]);
+
+    expect(response.status).toBe(302);
+    expect(response.headers.location).toBe("/");
+    expect(prisma.__tx.authIdentity.update).toHaveBeenCalledTimes(1);
+    expect(prisma.__tx.authIdentity.create).toHaveBeenCalledTimes(0);
   });
 });
