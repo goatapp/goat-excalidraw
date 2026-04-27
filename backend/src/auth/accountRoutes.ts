@@ -32,7 +32,11 @@ type RegisterAccountRoutesDeps = {
   generateTokens: (
     userId: string,
     email: string,
-    options?: { impersonatorId?: string }
+    options?: {
+      impersonatorId?: string;
+      authProvider?: "local" | "oidc";
+      oidcGroups?: string[];
+    }
   ) => { accessToken: string; refreshToken: string };
   getRefreshTokenExpiresAt: () => Date;
   setAuthCookies: (

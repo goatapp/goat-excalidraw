@@ -70,7 +70,7 @@ describe("editor/shared scene guards", () => {
 
     expect(result.sceneUpdate).toEqual({
       collaborators,
-      commitToHistory: false,
+      captureUpdate: "NEVER",
     });
     expect(result.mergedElements).toBeNull();
     expect(result.shouldUpdateFiles).toBe(false);
@@ -96,7 +96,7 @@ describe("editor/shared scene guards", () => {
         localElements[0],
         pendingElements[0],
       ],
-      commitToHistory: false,
+      captureUpdate: "NEVER",
     });
     expect(result.mergedElements).toEqual([
       localElements[0],
@@ -120,7 +120,7 @@ describe("editor/shared scene guards", () => {
 
     expect(result.sceneUpdate).toEqual({
       files: incomingFiles,
-      commitToHistory: false,
+      captureUpdate: "NEVER",
     });
     expect(result.mergedElements).toBeNull();
     expect(result.nextFiles).toEqual(incomingFiles);
@@ -144,7 +144,7 @@ describe("editor/shared scene guards", () => {
         localElements[1],
         localElements[0],
       ],
-      commitToHistory: false,
+      captureUpdate: "NEVER",
     });
     expect(result.mergedElements).toEqual([
       localElements[1],
@@ -157,6 +157,8 @@ describe("editor/shared scene guards", () => {
       getPersistedAppState({
         viewBackgroundColor: "#123456",
         gridSize: 24,
+        gridStep: 5,
+        gridModeEnabled: true,
         cursorButton: "down",
         activeTool: { type: "hand", locked: false, lastActiveTool: null },
         selectedElementIds: { a: true },
@@ -169,6 +171,8 @@ describe("editor/shared scene guards", () => {
     ).toEqual({
       viewBackgroundColor: "#123456",
       gridSize: 24,
+      gridStep: 5,
+      gridModeEnabled: true,
     });
   });
 

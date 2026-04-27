@@ -37,14 +37,21 @@ interface OidcConfig {
   enforced: boolean;
   providerName: string;
   issuerUrl: string | null;
+  discoveryUrl: string | null;
   clientId: string | null;
   clientSecret: string | null;
   redirectUri: string | null;
   idTokenSignedResponseAlg: string | null;
-  tokenEndpointAuthMethod: "none" | "client_secret_basic" | "client_secret_post" | null;
+  tokenEndpointAuthMethod:
+    | "none"
+    | "client_secret_basic"
+    | "client_secret_post"
+    | null;
   scopes: string;
   emailClaim: string;
   emailVerifiedClaim: string;
+  groupsClaim: string;
+  adminGroups: string[];
   requireEmailVerified: boolean;
   jitProvisioning: boolean;
   firstUserAdmin: boolean;
@@ -95,11 +102,11 @@ const getOptionalOidcSigningAlg = (key: string): string | null => {
 };
 
 const getOptionalOidcTokenEndpointAuthMethod = (
-  key: string
+  key: string,
 ): "none" | "client_secret_basic" | "client_secret_post" | null => {
   const raw = process.env[key];
   if (!raw) return null;
-  const normalized = raw.trim();
+  const normalized = raw.trim().toLowerCase();
   if (normalized.length === 0) return null;
   if (
     normalized === "none" ||
@@ -108,10 +115,18 @@ const getOptionalOidcTokenEndpointAuthMethod = (
   ) {
     return normalized;
   }
-
   throw new Error(
-    `${key} must be one of: none, client_secret_basic, client_secret_post`
+    `${key} must be one of: none, client_secret_basic, client_secret_post`,
   );
+};
+
+const parseCsvEnvList = (key: string): string[] => {
+  const raw = process.env[key];
+  if (!raw) return [];
+  return raw
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
 };
 
 const resolveJwtSecret = (nodeEnv: string): string => {
@@ -126,7 +141,7 @@ const resolveJwtSecret = (nodeEnv: string): string => {
 
   const generated = crypto.randomBytes(32).toString("hex");
   console.warn(
-    "[security] JWT_SECRET is not set (non-production). Using an ephemeral secret; tokens will be invalidated on restart."
+    "[security] JWT_SECRET is not set (non-production). Using an ephemeral secret; tokens will be invalidated on restart.",
   );
   return generated;
 };
@@ -161,7 +176,10 @@ const resolveDatabaseUrl = (rawUrl?: string) => {
 
   const absolutePath = path.isAbsolute(filePath)
     ? filePath
-    : path.resolve(hasLeadingPrismaDir ? backendRoot : prismaDir, normalizedRelative);
+    : path.resolve(
+        hasLeadingPrismaDir ? backendRoot : prismaDir,
+        normalizedRelative,
+      );
 
   return `file:${absolutePath}`;
 };
@@ -179,14 +197,21 @@ const getRequiredEnvNumber = (key: string, defaultValue: number): number => {
   if (!value) return defaultValue;
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) {
-    throw new Error(`Invalid value for environment variable ${key}: must be a positive number`);
+    throw new Error(
+      `Invalid value for environment variable ${key}: must be a positive number`,
+    );
   }
   return parsed;
 };
 
 const parseAuthMode = (rawValue: string | undefined): AuthMode => {
   const normalized = (rawValue || "local").trim().toLowerCase();
-  if (normalized === "local" || normalized === "hybrid" || normalized === "oidc_enforced" || normalized === "proxy") {
+  if (
+    normalized === "local" ||
+    normalized === "hybrid" ||
+    normalized === "oidc_enforced" ||
+    normalized === "proxy"
+  ) {
     return normalized;
   }
   throw new Error(
@@ -196,14 +221,23 @@ const parseAuthMode = (rawValue: string | undefined): AuthMode => {
 
 const resolveOidcConfig = (authMode: AuthMode): OidcConfig => {
   const issuerUrl = getOptionalTrimmedEnv("OIDC_ISSUER_URL");
+  const discoveryUrl = getOptionalTrimmedEnv("OIDC_DISCOVERY_URL");
   const clientId = getOptionalTrimmedEnv("OIDC_CLIENT_ID");
   const clientSecret = getOptionalTrimmedEnv("OIDC_CLIENT_SECRET");
   const redirectUri = getOptionalTrimmedEnv("OIDC_REDIRECT_URI");
+  const groupsClaim = getOptionalEnv("OIDC_GROUPS_CLAIM", "groups").trim();
+  const adminGroups = parseCsvEnvList("OIDC_ADMIN_GROUPS");
   const requiredWhenEnabled = {
     OIDC_ISSUER_URL: issuerUrl,
     OIDC_CLIENT_ID: clientId,
     OIDC_REDIRECT_URI: redirectUri,
   };
+
+  if (groupsClaim.length === 0) {
+    throw new Error(
+      "Invalid OIDC_GROUPS_CLAIM: must be a non-empty claim key/path",
+    );
+  }
 
   const enabled = authMode !== "local" && authMode !== "proxy";
   const missingRequired = Object.entries(requiredWhenEnabled)
@@ -211,14 +245,18 @@ const resolveOidcConfig = (authMode: AuthMode): OidcConfig => {
     .map(([key]) => key);
   if (enabled && missingRequired.length > 0) {
     throw new Error(
-      `AUTH_MODE=${authMode} requires OIDC configuration. Missing: ${missingRequired.join(", ")}`
+      `AUTH_MODE=${authMode} requires OIDC configuration. Missing: ${missingRequired.join(", ")}`,
     );
   }
 
   if (!enabled) {
-    const hasOidcVars = Object.values(requiredWhenEnabled).some((value) => Boolean(value));
+    const hasOidcVars =
+      Object.values(requiredWhenEnabled).some((value) => Boolean(value)) ||
+      adminGroups.length > 0;
     if (hasOidcVars) {
-      console.warn("[config] AUTH_MODE=local; ignoring OIDC_* provider settings.");
+      console.warn(
+        "[config] AUTH_MODE=local; ignoring OIDC_* provider settings.",
+      );
     }
   }
 
@@ -233,46 +271,13 @@ const resolveOidcConfig = (authMode: AuthMode): OidcConfig => {
       "OIDC_ID_TOKEN_SIGNED_RESPONSE_ALG using HS* requires OIDC_CLIENT_SECRET for a confidential client"
     );
   }
-  if (enabled && tokenEndpointAuthMethod?.startsWith("client_secret_") && !clientSecret) {
-    throw new Error(
-      "OIDC_TOKEN_ENDPOINT_AUTH_METHOD using client_secret_* requires OIDC_CLIENT_SECRET"
-    );
-  }
-  if (enabled && tokenEndpointAuthMethod === "none" && clientSecret) {
-    console.warn(
-      "[config] OIDC_TOKEN_ENDPOINT_AUTH_METHOD=none is set while OIDC_CLIENT_SECRET is provided. " +
-        "This usually means your IdP client should be configured as public (no client secret)."
-    );
-  }
-  if (enabled && issuerUrl) {
-    const issuerLower = issuerUrl.toLowerCase();
-    const providerNameLower = getOptionalEnv("OIDC_PROVIDER_NAME", "OIDC").toLowerCase();
-    if (
-      providerNameLower.includes("keycloak") &&
-      !/\/realms\/[^/]+\/?$/i.test(issuerUrl)
-    ) {
-      console.warn(
-        "[config] OIDC_PROVIDER_NAME=Keycloak usually requires issuer format https://<host>/realms/<realm>."
-      );
-    }
-    if (
-      providerNameLower.includes("authentik") &&
-      !/\/application\/o\/[^/]+\/?$/i.test(issuerUrl)
-    ) {
-      console.warn(
-        "[config] OIDC_PROVIDER_NAME=Authentik usually requires issuer format https://<host>/application/o/<provider-slug>/."
-      );
-    }
-    if (!issuerLower.startsWith("http://") && !issuerLower.startsWith("https://")) {
-      console.warn("[config] OIDC_ISSUER_URL should start with http:// or https://.");
-    }
-  }
 
   return {
     enabled,
     enforced: authMode === "oidc_enforced",
     providerName: getOptionalEnv("OIDC_PROVIDER_NAME", "OIDC"),
     issuerUrl,
+    discoveryUrl,
     clientId,
     clientSecret,
     redirectUri,
@@ -280,8 +285,16 @@ const resolveOidcConfig = (authMode: AuthMode): OidcConfig => {
     tokenEndpointAuthMethod,
     scopes: getOptionalEnv("OIDC_SCOPES", "openid profile email"),
     emailClaim: getOptionalEnv("OIDC_EMAIL_CLAIM", "email"),
-    emailVerifiedClaim: getOptionalEnv("OIDC_EMAIL_VERIFIED_CLAIM", "email_verified"),
-    requireEmailVerified: getOptionalBoolean("OIDC_REQUIRE_EMAIL_VERIFIED", true),
+    emailVerifiedClaim: getOptionalEnv(
+      "OIDC_EMAIL_VERIFIED_CLAIM",
+      "email_verified",
+    ),
+    groupsClaim,
+    adminGroups,
+    requireEmailVerified: getOptionalBoolean(
+      "OIDC_REQUIRE_EMAIL_VERIFIED",
+      true,
+    ),
     jitProvisioning: getOptionalBoolean("OIDC_JIT_PROVISIONING", true),
     firstUserAdmin: getOptionalBoolean("OIDC_FIRST_USER_ADMIN", true),
   };
@@ -303,11 +316,20 @@ export const config: Config = {
   csrfSecret: process.env.CSRF_SECRET || null,
   oidc: resolveOidcConfig(resolvedAuthMode),
   enablePasswordReset: getOptionalBoolean("ENABLE_PASSWORD_RESET", false),
-  enableRefreshTokenRotation: getOptionalBoolean("ENABLE_REFRESH_TOKEN_ROTATION", true),
+  enableRefreshTokenRotation: getOptionalBoolean(
+    "ENABLE_REFRESH_TOKEN_ROTATION",
+    true,
+  ),
   enableAuditLogging: getOptionalBoolean("ENABLE_AUDIT_LOGGING", false),
   enforceHttpsRedirect: getOptionalBoolean("ENFORCE_HTTPS_REDIRECT", true),
-  bootstrapSetupCodeTtlMs: getRequiredEnvNumber("BOOTSTRAP_SETUP_CODE_TTL_MS", 15 * 60 * 1000),
-  bootstrapSetupCodeMaxAttempts: getRequiredEnvNumber("BOOTSTRAP_SETUP_CODE_MAX_ATTEMPTS", 10),
+  bootstrapSetupCodeTtlMs: getRequiredEnvNumber(
+    "BOOTSTRAP_SETUP_CODE_TTL_MS",
+    15 * 60 * 1000,
+  ),
+  bootstrapSetupCodeMaxAttempts: getRequiredEnvNumber(
+    "BOOTSTRAP_SETUP_CODE_MAX_ATTEMPTS",
+    10,
+  ),
   proxyAuthHeader: getOptionalEnv("PROXY_AUTH_HEADER", "x-forwarded-email").toLowerCase(),
   proxyAdminEmails: new Set(
     (process.env.PROXY_ADMIN_EMAILS || "")
@@ -325,14 +347,20 @@ if (config.nodeEnv === "production") {
   ]);
 
   if (config.jwtSecret.length < 32) {
-    throw new Error("JWT_SECRET must be at least 32 characters long in production");
+    throw new Error(
+      "JWT_SECRET must be at least 32 characters long in production",
+    );
+  }
+  if (insecureJwtSecretPlaceholders.has(normalizedSecret)) {
+    throw new Error(
+      "JWT_SECRET must be changed from placeholder/default value in production",
+    );
   }
   if (
-    insecureJwtSecretPlaceholders.has(normalizedSecret)
+    config.oidc.enabled &&
+    config.oidc.redirectUri &&
+    !/^https:\/\//i.test(config.oidc.redirectUri)
   ) {
-    throw new Error("JWT_SECRET must be changed from placeholder/default value in production");
-  }
-  if (config.oidc.enabled && config.oidc.redirectUri && !/^https:\/\//i.test(config.oidc.redirectUri)) {
     throw new Error("OIDC_REDIRECT_URI must be HTTPS in production");
   }
 }

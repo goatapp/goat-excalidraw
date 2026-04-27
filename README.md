@@ -37,6 +37,13 @@ A self-hosted dashboard and organizer for [Excalidraw](https://github.com/excali
 </details>
 
 <details>
+<summary>Version history and restore</summary>
+
+Automatically retain recent drawing snapshots, preview past versions from the editor, and restore a previous state when needed.
+
+</details>
+
+<details>
 <summary>(Optional) Multi User Authentication, OIDC Support</summary>
 
 ### Sign in with OIDC
@@ -274,6 +281,9 @@ backend:
     - AUTH_MODE=oidc_enforced
     - OIDC_PROVIDER_NAME=Authentik
     - OIDC_ISSUER_URL=https://auth.example.com/application/o/excalidash/
+    # Optional split-horizon setup when backend reaches IdP via internal DNS.
+    # Keep OIDC_ISSUER_URL browser-routable; set OIDC_DISCOVERY_URL for backend-only access.
+    # - OIDC_DISCOVERY_URL=http://auth-internal:9000/application/o/excalidash/
     - OIDC_CLIENT_ID=your-client-id
     # Optional for public clients; required for confidential clients
     # - OIDC_CLIENT_SECRET=your-client-secret
@@ -283,6 +293,10 @@ backend:
     # - OIDC_ID_TOKEN_SIGNED_RESPONSE_ALG=HS256
     - OIDC_REDIRECT_URI=https://excalidash.example.com/api/auth/oidc/callback
     - OIDC_SCOPES=openid profile email
+    # Optional: path to groups/roles claim in ID token/user claims (supports dot path)
+    - OIDC_GROUPS_CLAIM=groups
+    # Optional: comma-separated group names that should be ADMIN in ExcaliDash
+    - OIDC_ADMIN_GROUPS=excalidash-admins,platform-admins
 ```
 
 Quick preflight check (recommended before starting backend):
@@ -310,6 +324,9 @@ Notes:
 | Authentik issuer format     | Use provider issuer URL: `https://<authentik-host>/application/o/<provider-slug>/`.                                           |
 | Authentik `email_verified`  | If Authentik does not emit `email_verified=true`, either add the scope mapping or set `OIDC_REQUIRE_EMAIL_VERIFIED=false`.   |
 | Redirect URI                | Must be exact callback: `https://<excalidash-host>/api/auth/oidc/callback`.                                                   |
+| Split-horizon IdP networking | Set `OIDC_ISSUER_URL` to the browser-reachable issuer and optionally `OIDC_DISCOVERY_URL` to a backend-reachable internal URL. |
+| OIDC admin mapping          | If `OIDC_ADMIN_GROUPS` is set, admin role is reconciled on each authenticated request for OIDC users: users in those groups are promoted to `ADMIN`, users not in those groups are demoted to `USER`. |
+| Legacy sessions             | Users with old sessions (issued before group claims were embedded) should sign out/in once so OIDC group claims are refreshed. |
 
 </details>
 
@@ -345,6 +362,8 @@ Configure ExcaliDash backend for hybrid OIDC:
 ```bash
 cd backend
 cp .env.oidc.example .env
+# If backend runs in Docker and Keycloak issuer is localhost for browser, set:
+# OIDC_DISCOVERY_URL=http://keycloak:8080/realms/excalidash
 # Ensure OIDC_REDIRECT_URI matches where your frontend is running:
 # - http://localhost:6767/api/auth/oidc/callback (repo frontend dev default)
 # - https://excalidash.example.com/api/auth/oidc/callback (production)
@@ -492,6 +511,6 @@ Common flags:
 # Credits
 If you find ExcaliDash useful, please consider [sponsoring](https://github.com/sponsors/ZimengXiong)
 - Example designs from:
-  - https://github.com/Prakash-sa/system-design-ultimatum/tree/main
-  - https://github.com/kitsteam/excalidraw-examples/tree/main
+  - <https://github.com/Prakash-sa/system-design-ultimatum/tree/main>
+  - <https://github.com/kitsteam/excalidraw-examples/tree/main>
 - [The amazing work of Excalidraw & contributors](https://www.npmjs.com/package/@excalidraw/excalidraw)
