@@ -10,7 +10,7 @@ import { getPasswordPolicy, validatePassword } from '../utils/passwordPolicy';
 import { PasswordRequirements } from '../components/PasswordRequirements';
 
 export const Profile: React.FC = () => {
-    const { user: authUser, logout, authEnabled } = useAuth();
+    const { user: authUser, logout, authEnabled, isProxyAuth } = useAuth();
     const navigate = useNavigate();
     const mustResetPassword = Boolean(authUser?.mustResetPassword);
     const passwordPolicy = getPasswordPolicy();
@@ -274,7 +274,7 @@ export const Profile: React.FC = () => {
 	                                            : "flex-1 px-4 py-3 bg-slate-50 dark:bg-neutral-800 border-2 border-slate-200 dark:border-neutral-700 rounded-xl text-slate-600 dark:text-neutral-400 cursor-not-allowed"
 	                                    }
 	                                />
-		                                {!showEmailForm && (
+		                                {!showEmailForm && !isProxyAuth && (
 		                                    <button
 		                                        onClick={() => {
 		                                            setShowEmailForm(true);
@@ -362,6 +362,7 @@ export const Profile: React.FC = () => {
                     </div>
                 </div>
 
+                {!isProxyAuth && (
                 <div className="bg-white dark:bg-neutral-900 border-2 border-black dark:border-neutral-700 rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.2)] p-6">
                     <div className="flex items-center justify-between mb-6">
                         <div className="flex items-center gap-3">
@@ -462,6 +463,7 @@ export const Profile: React.FC = () => {
 	                        </div>
 	                    )}
                 </div>
+                )}
             </div>
         </Layout>
     );
