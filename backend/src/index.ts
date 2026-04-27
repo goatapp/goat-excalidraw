@@ -260,14 +260,17 @@ app.use(
   helmet({
     contentSecurityPolicy: {
       directives: {
-        // Backend serves JSON APIs; keep CSP strict and avoid 'unsafe-*'.
         defaultSrc: ["'none'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        fontSrc: ["'self'"],
         baseUri: ["'none'"],
         formAction: ["'none'"],
         frameAncestors: ["'none'"],
         objectSrc: ["'none'"],
-        imgSrc: ["'self'", "data:"],
-        connectSrc: ["'self'"],
+        imgSrc: ["'self'", "data:", "blob:"],
+        connectSrc: ["'self'", "ws:", "wss:"],
+        workerSrc: ["'self'", "blob:"],
       },
     },
     hsts: {
