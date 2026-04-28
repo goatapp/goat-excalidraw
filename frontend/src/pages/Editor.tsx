@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Download, Loader2, ChevronUp, ChevronDown, Share2, History } from 'lucide-react';
 import clsx from 'clsx';
@@ -822,6 +822,7 @@ export const Editor: React.FC = () => {
   const excalidrawAPI = useRef<any>(null);
 
   const setExcalidrawAPI = useCallback((api: any) => {
+    // eslint-disable-next-line react-hooks/immutability -- ref set from Excalidraw callback, not during render
     excalidrawAPI.current = api;
     if (import.meta.env.DEV) {
       (window as any).__EXCALIDASH_EXCALIDRAW_API__ = api;
@@ -948,127 +949,129 @@ export const Editor: React.FC = () => {
   const savePreviewRef = useRef<((drawingId: string, elements: readonly any[], appState: any, files: any) => Promise<void>) | null>(null);
   const saveLibraryRef = useRef<((items: any[]) => Promise<void>) | null>(null);
 
-  saveDataRef.current = async (drawingId: string, elements: readonly any[], appState: any, files?: Record<string, any>) => {
-    if (!drawingId) return;
+  useEffect(() => {
+    saveDataRef.current = async (drawingId: string, elements: readonly any[], appState: any, files?: Record<string, any>) => {
+      if (!drawingId) return;
 
-    try {
-      const persistableAppState = getPersistedAppState(appState);
+      try {
+        const persistableAppState = getPersistedAppState(appState);
 
-      const candidateElements = Array.isArray(elements) ? elements : [];
-      const {
-        snapshot: safeElements,
-        prevented,
-        staleEmptySnapshot,
-        staleNonRenderableSnapshot,
-      } = resolveSafeSnapshot(candidateElements);
-      const persistableElements = Array.from(safeElements);
-      if (suspiciousBlankLoadRef.current && !hasRenderableElements(persistableElements)) {
-        console.warn("[Editor] Blocking non-renderable save due to suspicious blank load", {
-          drawingId,
-          elementCount: persistableElements.length,
-        });
-        return;
-      }
-      if (staleEmptySnapshot || staleNonRenderableSnapshot) {
-        console.warn("[Editor] Skipping stale snapshot save", {
-          drawingId,
-          candidateElementCount: candidateElements.length,
-          fallbackElementCount: persistableElements.length,
+        const candidateElements = Array.isArray(elements) ? elements : [];
+        const {
+          snapshot: safeElements,
           prevented,
           staleEmptySnapshot,
           staleNonRenderableSnapshot,
-        });
-        return;
-      }
-      let persistableFiles = files ?? latestFilesRef.current ?? {};
-      const compressedFilesResult = await compressExcalidrawFiles(persistableFiles);
-      if (compressedFilesResult.changed) {
-        persistableFiles = compressedFilesResult.files;
-        if (excalidrawAPI.current && typeof excalidrawAPI.current.addFiles === "function") {
-          isSyncing.current = true;
-          try {
-            excalidrawAPI.current.addFiles(Object.values(persistableFiles));
-          } finally {
-            isSyncing.current = false;
-          }
-        }
-        latestFilesRef.current = persistableFiles;
-        lastSyncedFilesRef.current = persistableFiles;
-        if (import.meta.env.DEV) {
-          console.log("[Editor] Auto-compressed image files before save", {
+        } = resolveSafeSnapshot(candidateElements);
+        const persistableElements = Array.from(safeElements);
+        if (suspiciousBlankLoadRef.current && !hasRenderableElements(persistableElements)) {
+          console.warn("[Editor] Blocking non-renderable save due to suspicious blank load", {
             drawingId,
-            changedFileCount: compressedFilesResult.changedIds.length,
+            elementCount: persistableElements.length,
           });
+          return;
         }
-      }
-      const filesChangedSincePersist =
-        Object.keys(getFilesDelta(lastPersistedFilesRef.current || {}, persistableFiles || {}))
-          .length > 0;
-      const normalizedElements = normalizeImageElementStatus(
-        persistableElements,
-        persistableFiles
-      );
-      const normalizedElementsForSave = Array.from(normalizedElements);
-
-      console.log("[Editor] Saving drawing", {
-        drawingId,
-        elementCount: normalizedElementsForSave.length,
-        hasRenderableElements: hasRenderableElements(normalizedElementsForSave),
-        appState: persistableAppState,
-      });
-
-      const persistScene = async (attempt: number): Promise<void> => {
-        try {
-          const updated = await api.updateDrawing(drawingId, {
-            elements: normalizedElementsForSave,
-            appState: persistableAppState,
-            ...(filesChangedSincePersist ? { files: persistableFiles } : {}),
-            version: currentDrawingVersionRef.current ?? undefined,
+        if (staleEmptySnapshot || staleNonRenderableSnapshot) {
+          console.warn("[Editor] Skipping stale snapshot save", {
+            drawingId,
+            candidateElementCount: candidateElements.length,
+            fallbackElementCount: persistableElements.length,
+            prevented,
+            staleEmptySnapshot,
+            staleNonRenderableSnapshot,
           });
-          if (typeof updated.version === "number") {
-            currentDrawingVersionRef.current = updated.version;
+          return;
+        }
+        let persistableFiles = files ?? latestFilesRef.current ?? {};
+        const compressedFilesResult = await compressExcalidrawFiles(persistableFiles);
+        if (compressedFilesResult.changed) {
+          persistableFiles = compressedFilesResult.files;
+          if (excalidrawAPI.current && typeof excalidrawAPI.current.addFiles === "function") {
+            isSyncing.current = true;
+            try {
+              excalidrawAPI.current.addFiles(Object.values(persistableFiles));
+            } finally {
+              isSyncing.current = false;
+            }
           }
-          lastPersistedElementsRef.current = normalizedElementsForSave;
-          if (filesChangedSincePersist) {
-            lastPersistedFilesRef.current = persistableFiles;
+          latestFilesRef.current = persistableFiles;
+          lastSyncedFilesRef.current = persistableFiles;
+          if (import.meta.env.DEV) {
+            console.log("[Editor] Auto-compressed image files before save", {
+              drawingId,
+              changedFileCount: compressedFilesResult.changedIds.length,
+            });
           }
-          console.log("[Editor] Save complete", { drawingId });
-        } catch (err) {
-          if (api.isAxiosError(err) && err.response?.status === 409) {
-            const reportedVersion = Number(err.response?.data?.currentVersion);
-            const hasReportedVersion = Number.isInteger(reportedVersion) && reportedVersion > 0;
-            if (hasReportedVersion) {
-              currentDrawingVersionRef.current = reportedVersion;
+        }
+        const filesChangedSincePersist =
+          Object.keys(getFilesDelta(lastPersistedFilesRef.current || {}, persistableFiles || {}))
+            .length > 0;
+        const normalizedElements = normalizeImageElementStatus(
+          persistableElements,
+          persistableFiles
+        );
+        const normalizedElementsForSave = Array.from(normalizedElements);
+
+        console.log("[Editor] Saving drawing", {
+          drawingId,
+          elementCount: normalizedElementsForSave.length,
+          hasRenderableElements: hasRenderableElements(normalizedElementsForSave),
+          appState: persistableAppState,
+        });
+
+        const persistScene = async (attempt: number): Promise<void> => {
+          try {
+            const updated = await api.updateDrawing(drawingId, {
+              elements: normalizedElementsForSave,
+              appState: persistableAppState,
+              ...(filesChangedSincePersist ? { files: persistableFiles } : {}),
+              version: currentDrawingVersionRef.current ?? undefined,
+            });
+            if (typeof updated.version === "number") {
+              currentDrawingVersionRef.current = updated.version;
+            }
+            lastPersistedElementsRef.current = normalizedElementsForSave;
+            if (filesChangedSincePersist) {
+              lastPersistedFilesRef.current = persistableFiles;
+            }
+            console.log("[Editor] Save complete", { drawingId });
+          } catch (err) {
+            if (api.isAxiosError(err) && err.response?.status === 409) {
+              const reportedVersion = Number(err.response?.data?.currentVersion);
+              const hasReportedVersion = Number.isInteger(reportedVersion) && reportedVersion > 0;
+              if (hasReportedVersion) {
+                currentDrawingVersionRef.current = reportedVersion;
+              }
+
+              if (attempt === 0 && hasReportedVersion) {
+                console.warn("[Editor] Version conflict while saving drawing, retrying once", {
+                  drawingId,
+                  currentVersion: reportedVersion,
+                });
+                await persistScene(1);
+                return;
+              }
+
+              throw new DrawingSaveConflictError();
             }
 
-            if (attempt === 0 && hasReportedVersion) {
-              console.warn("[Editor] Version conflict while saving drawing, retrying once", {
-                drawingId,
-                currentVersion: reportedVersion,
-              });
-              await persistScene(1);
-              return;
-            }
-
-            throw new DrawingSaveConflictError();
+            throw err;
           }
+        };
 
+        await persistScene(0);
+      } catch (err) {
+        if (err instanceof DrawingSaveConflictError) {
+          console.warn("[Editor] Version conflict while saving drawing", { drawingId });
+          toast.error("Drawing changed in another tab. Refresh to load latest.");
           throw err;
         }
-      };
-
-      await persistScene(0);
-    } catch (err) {
-      if (err instanceof DrawingSaveConflictError) {
-        console.warn("[Editor] Version conflict while saving drawing", { drawingId });
-        toast.error("Drawing changed in another tab. Refresh to load latest.");
+        console.error('Failed to save drawing', err);
+        toast.error("Failed to save changes");
         throw err;
       }
-      console.error('Failed to save drawing', err);
-      toast.error("Failed to save changes");
-      throw err;
-    }
-  };
+    };
+  });
 
   const enqueueSceneSave = useCallback(
     (
@@ -1098,91 +1101,96 @@ export const Editor: React.FC = () => {
     []
   );
 
-  savePreviewRef.current = async (drawingId: string, elements: readonly any[], appState: any, files: any) => {
-    if (!drawingId) return;
+  useEffect(() => {
+    savePreviewRef.current = async (drawingId: string, elements: readonly any[], appState: any, files: any) => {
+      if (!drawingId) return;
 
-    try {
-      const snapshotFromArgs = Array.isArray(elements) ? elements : [];
-      const snapshotFromRef = latestElementsRef.current ?? [];
-      const candidateSnapshot =
-        hasRenderableElements(snapshotFromArgs) || !hasRenderableElements(snapshotFromRef)
-          ? snapshotFromArgs
-          : snapshotFromRef;
-      const {
-        snapshot: currentSnapshot,
-        prevented: preventedPreviewOverwrite,
-        staleEmptySnapshot: staleEmptyPreview,
-        staleNonRenderableSnapshot: staleNonRenderablePreview,
-      } = resolveSafeSnapshot(candidateSnapshot);
-      const currentFiles = latestFilesRef.current ?? files;
-      const normalizedSnapshot = normalizeImageElementStatus(currentSnapshot, currentFiles);
-      if (suspiciousBlankLoadRef.current && !hasRenderableElements(currentSnapshot)) {
-        console.warn("[Editor] Blocking non-renderable preview due to suspicious blank load", {
-          drawingId,
-          elementCount: currentSnapshot.length,
+      try {
+        const snapshotFromArgs = Array.isArray(elements) ? elements : [];
+        const snapshotFromRef = latestElementsRef.current ?? [];
+        const candidateSnapshot =
+          hasRenderableElements(snapshotFromArgs) || !hasRenderableElements(snapshotFromRef)
+            ? snapshotFromArgs
+            : snapshotFromRef;
+        const {
+          snapshot: currentSnapshot,
+          prevented: preventedPreviewOverwrite,
+          staleEmptySnapshot: staleEmptyPreview,
+          staleNonRenderableSnapshot: staleNonRenderablePreview,
+        } = resolveSafeSnapshot(candidateSnapshot);
+        const currentFiles = latestFilesRef.current ?? files;
+        const normalizedSnapshot = normalizeImageElementStatus(currentSnapshot, currentFiles);
+        if (suspiciousBlankLoadRef.current && !hasRenderableElements(currentSnapshot)) {
+          console.warn("[Editor] Blocking non-renderable preview due to suspicious blank load", {
+            drawingId,
+            elementCount: currentSnapshot.length,
+          });
+          return;
+        }
+
+        if (preventedPreviewOverwrite) {
+          console.warn("[Editor] Prevented stale snapshot preview overwrite", {
+            drawingId,
+            staleEmptyPreview,
+            staleNonRenderablePreview,
+            fallbackElementCount: currentSnapshot.length,
+          });
+        }
+
+        const svg = await exportToSvg({
+          elements: normalizedSnapshot,
+          appState: {
+            ...appState,
+            exportBackground: true,
+            viewBackgroundColor: appState.viewBackgroundColor || '#ffffff',
+          },
+          files: currentFiles,
         });
-        return;
-      }
+        const preview = svg.outerHTML;
 
-      if (preventedPreviewOverwrite) {
-        console.warn("[Editor] Prevented stale snapshot preview overwrite", {
+        console.log("[Editor] Saving preview", {
           drawingId,
-          staleEmptyPreview,
-          staleNonRenderablePreview,
-          fallbackElementCount: currentSnapshot.length,
+          elementCount: normalizedSnapshot.length,
         });
+
+        await api.updateDrawing(drawingId, { preview });
+
+        console.log("[Editor] Preview save complete", { drawingId });
+      } catch (err) {
+        console.error('Failed to save preview', err);
       }
+    };
+  });
 
-      const svg = await exportToSvg({
-        elements: normalizedSnapshot,
-        appState: {
-          ...appState,
-          exportBackground: true,
-          viewBackgroundColor: appState.viewBackgroundColor || '#ffffff',
-        },
-        files: currentFiles,
-      });
-      const preview = svg.outerHTML;
-
-      console.log("[Editor] Saving preview", {
-        drawingId,
-        elementCount: normalizedSnapshot.length,
-      });
-
-      await api.updateDrawing(drawingId, { preview });
-
-      console.log("[Editor] Preview save complete", { drawingId });
-    } catch (err) {
-      console.error('Failed to save preview', err);
-    }
-  };
-
-  saveLibraryRef.current = async (items: any[]) => {
-    if (!user) return;
-    try {
-      console.log("[Editor] Saving library", { itemCount: items.length });
-      await api.updateLibrary(items);
-      console.log("[Editor] Library save complete");
-    } catch (err) {
-      console.error('Failed to save library', err);
-      if (api.isAxiosError(err) && err.response?.status === 401) {
-        // Share sessions / anonymous users can't persist library to the server.
-        return;
+  useEffect(() => {
+    saveLibraryRef.current = async (items: any[]) => {
+      if (!user) return;
+      try {
+        console.log("[Editor] Saving library", { itemCount: items.length });
+        await api.updateLibrary(items);
+        console.log("[Editor] Library save complete");
+      } catch (err) {
+        console.error('Failed to save library', err);
+        if (api.isAxiosError(err) && err.response?.status === 401) {
+          // Share sessions / anonymous users can't persist library to the server.
+          return;
+        }
+        toast.error("Failed to save library");
       }
-      toast.error("Failed to save library");
-    }
-  };
+    };
+  });
 
 
-  const debouncedSave = useCallback(
-    debounce((drawingId, elements, appState, files) => {
+  /* eslint-disable react-hooks/refs -- refs in debounced/throttled callbacks execute at call time, not during render */
+  const debouncedSave = useMemo(
+    () => debounce((drawingId: string, elements: readonly any[], appState: any, files?: Record<string, any>) => {
       enqueueSceneSave(drawingId, elements, appState, files);
     }, 1000),
     [enqueueSceneSave]
   );
-  debouncedSaveRef.current = debouncedSave;
-  const debouncedSavePreview = useCallback(
-    debounce((drawingId: string) => {
+  useEffect(() => { debouncedSaveRef.current = debouncedSave; }, [debouncedSave]);
+  const debouncedSavePreview = useMemo(
+    () => debounce((drawingId: string) => {
       if (!savePreviewRef.current) return;
       if (!drawingId) return;
       if (isUnmounting.current) return;
@@ -1213,8 +1221,8 @@ export const Editor: React.FC = () => {
     []
   );
 
-  const debouncedSaveLibrary = useCallback(
-    debounce((items: any[]) => {
+  const debouncedSaveLibrary = useMemo(
+    () => debounce((items: any[]) => {
       if (saveLibraryRef.current) {
         saveLibraryRef.current(items);
       }
@@ -1229,8 +1237,8 @@ export const Editor: React.FC = () => {
     };
   }, [debouncedSave, debouncedSavePreview]);
 
-  const broadcastChanges = useCallback(
-    throttle((elements: readonly any[], currentFiles?: Record<string, any>) => {
+  const broadcastChanges = useMemo(
+    () => throttle((elements: readonly any[], currentFiles?: Record<string, any>) => {
       if (!sendMsgRef.current || !id) return;
 
       const changes: any[] = [];
@@ -1263,6 +1271,7 @@ export const Editor: React.FC = () => {
 
       if (changes.length > 0 || shouldSyncFiles || shouldSyncOrder) {
         hasSceneChangesSinceLoadRef.current = true;
+        // eslint-disable-next-line react-hooks/purity -- called at event time, not during render
         lastLocalChangeAtRef.current = Date.now();
         sendMsgRef.current('element-update', {
           drawingId: id,
@@ -1290,6 +1299,7 @@ export const Editor: React.FC = () => {
       computeElementOrderSig,
     ]
   );
+  /* eslint-enable react-hooks/refs */
 
   useEffect(() => {
     isBootstrappingScene.current = true;
@@ -1314,6 +1324,7 @@ export const Editor: React.FC = () => {
     lastPersistedElementsRef.current = [];
     suspiciousBlankLoadRef.current = false;
     hasSceneChangesSinceLoadRef.current = false;
+    // eslint-disable-next-line react-hooks/immutability -- intentional reset when drawing ID changes
     excalidrawAPI.current = null;
     setIsReady(false);
     setIsSceneLoading(true);
@@ -1844,8 +1855,7 @@ export const Editor: React.FC = () => {
               if (autoHideStorageKey) {
                 try {
                   window.localStorage.setItem(autoHideStorageKey, next ? "1" : "0");
-                } catch {
-                }
+                } catch { /* storage unavailable */ }
               }
             }}
             className="p-2 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-lg text-gray-600 dark:text-gray-300 transition-colors"

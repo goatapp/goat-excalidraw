@@ -74,8 +74,7 @@ export const ImpersonationBanner: React.FC = () => {
           if (!serverImpersonating && readImpersonationState()) {
             clearLocalImpersonation();
           }
-        } catch {
-        }
+        } catch { /* storage unavailable */ }
       };
 
     void verifyServerImpersonationState();

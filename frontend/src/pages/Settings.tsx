@@ -89,7 +89,7 @@ export const Settings: React.FC = () => {
         const next = !imageCompression;
         try {
             window.localStorage?.setItem?.(COMPRESSION_ENABLED_KEY, String(next));
-        } catch { }
+        } catch { /* storage unavailable */ }
         setImageCompression(next);
     };
 
@@ -101,8 +101,7 @@ export const Settings: React.FC = () => {
             setUpdateInfo(info);
             try {
                 window.localStorage?.setItem?.(`${UPDATE_INFO_KEY}:${channel}`, JSON.stringify(info));
-            } catch {
-            }
+            } catch { /* storage unavailable */ }
         } catch (err: unknown) {
             let message = 'Failed to check for updates';
             if (api.isAxiosError(err)) {
@@ -415,8 +414,7 @@ export const Settings: React.FC = () => {
                                     const next = (e.target.value === 'prerelease' ? 'prerelease' : 'stable') as api.UpdateChannel;
                                     try {
                                         window.localStorage?.setItem?.(UPDATE_CHANNEL_KEY, next);
-                                    } catch {
-                                    }
+                                    } catch { /* storage unavailable */ }
                                     setUpdateChannel(next);
                                     void checkForUpdates(next);
                                 }}

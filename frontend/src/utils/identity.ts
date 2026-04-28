@@ -186,8 +186,7 @@ export const getUserIdentity = (): UserIdentity => {
         localStorage.setItem("excalidash-user-id", JSON.stringify(normalized));
         return normalized;
       }
-    } catch {
-    }
+    } catch { /* storage unavailable */ }
   }
 
   const deviceId = getOrCreateBrowserFingerprint();

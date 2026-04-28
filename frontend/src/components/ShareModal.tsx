@@ -163,8 +163,8 @@ export const ShareModal: React.FC<Props> = ({ drawingId, drawingName, isOpen, on
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const shareableEditorUrl = `${origin}/shared/${drawingId}`;
 
+  const [now] = useState(() => Date.now());
   const activeLink = useMemo(() => {
-    const now = Date.now();
     return (
       (sharing?.linkShares || []).find((s) => {
         if (s.revokedAt) return false;
@@ -174,7 +174,7 @@ export const ShareModal: React.FC<Props> = ({ drawingId, drawingName, isOpen, on
         return ts > now;
       }) || null
     );
-  }, [sharing]);
+  }, [sharing, now]);
 
   const formatAutoDisableText = (expiresAt: string | null): string => {
     if (!expiresAt) return "External access does not auto-disable.";

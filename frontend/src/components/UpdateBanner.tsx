@@ -26,8 +26,7 @@ const safeSetItem = (key: string, value: string): void => {
     const storage = window.localStorage;
     if (!storage || typeof storage.setItem !== "function") return;
     storage.setItem(key, value);
-  } catch {
-  }
+  } catch { /* storage unavailable */ }
 };
 
 const safeGetSessionItem = (key: string): string | null => {
@@ -47,8 +46,7 @@ const safeSetSessionItem = (key: string, value: string): void => {
     const storage = window.sessionStorage;
     if (!storage || typeof storage.setItem !== "function") return;
     storage.setItem(key, value);
-  } catch {
-  }
+  } catch { /* storage unavailable */ }
 };
 
 const readChannel = (): api.UpdateChannel => {
