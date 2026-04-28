@@ -12,8 +12,7 @@ import { execSync } from "child_process";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const TEST_DB_FILENAME = `test.${process.pid}.${Math.random().toString(16).slice(2)}.db`;
-const TEST_DB_PATH = path.resolve(__dirname, "../../prisma", TEST_DB_FILENAME);
+const TEST_DB_PATH = path.resolve(__dirname, "../../prisma", "test.db");
 const DB_PUSH_LOCK_PATH = path.resolve(__dirname, "../../prisma/.test-db-push.lock");
 
 const sleepSync = (ms: number) => {
