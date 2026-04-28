@@ -271,7 +271,11 @@ app.use(
         frameAncestors: ["'none'"],
         objectSrc: ["'none'"],
         imgSrc: ["'self'", "data:", "blob:"],
-        connectSrc: ["'self'", "ws:", "wss:", "https://esm.sh"],
+        connectSrc: [
+          "'self'",
+          ...allowedOrigins.map((o) => o.replace(/^http/, "ws")),
+          "https://esm.sh",
+        ],
         workerSrc: ["'self'", "blob:"],
       },
     },
