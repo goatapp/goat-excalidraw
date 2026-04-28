@@ -6,6 +6,7 @@ import { PrismaClient } from "../generated/client";
 import { AuthModeService } from "../auth/authMode";
 import { ACCESS_TOKEN_COOKIE_NAME, parseCookieHeader } from "../auth/cookies";
 import { BOOTSTRAP_USER_ID } from "../auth/authMode";
+import { config } from "../config";
 import {
   getDrawingAccess,
   canEditDrawing,
@@ -190,8 +191,33 @@ export const registerSocketHandlers = ({
     return normalized;
   };
 
+  const resolveProxyUserId = async (
+    req: IncomingMessage
+  ): Promise<string | null> => {
+    const raw = req.headers[config.proxyAuthHeader];
+    const email = (Array.isArray(raw) ? raw[0] : raw)?.trim().toLowerCase();
+    if (!email) return null;
+
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true, isActive: true },
+    });
+    if (!user || !user.isActive) return null;
+    return user.id;
+  };
+
   const handleAuth = async (state: SocketState, msg: WsMessage) => {
     try {
+      if (config.authMode === "proxy") {
+        const userId = await resolveProxyUserId(state.req);
+        if (userId) {
+          state.principal = { kind: "user", userId };
+        }
+        state.authenticated = true;
+        sendTo(state.ws, { type: "auth-ok" });
+        return;
+      }
+
       const tokenFromMsg =
         typeof msg.data?.token === "string" && msg.data.token.trim().length > 0
           ? msg.data.token

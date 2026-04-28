@@ -486,6 +486,7 @@ export const Editor: React.FC = () => {
     let intentionalClose = false;
     let reconnectAttempts = 0;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let joinRoomRetried = false;
     const MAX_RECONNECT_DELAY = 30000;
 
     const sendMsg = (ws: WebSocket, type: string, data?: any, onAck?: (payload: any) => void) => {
@@ -685,13 +686,16 @@ export const Editor: React.FC = () => {
         case 'error': {
           const message = typeof msg.data?.message === "string" ? msg.data.message : null;
           console.warn("[Editor] Socket error:", msg.data);
-          if (
-            message === "You do not have access to this drawing" &&
-            id &&
-            location.pathname.startsWith("/editor/")
-          ) {
-            navigate(`/shared/${id}${location.search}${location.hash}`, { replace: true });
-            return;
+          if (message === "You do not have access to this drawing") {
+            if (!joinRoomRetried) {
+              joinRoomRetried = true;
+              socketRef.current?.close();
+              return;
+            }
+            if (id && location.pathname.startsWith("/editor/")) {
+              navigate(`/shared/${id}${location.search}${location.hash}`, { replace: true });
+              return;
+            }
           }
           if (message) toast.error(message);
           break;
