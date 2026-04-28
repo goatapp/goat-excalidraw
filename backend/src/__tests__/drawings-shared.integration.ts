@@ -14,7 +14,7 @@ describe("Drawings - Shared With Me", () => {
 
   beforeAll(async () => {
     setupTestDb();
-    prisma = getTestPrisma();
+    prisma = await getTestPrisma();
     await resetTestDb(prisma);
     ({ app } = await import("../index.js"));
 

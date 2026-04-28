@@ -2,92 +2,28 @@
  * Test utilities for backend integration tests
  */
 import { PrismaClient } from "../generated/client/client.js";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import bcrypt from "bcrypt";
-import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "node:url";
-import { execSync } from "child_process";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TEST_DB_PATH = path.resolve(__dirname, "../../prisma", "test.db");
-const DB_PUSH_LOCK_PATH = path.resolve(__dirname, "../../prisma/.test-db-push.lock");
-let dbPushed = false;
-
-const sleepSync = (ms: number) => {
-  const shared = new Int32Array(new SharedArrayBuffer(4));
-  Atomics.wait(shared, 0, 0, ms);
-};
-
-const withDbPushLock = (fn: () => void) => {
-  const start = Date.now();
-  let fd: number | null = null;
-  while (fd === null) {
-    try {
-      fd = fs.openSync(DB_PUSH_LOCK_PATH, "wx");
-      fs.writeFileSync(fd, String(process.pid));
-    } catch (error) {
-      const err = error as NodeJS.ErrnoException;
-      if (err.code !== "EEXIST") throw error;
-      if (Date.now() - start > 30_000) {
-        throw new Error("Timed out waiting for Prisma db push lock");
-      }
-      sleepSync(50);
-    }
-  }
-
-  try {
-    fn();
-  } finally {
-    try {
-      fs.closeSync(fd);
-    } catch {
-    }
-    try {
-      fs.unlinkSync(DB_PUSH_LOCK_PATH);
-    } catch {
-    }
-  }
-};
 
 /**
- * Get a test Prisma client pointing to the test database
+ * Get a test Prisma client pointing to the test database.
+ * Returns the app's singleton to avoid dual-connection visibility issues with better-sqlite3.
  */
-export const getTestPrisma = () => {
-  const databaseUrl = `file:${TEST_DB_PATH}`;
-  process.env.DATABASE_URL = databaseUrl;
-  const adapter = new PrismaBetterSqlite3({ url: databaseUrl });
-  return new PrismaClient({ adapter });
+export const getTestPrisma = async (): Promise<PrismaClient> => {
+  const { prisma } = await import("../db/prisma.js");
+  return prisma;
 };
 
 /**
- * Setup the test database by running migrations
+ * Ensure DATABASE_URL points to the test database.
+ * Schema is pushed once by vitest.globalSetup.ts before any test file runs.
  */
 export const setupTestDb = () => {
-  const databaseUrl = `file:${TEST_DB_PATH}`;
-  process.env.DATABASE_URL = databaseUrl;
-
-  if (dbPushed) return;
-
-  try {
-    withDbPushLock(() => {
-      const cleanEnv = { ...process.env, DATABASE_URL: databaseUrl, RUST_LOG: "info" };
-      delete cleanEnv.CLAUDECODE;
-      delete cleanEnv.AI_AGENT;
-      delete cleanEnv.CLAUDE_CODE_ENTRYPOINT;
-      execSync("npx prisma db push --force-reset", {
-        cwd: path.resolve(__dirname, "../../"),
-        env: cleanEnv,
-        stdio: "pipe",
-      });
-    });
-    dbPushed = true;
-  } catch (error) {
-    console.error("Failed to setup test database:", error);
-    throw error;
-  }
+  process.env.DATABASE_URL = `file:${TEST_DB_PATH}`;
 };
 
 export const resetTestDb = async (prisma: PrismaClient) => {
@@ -103,6 +39,8 @@ export const resetTestDb = async (prisma: PrismaClient) => {
   await prisma.user.deleteMany({});
   await prisma.library.deleteMany({});
   await prisma.systemConfig.deleteMany({});
+  const { authModeService } = await import("../middleware/auth.js");
+  authModeService.clearAuthEnabledCache();
 };
 
 /**

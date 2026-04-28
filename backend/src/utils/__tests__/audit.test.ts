@@ -6,6 +6,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
+import { PrismaClient } from "../../generated/client/client.js";
 import { getTestPrisma, resetTestDb, setupTestDb, initTestDb, createTestUser } from "../../__tests__/testUtils.js";
 import {
   logAuditEvent,
@@ -15,11 +16,12 @@ import {
 } from "../audit.js";
 
 describe("Audit Logging", () => {
-  const prisma = getTestPrisma();
+  let prisma: PrismaClient;
   let testUser: { id: string; email: string };
 
   beforeAll(async () => {
     setupTestDb();
+    prisma = await getTestPrisma();
     await resetTestDb(prisma);
     testUser = await initTestDb(prisma);
     setAuditPrismaProvider(() => prisma);

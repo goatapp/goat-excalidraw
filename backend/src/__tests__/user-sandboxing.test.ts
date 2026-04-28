@@ -24,7 +24,7 @@ describe("User Data Sandboxing", () => {
 
   beforeAll(async () => {
     setupTestDb();
-    prisma = getTestPrisma();
+    prisma = await getTestPrisma();
     await resetTestDb(prisma);
 
     const hashA = await bcrypt.hash("passwordA", 10);

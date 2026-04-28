@@ -383,11 +383,12 @@ describe("Security Sanitization - Image Data URLs", () => {
 });
 
 describe("Drawing API - Database Round-Trip", () => {
-  const prisma = getTestPrisma();
+  let prisma: Awaited<ReturnType<typeof getTestPrisma>>;
   let testUser: { id: string };
 
   beforeAll(async () => {
     setupTestDb();
+    prisma = await getTestPrisma();
     await resetTestDb(prisma);
     testUser = await initTestDb(prisma);
   });

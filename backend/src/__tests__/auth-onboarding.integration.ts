@@ -15,7 +15,7 @@ describe("Auth onboarding decision", () => {
 
   beforeAll(async () => {
     setupTestDb();
-    prisma = getTestPrisma();
+    prisma = await getTestPrisma();
     await resetTestDb(prisma);
 
     ({ app } = await import("../index.js"));

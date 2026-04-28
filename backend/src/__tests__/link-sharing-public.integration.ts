@@ -75,7 +75,7 @@ describe("Link Sharing - Public By Drawing ID", () => {
 
   beforeAll(async () => {
     setupTestDb();
-    prisma = getTestPrisma();
+    prisma = await getTestPrisma();
     await resetTestDb(prisma);
 
     ({ app } = await import("../index.js"));

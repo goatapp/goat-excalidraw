@@ -5,6 +5,7 @@ import path from "path";
 import os from "os";
 import JSZip from "jszip";
 import { fileURLToPath } from "node:url";
+import { PrismaClient } from "../generated/client/client.js";
 import { getTestPrisma, resetTestDb, setupTestDb, cleanupTestDb } from "./testUtils.js";
 import { BOOTSTRAP_USER_ID } from "../auth/authMode.js";
 
@@ -267,7 +268,7 @@ const createLegacySqliteDbWithDuplicateDrawingIds = async (): Promise<string> =>
 describe("Import compatibility (legacy exports)", () => {
   const uploadsDir = path.resolve(__dirname, "../../uploads");
   const userAgent = "vitest-import-compat";
-  let prisma: ReturnType<typeof getTestPrisma>;
+  let prisma: PrismaClient;
   let app: any;
   let agent: any;
   let csrfHeaderName: string;
@@ -275,7 +276,7 @@ describe("Import compatibility (legacy exports)", () => {
 
   beforeAll(async () => {
     setupTestDb();
-    prisma = getTestPrisma();
+    prisma = await getTestPrisma();
     await resetTestDb(prisma);
     fs.mkdirSync(uploadsDir, { recursive: true });
 
