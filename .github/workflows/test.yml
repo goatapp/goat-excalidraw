@@ -202,4 +202,4 @@ jobs:
       - name: Run security tests
         run: |
           cd backend
-          npx ts-node src/securityTest.ts
+          npx tsx src/securityTest.ts
