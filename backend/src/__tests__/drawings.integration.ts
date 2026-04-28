@@ -18,6 +18,7 @@ import {
   createSampleFilesObject,
   generateLargeImageDataUrl,
   compareFilesObjects,
+  resetTestDb,
 } from "./testUtils.js";
 import { 
   sanitizeDrawingData, 
@@ -387,6 +388,7 @@ describe("Drawing API - Database Round-Trip", () => {
 
   beforeAll(async () => {
     setupTestDb();
+    await resetTestDb(prisma);
     testUser = await initTestDb(prisma);
   });
 

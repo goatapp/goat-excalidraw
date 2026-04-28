@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import request from "supertest";
 import { PrismaClient } from "../generated/client/client.js";
-import { getTestPrisma, setupTestDb } from "./testUtils.js";
+import { getTestPrisma, resetTestDb, setupTestDb } from "./testUtils.js";
 import { BOOTSTRAP_USER_ID } from "../auth/authMode.js";
 import { issueBootstrapSetupCodeIfRequired } from "../auth/bootstrapSetupCode.js";
 
@@ -16,6 +16,7 @@ describe("Auth onboarding decision", () => {
   beforeAll(async () => {
     setupTestDb();
     prisma = getTestPrisma();
+    await resetTestDb(prisma);
 
     ({ app } = await import("../index.js"));
 

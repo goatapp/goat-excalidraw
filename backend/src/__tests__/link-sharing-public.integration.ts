@@ -5,7 +5,7 @@ import jwt, { SignOptions } from "jsonwebtoken";
 import { StringValue } from "ms";
 import { PrismaClient } from "../generated/client/client.js";
 import { config } from "../config.js";
-import { getTestPrisma, setupTestDb } from "./testUtils.js";
+import { getTestPrisma, resetTestDb, setupTestDb } from "./testUtils.js";
 import {
   ACCESS_TOKEN_COOKIE_NAME,
   REFRESH_TOKEN_COOKIE_NAME,
@@ -76,6 +76,7 @@ describe("Link Sharing - Public By Drawing ID", () => {
   beforeAll(async () => {
     setupTestDb();
     prisma = getTestPrisma();
+    await resetTestDb(prisma);
 
     ({ app } = await import("../index.js"));
 

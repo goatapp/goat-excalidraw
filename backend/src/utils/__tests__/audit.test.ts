@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
-import { getTestPrisma, setupTestDb, initTestDb, createTestUser } from "../../__tests__/testUtils.js";
+import { getTestPrisma, resetTestDb, setupTestDb, initTestDb, createTestUser } from "../../__tests__/testUtils.js";
 import {
   logAuditEvent,
   getAuditLogs,
@@ -20,6 +20,7 @@ describe("Audit Logging", () => {
 
   beforeAll(async () => {
     setupTestDb();
+    await resetTestDb(prisma);
     testUser = await initTestDb(prisma);
     setAuditPrismaProvider(() => prisma);
     process.env.ENABLE_AUDIT_LOGGING = "true";

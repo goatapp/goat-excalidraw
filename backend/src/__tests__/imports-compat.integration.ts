@@ -5,7 +5,7 @@ import path from "path";
 import os from "os";
 import JSZip from "jszip";
 import { fileURLToPath } from "node:url";
-import { getTestPrisma, setupTestDb, cleanupTestDb } from "./testUtils.js";
+import { getTestPrisma, resetTestDb, setupTestDb, cleanupTestDb } from "./testUtils.js";
 import { BOOTSTRAP_USER_ID } from "../auth/authMode.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -276,6 +276,7 @@ describe("Import compatibility (legacy exports)", () => {
   beforeAll(async () => {
     setupTestDb();
     prisma = getTestPrisma();
+    await resetTestDb(prisma);
     fs.mkdirSync(uploadsDir, { recursive: true });
 
     ({ app } = await import("../index.js"));

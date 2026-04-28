@@ -14,6 +14,7 @@ const __dirname = path.dirname(__filename);
 
 const TEST_DB_PATH = path.resolve(__dirname, "../../prisma", "test.db");
 const DB_PUSH_LOCK_PATH = path.resolve(__dirname, "../../prisma/.test-db-push.lock");
+let dbPushed = false;
 
 const sleepSync = (ms: number) => {
   const shared = new Int32Array(new SharedArrayBuffer(4));
@@ -68,22 +69,40 @@ export const setupTestDb = () => {
   const databaseUrl = `file:${TEST_DB_PATH}`;
   process.env.DATABASE_URL = databaseUrl;
 
+  if (dbPushed) return;
+
   try {
     withDbPushLock(() => {
+      const cleanEnv = { ...process.env, DATABASE_URL: databaseUrl, RUST_LOG: "info" };
+      delete cleanEnv.CLAUDECODE;
+      delete cleanEnv.AI_AGENT;
+      delete cleanEnv.CLAUDE_CODE_ENTRYPOINT;
       execSync("npx prisma db push --force-reset", {
         cwd: path.resolve(__dirname, "../../"),
-        env: {
-          ...process.env,
-          DATABASE_URL: databaseUrl,
-          RUST_LOG: "info",
-        },
+        env: cleanEnv,
         stdio: "pipe",
       });
     });
+    dbPushed = true;
   } catch (error) {
     console.error("Failed to setup test database:", error);
     throw error;
   }
+};
+
+export const resetTestDb = async (prisma: PrismaClient) => {
+  await prisma.drawingSnapshot.deleteMany({});
+  await prisma.drawingLinkShare.deleteMany({});
+  await prisma.drawingPermission.deleteMany({});
+  await prisma.drawing.deleteMany({});
+  await prisma.collection.deleteMany({});
+  await prisma.auditLog.deleteMany({});
+  await prisma.passwordResetToken.deleteMany({});
+  await prisma.refreshToken.deleteMany({});
+  await prisma.authIdentity.deleteMany({});
+  await prisma.user.deleteMany({});
+  await prisma.library.deleteMany({});
+  await prisma.systemConfig.deleteMany({});
 };
 
 /**
