@@ -13,10 +13,8 @@ export default defineConfig({
       AUTH_MODE: "local",
     },
     pool: "forks",
-    poolOptions: {
-      forks: {
-        singleFork: true,
-      },
+    forks: {
+      singleFork: true,
     },
   },
 });

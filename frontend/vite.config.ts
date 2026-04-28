@@ -34,21 +34,17 @@ export default defineConfig(({ command }) => {
       'import.meta.env.VITE_APP_BUILD_LABEL': JSON.stringify(buildLabel),
     },
     build: {
-      rollupOptions: {
+      chunkSizeWarningLimit: 1500,
+      rolldownOptions: {
         output: {
           manualChunks(id) {
-            if (id.includes("@excalidraw/excalidraw/dist") &&
-                (id.endsWith("chunk-EIO257PC.js") || id.endsWith("chunk-SRAX5OIU.js"))) {
-              return "excalidraw-subset-deps";
-            }
+            if (!id.includes("@excalidraw/excalidraw")) return;
+            if (id.includes("subset-worker")) return;
+            const match = id.match(/\/(chunk-[A-Z0-9]+|subset-shared\.chunk|index)\.js$/);
+            if (match) return `excalidraw-${match[1]}`;
+            return "excalidraw-vendor";
           },
         },
-      },
-    },
-    optimizeDeps: {
-      esbuildOptions: {
-        define: processEnvDefines,
-        target: "es2022",
       },
     },
     server: {

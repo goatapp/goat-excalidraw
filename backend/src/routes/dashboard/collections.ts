@@ -59,7 +59,7 @@ export const registerCollectionRoutes = (
   app.put("/collections/:id", requireAuth, asyncHandler(async (req, res) => {
     if (!req.user) return res.status(401).json({ error: "Unauthorized" });
 
-    const { id } = req.params;
+    const id = req.params.id as string;
     if (isTrashCollectionId(id, req.user.id)) {
       return res.status(400).json({
         error: "Validation error",
@@ -99,7 +99,7 @@ export const registerCollectionRoutes = (
   app.delete("/collections/:id", requireAuth, asyncHandler(async (req, res) => {
     if (!req.user) return res.status(401).json({ error: "Unauthorized" });
 
-    const { id } = req.params;
+    const id = req.params.id as string;
     if (isTrashCollectionId(id, req.user.id)) {
       return res.status(400).json({
         error: "Validation error",
