@@ -26,7 +26,9 @@ if (!BUCKET) {
   process.exit(1);
 }
 
-const s3 = new S3Client({});
+const s3 = new S3Client({
+  forcePathStyle: process.env.S3_FORCE_PATH_STYLE === "true",
+});
 
 let lastDbHash = null;
 let uploadManifest = {};
