@@ -12,6 +12,8 @@
     "isolatedModules": true,
     "noUncheckedSideEffectImports": true,
     "moduleDetection": "force",
+    "strict": true,
+    "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true,
     "allowJs": true,
   },
