@@ -72,7 +72,7 @@ function buildApp() {
     requireAuth: (_req: any, _res: any, next: any) => next(),
     optionalAuth: (_req: any, _res: any, next: any) => next(),
     asyncHandler: (fn: any) => (req: any, res: any, next: any) => Promise.resolve(fn(req, res, next)).catch(next),
-    parseJsonField: (val: string, fallback: any) => { try { return JSON.parse(val); } catch { return fallback; } },
+    parseJsonField: (val: string | null | undefined, fallback: any) => { try { return JSON.parse(val!); } catch { return fallback; } },
     validateImportedDrawing: vi.fn().mockReturnValue(true),
     drawingCreateSchema: { safeParse: vi.fn().mockReturnValue({ success: true, data: {} }) } as any,
     drawingUpdateSchema: { safeParse: vi.fn() } as any,

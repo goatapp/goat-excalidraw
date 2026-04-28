@@ -150,7 +150,11 @@ export const createAuthRouter = (deps: CreateAuthRouterDeps): express.Router => 
   let loginIdentifierKeyIndex = new Map<string, Set<string>>();
 
   const parseLoginRateLimitConfig = (
-    systemConfig: Awaited<ReturnType<typeof ensureSystemConfig>>
+    systemConfig: {
+      authLoginRateLimitEnabled: boolean;
+      authLoginRateLimitWindowMs: number;
+      authLoginRateLimitMax: number;
+    }
   ): LoginRateLimitConfig => {
     const enabled =
       typeof systemConfig.authLoginRateLimitEnabled === "boolean"
