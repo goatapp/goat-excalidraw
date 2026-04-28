@@ -231,9 +231,9 @@ changelog: ## Prepare RELEASE.md from template or keep existing content, then op
 	if [ "$$CHOICE_LOWER" = "y" ] || [ "$$CHOICE_LOWER" = "yes" ]; then \
 		echo "Generating fresh RELEASE.md..."; \
 		if [ "$(PRERELEASE)" = "1" ]; then \
-			node scripts/reset-release-notes.cjs --prerelease; \
+			node scripts/reset-release-notes.mjs --prerelease; \
 		else \
-			node scripts/reset-release-notes.cjs; \
+			node scripts/reset-release-notes.mjs; \
 		fi; \
 	else \
 		echo "Keeping current RELEASE.md."; \

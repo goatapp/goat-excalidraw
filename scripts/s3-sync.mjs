@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 
-const {
+import {
   S3Client,
   GetObjectCommand,
   PutObjectCommand,
   ListObjectsV2Command,
-} = require("@aws-sdk/client-s3");
-const fs = require("fs");
-const path = require("path");
-const crypto = require("crypto");
-const { pipeline } = require("stream/promises");
-const Database = require("better-sqlite3");
+} from "@aws-sdk/client-s3";
+import fs from "fs";
+import path from "path";
+import crypto from "crypto";
+import { pipeline } from "stream/promises";
+import Database from "better-sqlite3";
 
 const BUCKET = process.env.S3_BUCKET_NAME;
 const PREFIX = process.env.S3_PREFIX || "excalidraw/";

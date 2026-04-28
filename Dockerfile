@@ -60,7 +60,7 @@ COPY --from=backend-builder /app/src/generated ./dist/generated
 
 COPY --from=frontend-builder /app/frontend/dist ./public
 
-COPY scripts/s3-sync.cjs ./scripts/s3-sync.cjs
+COPY scripts/s3-sync.mjs ./scripts/s3-sync.mjs
 COPY docker-entrypoint.combined.sh ./docker-entrypoint.combined.sh
 RUN chmod +x docker-entrypoint.combined.sh
 

@@ -527,7 +527,7 @@ const verifyDatabaseIntegrityAsync = (filePath: string): Promise<boolean> => {
 
   return new Promise((resolve) => {
     const worker = new Worker(
-      path.resolve(__dirname, "./workers/db-verify.cjs"),
+      path.resolve(__dirname, "./workers/db-verify.js"),
       {
         workerData: { filePath },
       }

@@ -1,17 +1,17 @@
-const { parentPort, workerData } = require('worker_threads');
+import { parentPort, workerData } from "worker_threads";
 
 if (!parentPort) throw new Error("Must be run in a worker thread");
 
-const openReadonlyDb = (filePath) => {
+const openReadonlyDb = async (filePath) => {
   try {
-    const { DatabaseSync } = require("node:sqlite");
+    const { DatabaseSync } = await import("node:sqlite");
     const db = new DatabaseSync(filePath, {
       readOnly: true,
       enableForeignKeyConstraints: false,
     });
     return { kind: "node:sqlite", db };
   } catch (_err) {
-    const Database = require("better-sqlite3");
+    const { default: Database } = await import("better-sqlite3");
     const db = new Database(filePath, { readonly: true, fileMustExist: true });
     return { kind: "better-sqlite3", db };
   }
@@ -19,10 +19,10 @@ const openReadonlyDb = (filePath) => {
 
 try {
   const { filePath } = workerData;
-  const { db } = openReadonlyDb(filePath);
-  
+  const { db } = await openReadonlyDb(filePath);
+
   const result = db.prepare("PRAGMA integrity_check;").get();
-  
+
   db.close();
   parentPort.postMessage(result.integrity_check === "ok");
 } catch (error) {
