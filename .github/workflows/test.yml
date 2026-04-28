@@ -30,7 +30,9 @@ jobs:
         run: |
           cd backend
           npx prisma generate
-      
+        env:
+          DATABASE_URL: file:./prisma/test.db
+
       - name: Run backend tests
         run: |
           cd backend
@@ -81,7 +83,9 @@ jobs:
         run: |
           cd backend
           npx prisma generate
-      
+        env:
+          DATABASE_URL: file:${{ github.workspace }}/backend/prisma/e2e-test.db
+
       - name: Setup backend database
         run: |
           cd backend
@@ -192,7 +196,9 @@ jobs:
         run: |
           cd backend
           npx prisma generate
-      
+        env:
+          DATABASE_URL: file:./prisma/test.db
+
       - name: Run security tests
         run: |
           cd backend
