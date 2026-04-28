@@ -258,6 +258,7 @@ export const Editor: React.FC = () => {
   const patchedAddFilesApisRef = useRef<WeakSet<object>>(new WeakSet());
   const suspiciousBlankLoadRef = useRef(false);
   const hasSceneChangesSinceLoadRef = useRef(false);
+  const hasHydratedLibraryRef = useRef(false);
   const lastLocalChangeAtRef = useRef<number>(0);
   const pendingRemoteElementsRef = useRef<Map<string, any>>(new Map());
   const pendingRemoteFilesRef = useRef<Record<string, any>>({});
@@ -1324,6 +1325,7 @@ export const Editor: React.FC = () => {
     lastPersistedElementsRef.current = [];
     suspiciousBlankLoadRef.current = false;
     hasSceneChangesSinceLoadRef.current = false;
+    hasHydratedLibraryRef.current = false;
     // eslint-disable-next-line react-hooks/immutability -- intentional reset when drawing ID changes
     excalidrawAPI.current = null;
     setIsReady(false);
@@ -1376,6 +1378,7 @@ export const Editor: React.FC = () => {
         lastPersistedFilesRef.current = files;
         currentDrawingVersionRef.current = typeof data.version === "number" ? data.version : null;
         lastPersistedElementsRef.current = elements;
+        lastSyncedElementOrderSigRef.current = computeElementOrderSig(elements);
 
         elements.forEach((el: any) => {
           recordElementVersion(el);
@@ -1705,6 +1708,10 @@ export const Editor: React.FC = () => {
   const handleLibraryChange = useCallback((items: readonly any[]) => {
     if (!canEdit) return;
     if (!user) return;
+    if (!hasHydratedLibraryRef.current) {
+      hasHydratedLibraryRef.current = true;
+      return;
+    }
     if (import.meta.env.DEV) {
       console.log("[Editor] Library changed", { itemCount: items.length });
     }
