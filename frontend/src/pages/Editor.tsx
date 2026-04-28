@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Download, Loader2, ChevronUp, ChevronDown, Share2, History } from 'lucide-react';
 import clsx from 'clsx';
@@ -14,7 +14,6 @@ import { getInitialLangCode, LanguageSelector } from '../components/LanguageSele
 import debounce from 'lodash/debounce';
 import throttle from 'lodash/throttle';
 import { Toaster, toast } from 'sonner';
-import { io, Socket } from 'socket.io-client';
 import type { UserIdentity } from '../utils/identity';
 import { useAuth } from '../context/AuthContext';
 import { exportFromEditor } from '../utils/exportUtils';
@@ -235,7 +234,8 @@ export const Editor: React.FC = () => {
 
   const [peers, setPeers] = useState<Peer[]>([]);
   const [isReady, setIsReady] = useState(false);
-  const socketRef = useRef<Socket | null>(null);
+  const socketRef = useRef<WebSocket | null>(null);
+  const sendMsgRef = useRef<((type: string, data?: any, onAck?: (payload: any) => void) => void) | null>(null);
   const lastCursorEmit = useRef<number>(0);
   const elementVersionMap = useRef<Map<string, ElementVersionInfo>>(new Map());
   const isBootstrappingScene = useRef(true);
@@ -258,6 +258,7 @@ export const Editor: React.FC = () => {
   const patchedAddFilesApisRef = useRef<WeakSet<object>>(new WeakSet());
   const suspiciousBlankLoadRef = useRef(false);
   const hasSceneChangesSinceLoadRef = useRef(false);
+  const hasHydratedLibraryRef = useRef(false);
   const lastLocalChangeAtRef = useRef<number>(0);
   const pendingRemoteElementsRef = useRef<Map<string, any>>(new Map());
   const pendingRemoteFilesRef = useRef<Record<string, any>>({});
@@ -385,7 +386,7 @@ export const Editor: React.FC = () => {
 
   const emitFilesDeltaIfNeeded = useCallback(
     (nextFiles: Record<string, any>) => {
-      if (!socketRef.current || !id) return false;
+      if (!sendMsgRef.current || !id) return false;
       const filesDelta = getFilesDelta(lastSyncedFilesRef.current, nextFiles || {});
       if (Object.keys(filesDelta).length === 0) return false;
 
@@ -401,7 +402,7 @@ export const Editor: React.FC = () => {
         dbg.lastFilesDeltaIds = Object.keys(filesDelta);
       }
 
-      socketRef.current.emit("element-update", {
+      sendMsgRef.current("element-update", {
         drawingId: id,
         elements: [],
         files: filesDelta,
@@ -475,114 +476,49 @@ export const Editor: React.FC = () => {
   useEffect(() => {
     if (!id || !isReady) return;
 
-    const socketUrl = import.meta.env.VITE_API_URL === '/api'
+    const baseUrl = import.meta.env.VITE_API_URL === '/api'
       ? window.location.origin
       : (import.meta.env.VITE_API_URL || import.meta.env.VITE_DEV_BACKEND_URL || 'http://localhost:8000');
+    const wsProtocol = baseUrl.startsWith('https') ? 'wss' : 'ws';
+    const wsUrl = `${wsProtocol}://${new URL(baseUrl).host}/ws`;
 
-    const socket = io(socketUrl, {
-      path: '/socket.io',
-      transports: ['websocket', 'polling'],
-      withCredentials: true,
-    });
-    socketRef.current = socket;
+    let ackCounter = 0;
+    const pendingAcks = new Map<string, (payload: any) => void>();
+    let intentionalClose = false;
+    let reconnectAttempts = 0;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let joinRoomRetried = false;
+    const MAX_RECONNECT_DELAY = 30000;
 
-    if (import.meta.env.DEV) {
-      (window as any).__EXCALIDASH_SOCKET_STATUS__ = {
-        connected: socket.connected,
-      };
-      socket.on("connect", () => {
-        (window as any).__EXCALIDASH_SOCKET_STATUS__ = { connected: true };
-      });
-      socket.on("disconnect", () => {
-        (window as any).__EXCALIDASH_SOCKET_STATUS__ = { connected: false };
-      });
-    }
-
-    socket.emit('join-room', { drawingId: id, user: me }, (payload: any) => {
-      const serverUser = payload?.user;
-      if (!serverUser || typeof serverUser.id !== "string") return;
-      const next: UserIdentity = {
-        id: serverUser.id,
-        name: typeof serverUser.name === "string" ? serverUser.name : me.name,
-        initials: typeof serverUser.initials === "string" ? serverUser.initials : me.initials,
-        color: typeof serverUser.color === "string" ? serverUser.color : me.color,
-      };
-      socketMeRef.current = next;
-      setSocketMe(next);
-      const lastUsers = lastPresenceUsersRef.current;
-      if (lastUsers) {
-        setPeers(lastUsers.filter((u) => u.id !== next.id));
+    const sendMsg = (ws: WebSocket, type: string, data?: any, onAck?: (payload: any) => void) => {
+      if (ws.readyState !== WebSocket.OPEN) return;
+      const msg: any = { type, data };
+      if (onAck) {
+        const ackId = `ack_${++ackCounter}`;
+        msg.ackId = ackId;
+        pendingAcks.set(ackId, onAck);
       }
-    });
-
-    const renderLoop = () => {
-      if (cursorBuffer.current.size > 0 && excalidrawAPI.current) {
-        const collaborators = new Map<string, any>(
-          excalidrawAPI.current.getAppState().collaborators || []
-        );
-
-        cursorBuffer.current.forEach((data, userId) => {
-          collaborators.set(userId, data);
-        });
-
-        cursorBuffer.current.clear();
-        const { sceneUpdate } = buildRemoteSceneUpdate({ collaborators });
-        if (sceneUpdate) {
-          excalidrawAPI.current.updateScene(sceneUpdate);
-        }
-      }
-      animationFrameId.current = requestAnimationFrame(renderLoop);
+      ws.send(JSON.stringify(msg));
     };
-    renderLoop();
 
-    socket.on('presence-update', (users: Peer[]) => {
-      lastPresenceUsersRef.current = users;
-      const selfId = socketMeRef.current.id;
-      setPeers(users.filter(u => u.id !== selfId));
-
-      if (excalidrawAPI.current) {
-        const collaborators = new Map<string, any>(
-          excalidrawAPI.current.getAppState().collaborators || []
-        );
-        users.forEach(user => {
-          if (!user.isActive && user.id !== selfId) {
-            collaborators.delete(user.id);
-          }
-        });
-        const { sceneUpdate } = buildRemoteSceneUpdate({ collaborators });
-        if (sceneUpdate) {
-          excalidrawAPI.current.updateScene(sceneUpdate);
+    const joinRoom = (ws: WebSocket) => {
+      sendMsg(ws, 'join-room', { drawingId: id, user: me }, (payload: any) => {
+        const serverUser = payload?.user;
+        if (!serverUser || typeof serverUser.id !== "string") return;
+        const next: UserIdentity = {
+          id: serverUser.id,
+          name: typeof serverUser.name === "string" ? serverUser.name : me.name,
+          initials: typeof serverUser.initials === "string" ? serverUser.initials : me.initials,
+          color: typeof serverUser.color === "string" ? serverUser.color : me.color,
+        };
+        socketMeRef.current = next;
+        setSocketMe(next);
+        const lastUsers = lastPresenceUsersRef.current;
+        if (lastUsers) {
+          setPeers(lastUsers.filter((u) => u.id !== next.id));
         }
-      }
-    });
-
-    socket.on("error", (payload: any) => {
-      const message = typeof payload?.message === "string" ? payload.message : null;
-      console.warn("[Editor] Socket error:", payload);
-      // If someone opens a link-shared drawing via the normal editor URL while signed in,
-      // backend policy may still allow access via the public editor route (`/shared/:id`).
-      // Prefer redirecting over showing a hard denial.
-      if (
-        message === "You do not have access to this drawing" &&
-        id &&
-        location.pathname.startsWith("/editor/")
-      ) {
-        navigate(`/shared/${id}${location.search}${location.hash}`, { replace: true });
-        return;
-      }
-      if (message) toast.error(message);
-    });
-
-    socket.on('cursor-move', (data: any) => {
-      cursorBuffer.current.set(data.userId, {
-        pointer: data.pointer,
-        button: data.button || 'up',
-        selectedElementIds: data.selectedElementIds || {},
-        username: data.username,
-        color: { background: data.color, stroke: data.color },
-        id: data.userId,
       });
-    });
+    };
 
     const hasNonEmptyArray = (value: unknown): value is any[] =>
       Array.isArray(value) && value.length > 0;
@@ -669,44 +605,160 @@ export const Editor: React.FC = () => {
       remoteFlushRafIdRef.current = requestAnimationFrame(flushRemoteUpdates);
     };
 
-    socket.on(
-      "element-update",
-      ({
-        elements,
-        files,
-        elementOrder,
-      }: {
-        elements: any[];
-        files?: Record<string, any>;
-        elementOrder?: string[];
-      }) => {
-        if (Array.isArray(elements)) {
-          for (const el of elements) {
-            const id = el?.id;
-            if (typeof id === "string" && id.length > 0) {
-              pendingRemoteElementsRef.current.set(id, el);
+    const handleWsMessage = (event: MessageEvent) => {
+      let msg: any;
+      try { msg = JSON.parse(event.data); } catch { return; }
+
+      switch (msg.type) {
+        case 'auth-ok':
+          if (socketRef.current) joinRoom(socketRef.current);
+          break;
+
+        case 'auth-error':
+          console.warn("[Editor] WebSocket auth failed:", msg.data);
+          break;
+
+        case 'ack': {
+          const ackId = msg.data?.ackId;
+          const cb = pendingAcks.get(ackId);
+          if (cb) { pendingAcks.delete(ackId); cb(msg.data.payload); }
+          break;
+        }
+
+        case 'presence-update': {
+          const users: Peer[] = msg.data;
+          lastPresenceUsersRef.current = users;
+          const selfId = socketMeRef.current.id;
+          setPeers(users.filter(u => u.id !== selfId));
+
+          if (excalidrawAPI.current) {
+            const collaborators = new Map<string, any>(
+              excalidrawAPI.current.getAppState().collaborators || []
+            );
+            users.forEach(user => {
+              if (!user.isActive && user.id !== selfId) {
+                collaborators.delete(user.id);
+              }
+            });
+            const { sceneUpdate } = buildRemoteSceneUpdate({ collaborators });
+            if (sceneUpdate) {
+              excalidrawAPI.current.updateScene(sceneUpdate);
             }
           }
+          break;
         }
 
-        if (files && typeof files === "object") {
-          pendingRemoteFilesRef.current = {
-            ...pendingRemoteFilesRef.current,
-            ...files,
-          };
+        case 'cursor-move': {
+          const data = msg.data;
+          cursorBuffer.current.set(data.userId, {
+            pointer: data.pointer,
+            button: data.button || 'up',
+            selectedElementIds: data.selectedElementIds || {},
+            username: data.username,
+            color: { background: data.color, stroke: data.color },
+            id: data.userId,
+          });
+          break;
         }
 
-        if (Array.isArray(elementOrder) && elementOrder.length > 0) {
-          pendingRemoteElementOrderRef.current = elementOrder;
+        case 'element-update': {
+          const { elements, files, elementOrder } = msg.data || {};
+          if (Array.isArray(elements)) {
+            for (const el of elements) {
+              const elId = el?.id;
+              if (typeof elId === "string" && elId.length > 0) {
+                pendingRemoteElementsRef.current.set(elId, el);
+              }
+            }
+          }
+          if (files && typeof files === "object") {
+            pendingRemoteFilesRef.current = {
+              ...pendingRemoteFilesRef.current,
+              ...files,
+            };
+          }
+          if (Array.isArray(elementOrder) && elementOrder.length > 0) {
+            pendingRemoteElementOrderRef.current = elementOrder;
+          }
+          scheduleRemoteFlush();
+          break;
         }
 
-        scheduleRemoteFlush();
+        case 'error': {
+          const message = typeof msg.data?.message === "string" ? msg.data.message : null;
+          console.warn("[Editor] Socket error:", msg.data);
+          if (message === "You do not have access to this drawing") {
+            if (!joinRoomRetried) {
+              joinRoomRetried = true;
+              socketRef.current?.close();
+              return;
+            }
+            if (id && location.pathname.startsWith("/editor/")) {
+              navigate(`/shared/${id}${location.search}${location.hash}`, { replace: true });
+              return;
+            }
+          }
+          if (message) toast.error(message);
+          break;
+        }
       }
-    );
+    };
 
+    function connect() {
+      const ws = new WebSocket(wsUrl);
+      socketRef.current = ws;
+      sendMsgRef.current = (type, data, onAck) => sendMsg(ws, type, data, onAck);
+
+      ws.onopen = () => {
+        reconnectAttempts = 0;
+        if (import.meta.env.DEV) {
+          (window as any).__EXCALIDASH_SOCKET_STATUS__ = { connected: true };
+        }
+        sendMsg(ws, 'auth', { token: undefined });
+      };
+
+      ws.onmessage = handleWsMessage;
+
+      ws.onclose = () => {
+        if (import.meta.env.DEV) {
+          (window as any).__EXCALIDASH_SOCKET_STATUS__ = { connected: false };
+        }
+        sendMsgRef.current = null;
+        if (intentionalClose) return;
+        reconnectAttempts++;
+        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY) + Math.random() * 1000;
+        reconnectTimer = setTimeout(connect, delay);
+      };
+
+      ws.onerror = () => {};
+    }
+
+    connect();
+
+    const renderLoop = () => {
+      if (cursorBuffer.current.size > 0 && excalidrawAPI.current) {
+        const collaborators = new Map<string, any>(
+          excalidrawAPI.current.getAppState().collaborators || []
+        );
+
+        cursorBuffer.current.forEach((data, userId) => {
+          collaborators.set(userId, data);
+        });
+
+        cursorBuffer.current.clear();
+        const { sceneUpdate } = buildRemoteSceneUpdate({ collaborators });
+        if (sceneUpdate) {
+          excalidrawAPI.current.updateScene(sceneUpdate);
+        }
+      }
+      animationFrameId.current = requestAnimationFrame(renderLoop);
+    };
+    renderLoop();
 
     const handleActivity = (isActive: boolean) => {
-      socket.emit('user-activity', { drawingId: id, isActive });
+      if (sendMsgRef.current) {
+        sendMsgRef.current('user-activity', { drawingId: id, isActive });
+      }
     };
 
     const onFocus = () => handleActivity(true);
@@ -720,15 +772,16 @@ export const Editor: React.FC = () => {
     document.addEventListener('mouseleave', onMouseLeave);
 
     return () => {
+      intentionalClose = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
       window.removeEventListener('focus', onFocus);
       window.removeEventListener('blur', onBlur);
       document.removeEventListener('mouseenter', onMouseEnter);
       document.removeEventListener('mouseleave', onMouseLeave);
-      socket.off('presence-update');
-      socket.off('error');
-      socket.off('cursor-move');
-      socket.off('element-update');
-      socket.disconnect();
+      pendingAcks.clear();
+      sendMsgRef.current = null;
+      socketRef.current?.close();
+      socketRef.current = null;
       if (remoteFlushRafIdRef.current !== null) {
         cancelAnimationFrame(remoteFlushRafIdRef.current);
         remoteFlushRafIdRef.current = null;
@@ -753,9 +806,9 @@ export const Editor: React.FC = () => {
 
   const onPointerUpdate = useCallback((payload: any) => {
     const now = Date.now();
-    if (now - lastCursorEmit.current > 50 && socketRef.current) {
+    if (now - lastCursorEmit.current > 50 && sendMsgRef.current) {
       const self = socketMeRef.current;
-      socketRef.current.emit('cursor-move', {
+      sendMsgRef.current('cursor-move', {
         pointer: payload.pointer,
         button: payload.button,
         username: self.name,
@@ -770,6 +823,7 @@ export const Editor: React.FC = () => {
   const excalidrawAPI = useRef<any>(null);
 
   const setExcalidrawAPI = useCallback((api: any) => {
+    // eslint-disable-next-line react-hooks/immutability -- ref set from Excalidraw callback, not during render
     excalidrawAPI.current = api;
     if (import.meta.env.DEV) {
       (window as any).__EXCALIDASH_EXCALIDRAW_API__ = api;
@@ -896,127 +950,129 @@ export const Editor: React.FC = () => {
   const savePreviewRef = useRef<((drawingId: string, elements: readonly any[], appState: any, files: any) => Promise<void>) | null>(null);
   const saveLibraryRef = useRef<((items: any[]) => Promise<void>) | null>(null);
 
-  saveDataRef.current = async (drawingId: string, elements: readonly any[], appState: any, files?: Record<string, any>) => {
-    if (!drawingId) return;
+  useEffect(() => {
+    saveDataRef.current = async (drawingId: string, elements: readonly any[], appState: any, files?: Record<string, any>) => {
+      if (!drawingId) return;
 
-    try {
-      const persistableAppState = getPersistedAppState(appState);
+      try {
+        const persistableAppState = getPersistedAppState(appState);
 
-      const candidateElements = Array.isArray(elements) ? elements : [];
-      const {
-        snapshot: safeElements,
-        prevented,
-        staleEmptySnapshot,
-        staleNonRenderableSnapshot,
-      } = resolveSafeSnapshot(candidateElements);
-      const persistableElements = Array.from(safeElements);
-      if (suspiciousBlankLoadRef.current && !hasRenderableElements(persistableElements)) {
-        console.warn("[Editor] Blocking non-renderable save due to suspicious blank load", {
-          drawingId,
-          elementCount: persistableElements.length,
-        });
-        return;
-      }
-      if (staleEmptySnapshot || staleNonRenderableSnapshot) {
-        console.warn("[Editor] Skipping stale snapshot save", {
-          drawingId,
-          candidateElementCount: candidateElements.length,
-          fallbackElementCount: persistableElements.length,
+        const candidateElements = Array.isArray(elements) ? elements : [];
+        const {
+          snapshot: safeElements,
           prevented,
           staleEmptySnapshot,
           staleNonRenderableSnapshot,
-        });
-        return;
-      }
-      let persistableFiles = files ?? latestFilesRef.current ?? {};
-      const compressedFilesResult = await compressExcalidrawFiles(persistableFiles);
-      if (compressedFilesResult.changed) {
-        persistableFiles = compressedFilesResult.files;
-        if (excalidrawAPI.current && typeof excalidrawAPI.current.addFiles === "function") {
-          isSyncing.current = true;
-          try {
-            excalidrawAPI.current.addFiles(Object.values(persistableFiles));
-          } finally {
-            isSyncing.current = false;
-          }
-        }
-        latestFilesRef.current = persistableFiles;
-        lastSyncedFilesRef.current = persistableFiles;
-        if (import.meta.env.DEV) {
-          console.log("[Editor] Auto-compressed image files before save", {
+        } = resolveSafeSnapshot(candidateElements);
+        const persistableElements = Array.from(safeElements);
+        if (suspiciousBlankLoadRef.current && !hasRenderableElements(persistableElements)) {
+          console.warn("[Editor] Blocking non-renderable save due to suspicious blank load", {
             drawingId,
-            changedFileCount: compressedFilesResult.changedIds.length,
+            elementCount: persistableElements.length,
           });
+          return;
         }
-      }
-      const filesChangedSincePersist =
-        Object.keys(getFilesDelta(lastPersistedFilesRef.current || {}, persistableFiles || {}))
-          .length > 0;
-      const normalizedElements = normalizeImageElementStatus(
-        persistableElements,
-        persistableFiles
-      );
-      const normalizedElementsForSave = Array.from(normalizedElements);
-
-      console.log("[Editor] Saving drawing", {
-        drawingId,
-        elementCount: normalizedElementsForSave.length,
-        hasRenderableElements: hasRenderableElements(normalizedElementsForSave),
-        appState: persistableAppState,
-      });
-
-      const persistScene = async (attempt: number): Promise<void> => {
-        try {
-          const updated = await api.updateDrawing(drawingId, {
-            elements: normalizedElementsForSave,
-            appState: persistableAppState,
-            ...(filesChangedSincePersist ? { files: persistableFiles } : {}),
-            version: currentDrawingVersionRef.current ?? undefined,
+        if (staleEmptySnapshot || staleNonRenderableSnapshot) {
+          console.warn("[Editor] Skipping stale snapshot save", {
+            drawingId,
+            candidateElementCount: candidateElements.length,
+            fallbackElementCount: persistableElements.length,
+            prevented,
+            staleEmptySnapshot,
+            staleNonRenderableSnapshot,
           });
-          if (typeof updated.version === "number") {
-            currentDrawingVersionRef.current = updated.version;
+          return;
+        }
+        let persistableFiles = files ?? latestFilesRef.current ?? {};
+        const compressedFilesResult = await compressExcalidrawFiles(persistableFiles);
+        if (compressedFilesResult.changed) {
+          persistableFiles = compressedFilesResult.files;
+          if (excalidrawAPI.current && typeof excalidrawAPI.current.addFiles === "function") {
+            isSyncing.current = true;
+            try {
+              excalidrawAPI.current.addFiles(Object.values(persistableFiles));
+            } finally {
+              isSyncing.current = false;
+            }
           }
-          lastPersistedElementsRef.current = normalizedElementsForSave;
-          if (filesChangedSincePersist) {
-            lastPersistedFilesRef.current = persistableFiles;
+          latestFilesRef.current = persistableFiles;
+          lastSyncedFilesRef.current = persistableFiles;
+          if (import.meta.env.DEV) {
+            console.log("[Editor] Auto-compressed image files before save", {
+              drawingId,
+              changedFileCount: compressedFilesResult.changedIds.length,
+            });
           }
-          console.log("[Editor] Save complete", { drawingId });
-        } catch (err) {
-          if (api.isAxiosError(err) && err.response?.status === 409) {
-            const reportedVersion = Number(err.response?.data?.currentVersion);
-            const hasReportedVersion = Number.isInteger(reportedVersion) && reportedVersion > 0;
-            if (hasReportedVersion) {
-              currentDrawingVersionRef.current = reportedVersion;
+        }
+        const filesChangedSincePersist =
+          Object.keys(getFilesDelta(lastPersistedFilesRef.current || {}, persistableFiles || {}))
+            .length > 0;
+        const normalizedElements = normalizeImageElementStatus(
+          persistableElements,
+          persistableFiles
+        );
+        const normalizedElementsForSave = Array.from(normalizedElements);
+
+        console.log("[Editor] Saving drawing", {
+          drawingId,
+          elementCount: normalizedElementsForSave.length,
+          hasRenderableElements: hasRenderableElements(normalizedElementsForSave),
+          appState: persistableAppState,
+        });
+
+        const persistScene = async (attempt: number): Promise<void> => {
+          try {
+            const updated = await api.updateDrawing(drawingId, {
+              elements: normalizedElementsForSave,
+              appState: persistableAppState,
+              ...(filesChangedSincePersist ? { files: persistableFiles } : {}),
+              version: currentDrawingVersionRef.current ?? undefined,
+            });
+            if (typeof updated.version === "number") {
+              currentDrawingVersionRef.current = updated.version;
+            }
+            lastPersistedElementsRef.current = normalizedElementsForSave;
+            if (filesChangedSincePersist) {
+              lastPersistedFilesRef.current = persistableFiles;
+            }
+            console.log("[Editor] Save complete", { drawingId });
+          } catch (err) {
+            if (api.isAxiosError(err) && err.response?.status === 409) {
+              const reportedVersion = Number(err.response?.data?.currentVersion);
+              const hasReportedVersion = Number.isInteger(reportedVersion) && reportedVersion > 0;
+              if (hasReportedVersion) {
+                currentDrawingVersionRef.current = reportedVersion;
+              }
+
+              if (attempt === 0 && hasReportedVersion) {
+                console.warn("[Editor] Version conflict while saving drawing, retrying once", {
+                  drawingId,
+                  currentVersion: reportedVersion,
+                });
+                await persistScene(1);
+                return;
+              }
+
+              throw new DrawingSaveConflictError();
             }
 
-            if (attempt === 0 && hasReportedVersion) {
-              console.warn("[Editor] Version conflict while saving drawing, retrying once", {
-                drawingId,
-                currentVersion: reportedVersion,
-              });
-              await persistScene(1);
-              return;
-            }
-
-            throw new DrawingSaveConflictError();
+            throw err;
           }
+        };
 
+        await persistScene(0);
+      } catch (err) {
+        if (err instanceof DrawingSaveConflictError) {
+          console.warn("[Editor] Version conflict while saving drawing", { drawingId });
+          toast.error("Drawing changed in another tab. Refresh to load latest.");
           throw err;
         }
-      };
-
-      await persistScene(0);
-    } catch (err) {
-      if (err instanceof DrawingSaveConflictError) {
-        console.warn("[Editor] Version conflict while saving drawing", { drawingId });
-        toast.error("Drawing changed in another tab. Refresh to load latest.");
+        console.error('Failed to save drawing', err);
+        toast.error("Failed to save changes");
         throw err;
       }
-      console.error('Failed to save drawing', err);
-      toast.error("Failed to save changes");
-      throw err;
-    }
-  };
+    };
+  });
 
   const enqueueSceneSave = useCallback(
     (
@@ -1046,91 +1102,96 @@ export const Editor: React.FC = () => {
     []
   );
 
-  savePreviewRef.current = async (drawingId: string, elements: readonly any[], appState: any, files: any) => {
-    if (!drawingId) return;
+  useEffect(() => {
+    savePreviewRef.current = async (drawingId: string, elements: readonly any[], appState: any, files: any) => {
+      if (!drawingId) return;
 
-    try {
-      const snapshotFromArgs = Array.isArray(elements) ? elements : [];
-      const snapshotFromRef = latestElementsRef.current ?? [];
-      const candidateSnapshot =
-        hasRenderableElements(snapshotFromArgs) || !hasRenderableElements(snapshotFromRef)
-          ? snapshotFromArgs
-          : snapshotFromRef;
-      const {
-        snapshot: currentSnapshot,
-        prevented: preventedPreviewOverwrite,
-        staleEmptySnapshot: staleEmptyPreview,
-        staleNonRenderableSnapshot: staleNonRenderablePreview,
-      } = resolveSafeSnapshot(candidateSnapshot);
-      const currentFiles = latestFilesRef.current ?? files;
-      const normalizedSnapshot = normalizeImageElementStatus(currentSnapshot, currentFiles);
-      if (suspiciousBlankLoadRef.current && !hasRenderableElements(currentSnapshot)) {
-        console.warn("[Editor] Blocking non-renderable preview due to suspicious blank load", {
-          drawingId,
-          elementCount: currentSnapshot.length,
+      try {
+        const snapshotFromArgs = Array.isArray(elements) ? elements : [];
+        const snapshotFromRef = latestElementsRef.current ?? [];
+        const candidateSnapshot =
+          hasRenderableElements(snapshotFromArgs) || !hasRenderableElements(snapshotFromRef)
+            ? snapshotFromArgs
+            : snapshotFromRef;
+        const {
+          snapshot: currentSnapshot,
+          prevented: preventedPreviewOverwrite,
+          staleEmptySnapshot: staleEmptyPreview,
+          staleNonRenderableSnapshot: staleNonRenderablePreview,
+        } = resolveSafeSnapshot(candidateSnapshot);
+        const currentFiles = latestFilesRef.current ?? files;
+        const normalizedSnapshot = normalizeImageElementStatus(currentSnapshot, currentFiles);
+        if (suspiciousBlankLoadRef.current && !hasRenderableElements(currentSnapshot)) {
+          console.warn("[Editor] Blocking non-renderable preview due to suspicious blank load", {
+            drawingId,
+            elementCount: currentSnapshot.length,
+          });
+          return;
+        }
+
+        if (preventedPreviewOverwrite) {
+          console.warn("[Editor] Prevented stale snapshot preview overwrite", {
+            drawingId,
+            staleEmptyPreview,
+            staleNonRenderablePreview,
+            fallbackElementCount: currentSnapshot.length,
+          });
+        }
+
+        const svg = await exportToSvg({
+          elements: normalizedSnapshot,
+          appState: {
+            ...appState,
+            exportBackground: true,
+            viewBackgroundColor: appState.viewBackgroundColor || '#ffffff',
+          },
+          files: currentFiles,
         });
-        return;
-      }
+        const preview = svg.outerHTML;
 
-      if (preventedPreviewOverwrite) {
-        console.warn("[Editor] Prevented stale snapshot preview overwrite", {
+        console.log("[Editor] Saving preview", {
           drawingId,
-          staleEmptyPreview,
-          staleNonRenderablePreview,
-          fallbackElementCount: currentSnapshot.length,
+          elementCount: normalizedSnapshot.length,
         });
+
+        await api.updateDrawing(drawingId, { preview });
+
+        console.log("[Editor] Preview save complete", { drawingId });
+      } catch (err) {
+        console.error('Failed to save preview', err);
       }
+    };
+  });
 
-      const svg = await exportToSvg({
-        elements: normalizedSnapshot,
-        appState: {
-          ...appState,
-          exportBackground: true,
-          viewBackgroundColor: appState.viewBackgroundColor || '#ffffff',
-        },
-        files: currentFiles,
-      });
-      const preview = svg.outerHTML;
-
-      console.log("[Editor] Saving preview", {
-        drawingId,
-        elementCount: normalizedSnapshot.length,
-      });
-
-      await api.updateDrawing(drawingId, { preview });
-
-      console.log("[Editor] Preview save complete", { drawingId });
-    } catch (err) {
-      console.error('Failed to save preview', err);
-    }
-  };
-
-  saveLibraryRef.current = async (items: any[]) => {
-    if (!user) return;
-    try {
-      console.log("[Editor] Saving library", { itemCount: items.length });
-      await api.updateLibrary(items);
-      console.log("[Editor] Library save complete");
-    } catch (err) {
-      console.error('Failed to save library', err);
-      if (api.isAxiosError(err) && err.response?.status === 401) {
-        // Share sessions / anonymous users can't persist library to the server.
-        return;
+  useEffect(() => {
+    saveLibraryRef.current = async (items: any[]) => {
+      if (!user) return;
+      try {
+        console.log("[Editor] Saving library", { itemCount: items.length });
+        await api.updateLibrary(items);
+        console.log("[Editor] Library save complete");
+      } catch (err) {
+        console.error('Failed to save library', err);
+        if (api.isAxiosError(err) && err.response?.status === 401) {
+          // Share sessions / anonymous users can't persist library to the server.
+          return;
+        }
+        toast.error("Failed to save library");
       }
-      toast.error("Failed to save library");
-    }
-  };
+    };
+  });
 
 
-  const debouncedSave = useCallback(
-    debounce((drawingId, elements, appState, files) => {
+  /* eslint-disable react-hooks/refs -- refs in debounced/throttled callbacks execute at call time, not during render */
+  const debouncedSave = useMemo(
+    () => debounce((drawingId: string, elements: readonly any[], appState: any, files?: Record<string, any>) => {
       enqueueSceneSave(drawingId, elements, appState, files);
     }, 1000),
     [enqueueSceneSave]
   );
-  debouncedSaveRef.current = debouncedSave;
-  const debouncedSavePreview = useCallback(
-    debounce((drawingId: string) => {
+  useEffect(() => { debouncedSaveRef.current = debouncedSave; }, [debouncedSave]);
+  const debouncedSavePreview = useMemo(
+    () => debounce((drawingId: string) => {
       if (!savePreviewRef.current) return;
       if (!drawingId) return;
       if (isUnmounting.current) return;
@@ -1161,8 +1222,8 @@ export const Editor: React.FC = () => {
     []
   );
 
-  const debouncedSaveLibrary = useCallback(
-    debounce((items: any[]) => {
+  const debouncedSaveLibrary = useMemo(
+    () => debounce((items: any[]) => {
       if (saveLibraryRef.current) {
         saveLibraryRef.current(items);
       }
@@ -1177,9 +1238,9 @@ export const Editor: React.FC = () => {
     };
   }, [debouncedSave, debouncedSavePreview]);
 
-  const broadcastChanges = useCallback(
-    throttle((elements: readonly any[], currentFiles?: Record<string, any>) => {
-      if (!socketRef.current || !id) return;
+  const broadcastChanges = useMemo(
+    () => throttle((elements: readonly any[], currentFiles?: Record<string, any>) => {
+      if (!sendMsgRef.current || !id) return;
 
       const changes: any[] = [];
 
@@ -1211,8 +1272,9 @@ export const Editor: React.FC = () => {
 
       if (changes.length > 0 || shouldSyncFiles || shouldSyncOrder) {
         hasSceneChangesSinceLoadRef.current = true;
+        // eslint-disable-next-line react-hooks/purity -- called at event time, not during render
         lastLocalChangeAtRef.current = Date.now();
-        socketRef.current.emit('element-update', {
+        sendMsgRef.current('element-update', {
           drawingId: id,
           elements: changes.length > 0 ? changes : [],
           files: shouldSyncFiles ? filesDelta : undefined,
@@ -1238,6 +1300,7 @@ export const Editor: React.FC = () => {
       computeElementOrderSig,
     ]
   );
+  /* eslint-enable react-hooks/refs */
 
   useEffect(() => {
     isBootstrappingScene.current = true;
@@ -1262,6 +1325,8 @@ export const Editor: React.FC = () => {
     lastPersistedElementsRef.current = [];
     suspiciousBlankLoadRef.current = false;
     hasSceneChangesSinceLoadRef.current = false;
+    hasHydratedLibraryRef.current = false;
+    // eslint-disable-next-line react-hooks/immutability -- intentional reset when drawing ID changes
     excalidrawAPI.current = null;
     setIsReady(false);
     setIsSceneLoading(true);
@@ -1313,6 +1378,7 @@ export const Editor: React.FC = () => {
         lastPersistedFilesRef.current = files;
         currentDrawingVersionRef.current = typeof data.version === "number" ? data.version : null;
         lastPersistedElementsRef.current = elements;
+        lastSyncedElementOrderSigRef.current = computeElementOrderSig(elements);
 
         elements.forEach((el: any) => {
           recordElementVersion(el);
@@ -1608,7 +1674,7 @@ export const Editor: React.FC = () => {
     const interval = window.setInterval(() => {
       if (isUnmounting.current) return;
       if (isSyncing.current) return;
-      if (!socketRef.current) return;
+      if (!sendMsgRef.current) return;
       if (!excalidrawAPI.current) return;
 
       const nextFiles = excalidrawAPI.current.getFiles?.() || {};
@@ -1642,6 +1708,10 @@ export const Editor: React.FC = () => {
   const handleLibraryChange = useCallback((items: readonly any[]) => {
     if (!canEdit) return;
     if (!user) return;
+    if (!hasHydratedLibraryRef.current) {
+      hasHydratedLibraryRef.current = true;
+      return;
+    }
     if (import.meta.env.DEV) {
       console.log("[Editor] Library changed", { itemCount: items.length });
     }
@@ -1792,8 +1862,7 @@ export const Editor: React.FC = () => {
               if (autoHideStorageKey) {
                 try {
                   window.localStorage.setItem(autoHideStorageKey, next ? "1" : "0");
-                } catch {
-                }
+                } catch { /* storage unavailable */ }
               }
             }}
             className="p-2 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-lg text-gray-600 dark:text-gray-300 transition-colors"

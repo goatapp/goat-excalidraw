@@ -1,5 +1,5 @@
 import archiver from "archiver";
-import { Prisma } from "../../generated/client";
+import { Prisma } from "../../generated/client/client.js";
 import {
   RegisterImportExportDeps,
   assertSafeArchivePath,
@@ -8,7 +8,7 @@ import {
   makeUniqueName,
   sanitizePathSegment,
   toPublicTrashCollectionId,
-} from "./shared";
+} from "./shared.js";
 
 export const registerExcalidashExportRoute = (deps: RegisterImportExportDeps) => {
   const {

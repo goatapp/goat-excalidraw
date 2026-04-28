@@ -11,9 +11,10 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import bcrypt from "bcrypt";
 import {
   getTestPrisma,
+  resetTestDb,
   setupTestDb,
-} from "./testUtils";
-import { PrismaClient } from "../generated/client";
+} from "./testUtils.js";
+import { PrismaClient } from "../generated/client/client.js";
 
 let prisma: PrismaClient;
 
@@ -23,7 +24,8 @@ describe("User Data Sandboxing", () => {
 
   beforeAll(async () => {
     setupTestDb();
-    prisma = getTestPrisma();
+    prisma = await getTestPrisma();
+    await resetTestDb(prisma);
 
     const hashA = await bcrypt.hash("passwordA", 10);
     const hashB = await bcrypt.hash("passwordB", 10);

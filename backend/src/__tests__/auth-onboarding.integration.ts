@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import request from "supertest";
-import { PrismaClient } from "../generated/client";
-import { getTestPrisma, setupTestDb } from "./testUtils";
-import { BOOTSTRAP_USER_ID } from "../auth/authMode";
-import { issueBootstrapSetupCodeIfRequired } from "../auth/bootstrapSetupCode";
+import { PrismaClient } from "../generated/client/client.js";
+import { getTestPrisma, resetTestDb, setupTestDb } from "./testUtils.js";
+import { BOOTSTRAP_USER_ID } from "../auth/authMode.js";
+import { issueBootstrapSetupCodeIfRequired } from "../auth/bootstrapSetupCode.js";
 
 describe("Auth onboarding decision", () => {
   const userAgent = "vitest-auth-onboarding";
@@ -15,9 +15,10 @@ describe("Auth onboarding decision", () => {
 
   beforeAll(async () => {
     setupTestDb();
-    prisma = getTestPrisma();
+    prisma = await getTestPrisma();
+    await resetTestDb(prisma);
 
-    ({ app } = await import("../index"));
+    ({ app } = await import("../index.js"));
 
     agent = request.agent(app);
     const csrfRes = await agent.get("/csrf-token").set("User-Agent", userAgent);

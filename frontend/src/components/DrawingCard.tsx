@@ -90,7 +90,7 @@ export const DrawingCard: React.FC<DrawingCardProps> = ({
   const hasEmbeddedImages = previewHasEmbeddedImages(previewSvg);
 
   const fullDataRef = React.useRef(fullData);
-  fullDataRef.current = fullData;
+  useEffect(() => { fullDataRef.current = fullData; }, [fullData]);
   const fullDataPromiseRef = React.useRef<Promise<HydratedDrawingData> | null>(null);
 
   useEffect(() => {
@@ -99,7 +99,7 @@ export const DrawingCard: React.FC<DrawingCardProps> = ({
   }, [drawing.id]);
 
   const drawingIdRef = React.useRef(drawing.id);
-  drawingIdRef.current = drawing.id;
+  useEffect(() => { drawingIdRef.current = drawing.id; }, [drawing.id]);
 
   const ensureFullData = useCallback(async (): Promise<HydratedDrawingData> => {
     if (fullDataRef.current) {

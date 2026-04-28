@@ -1,7 +1,7 @@
 /**
  * Audit logging utility for security events
  */
-import { prisma } from "../db/prisma";
+import { prisma } from "../db/prisma.js";
 
 let prismaProvider: () => typeof prisma = () => prisma;
 
@@ -37,7 +37,7 @@ export interface AuditLogResult {
  */
 export const logAuditEvent = async (data: AuditLogData): Promise<void> => {
   try {
-    const { config } = await import("../config");
+    const { config } = await import("../config.js");
     if (!config.enableAuditLogging) {
       return; // Feature disabled, silently skip
     }
@@ -68,7 +68,7 @@ export const getAuditLogs = async (
   limit: number = 100
 ): Promise<AuditLogResult[]> => {
   try {
-    const { config } = await import("../config");
+    const { config } = await import("../config.js");
     if (!config.enableAuditLogging) {
       return []; // Feature disabled, return empty array
     }

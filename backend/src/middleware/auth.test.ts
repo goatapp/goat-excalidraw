@@ -1,9 +1,9 @@
 import type { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { config } from "../config";
-import { createAuthMiddleware } from "./auth";
-import { BOOTSTRAP_USER_ID } from "../auth/authMode";
+import { config } from "../config.js";
+import { createAuthMiddleware } from "./auth.js";
+import { BOOTSTRAP_USER_ID } from "../auth/authMode.js";
 
 const createRequest = (overrides?: Partial<Request>): Request =>
   ({

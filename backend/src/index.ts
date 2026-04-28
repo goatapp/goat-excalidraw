@@ -4,14 +4,14 @@ import path from "path";
 import fs from "fs";
 import { promises as fsPromises } from "fs";
 import { createServer } from "http";
-import { Server } from "socket.io";
+import { WebSocketServer } from "ws";
 import { Worker } from "worker_threads";
 import multer from "multer";
 import { z } from "zod";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { v4 as uuidv4 } from "uuid";
-import { PrismaClient, Prisma } from "./generated/client";
+import { PrismaClient, Prisma } from "./generated/client/client.js";
 import {
   sanitizeDrawingData,
   validateImportedDrawing,
@@ -19,25 +19,27 @@ import {
   sanitizeSvg,
   elementSchema,
   appStateSchema,
-} from "./security";
-import { config } from "./config";
-import { authModeService, requireAuth, optionalAuth } from "./middleware/auth";
-import { errorHandler, asyncHandler } from "./middleware/errorHandler";
-import authRouter from "./auth";
-import { logAuditEvent } from "./utils/audit";
-import { registerDashboardRoutes } from "./routes/dashboard";
-import { registerImportExportRoutes } from "./routes/importExport";
-import { registerSystemRoutes } from "./routes/system";
-import { prisma } from "./db/prisma";
-import { createDrawingsCacheStore } from "./server/drawingsCache";
-import { registerCsrfProtection } from "./server/csrf";
-import { registerSocketHandlers } from "./server/socket";
+} from "./security.js";
+import { config } from "./config.js";
+import { authModeService, requireAuth, optionalAuth } from "./middleware/auth.js";
+import { errorHandler, asyncHandler } from "./middleware/errorHandler.js";
+import authRouter from "./auth.js";
+import { logAuditEvent } from "./utils/audit.js";
+import { registerDashboardRoutes } from "./routes/dashboard.js";
+import { registerImportExportRoutes } from "./routes/importExport.js";
+import { registerSystemRoutes } from "./routes/system.js";
+import { prisma } from "./db/prisma.js";
+import { createDrawingsCacheStore } from "./server/drawingsCache.js";
+import { registerCsrfProtection } from "./server/csrf.js";
+import { registerSocketHandlers } from "./server/socket.js";
 import {
   createHttpsRedirectPolicy,
   getHttpsRedirectUrl,
-} from "./server/httpsRedirectPolicy";
-import { issueBootstrapSetupCodeIfRequired } from "./auth/bootstrapSetupCode";
+} from "./server/httpsRedirectPolicy.js";
+import { issueBootstrapSetupCodeIfRequired } from "./auth/bootstrapSetupCode.js";
+import { fileURLToPath } from "node:url";
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const backendRoot = path.resolve(__dirname, "../");
 console.log("Resolved DATABASE_URL:", process.env.DATABASE_URL);
 
@@ -133,12 +135,28 @@ if (trustProxyValue === true) {
 }
 
 const httpServer = createServer(app);
-const io = new Server(httpServer, {
-  cors: {
-    origin: (origin, cb) => cb(null, isAllowedOrigin(origin ?? undefined)),
-    credentials: true,
-  },
-  maxHttpBufferSize: 50 * 1024 * 1024,
+const wss = new WebSocketServer({
+  noServer: true,
+  maxPayload: 50 * 1024 * 1024,
+});
+
+httpServer.on("upgrade", (req, socket, head) => {
+  const url = new URL(req.url || "", `http://${req.headers.host}`);
+  if (url.pathname !== "/ws") {
+    socket.destroy();
+    return;
+  }
+
+  const origin = req.headers.origin;
+  if (origin && !isAllowedOrigin(origin)) {
+    socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
+    socket.destroy();
+    return;
+  }
+
+  wss.handleUpgrade(req, socket, head, (ws) => {
+    wss.emit("connection", ws, req);
+  });
 });
 const parseJsonField = <T>(
   rawValue: string | null | undefined,
@@ -244,14 +262,21 @@ app.use(
   helmet({
     contentSecurityPolicy: {
       directives: {
-        // Backend serves JSON APIs; keep CSP strict and avoid 'unsafe-*'.
         defaultSrc: ["'none'"],
+        scriptSrc: ["'self'", "'wasm-unsafe-eval'", "'unsafe-eval'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        fontSrc: ["'self'", "https://esm.sh"],
         baseUri: ["'none'"],
         formAction: ["'none'"],
         frameAncestors: ["'none'"],
         objectSrc: ["'none'"],
-        imgSrc: ["'self'", "data:"],
-        connectSrc: ["'self'"],
+        imgSrc: ["'self'", "data:", "blob:"],
+        connectSrc: [
+          "'self'",
+          ...allowedOrigins.map((o) => o.replace(/^http/, "ws")),
+          "https://esm.sh",
+        ],
+        workerSrc: ["'self'", "blob:"],
       },
     },
     hsts: {
@@ -272,6 +297,21 @@ app.use(
 );
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+
+app.use((req, res, next) => {
+  const requestId = req.headers["x-request-id"] || "unknown";
+  const userEmail = req.user?.email || req.headers[config.proxyAuthHeader] as string || "anonymous";
+
+  res.on("finish", () => {
+    if (res.statusCode >= 400) {
+      console.error(
+        `[ERROR] ${req.method} ${req.path} - ${res.statusCode} - User: ${userEmail} - IP: ${req.ip} - RequestID: ${requestId}`
+      );
+    }
+  });
+
+  next();
+});
 
 
 const RATE_LIMIT_WINDOW = 15 * 60 * 1000;
@@ -301,7 +341,7 @@ if (hasFrontend) {
   app.use(express.static(FRONTEND_DIR, { index: false }));
 
   const API_PATH_PREFIXES = [
-    "/api", "/auth", "/health", "/csrf-token", "/socket.io/",
+    "/api", "/auth", "/health", "/csrf-token", "/ws",
     "/drawings", "/collections", "/library", "/import", "/export",
     "/system", "/share", "/admin", "/users",
   ];
@@ -538,7 +578,7 @@ const removeFileIfExists = async (filePath?: string) => {
 };
 
 registerSocketHandlers({
-  io,
+  wss,
   prisma,
   authModeService,
   jwtSecret: config.jwtSecret,
@@ -666,9 +706,8 @@ app.use(errorHandler);
 
 export { app, httpServer };
 
-const isMain =
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-  typeof require !== "undefined" && require.main === module;
+const isMain = process.argv[1] &&
+  import.meta.url === new URL(`file://${path.resolve(process.argv[1])}`).href;
 
 // Snapshot cleanup: delete snapshots older than 2 days (runs hourly)
 const SNAPSHOT_RETENTION_MS = 2 * 24 * 60 * 60 * 1000;

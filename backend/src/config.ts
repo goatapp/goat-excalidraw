@@ -4,8 +4,11 @@
 import dotenv from "dotenv";
 import crypto from "crypto";
 import path from "path";
+import { fileURLToPath } from "node:url";
 
 dotenv.config();
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 interface Config {
   port: number;

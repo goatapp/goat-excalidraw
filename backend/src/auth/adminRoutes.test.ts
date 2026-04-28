@@ -1,7 +1,7 @@
 import express from "express";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { registerAdminRoutes } from "./adminRoutes";
+import { registerAdminRoutes } from "./adminRoutes.js";
 
 const buildApp = (options?: {
   authMode?: "local" | "hybrid" | "oidc_enforced" | "proxy";

@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import ms, { type StringValue } from "ms";
-import { config } from "../config";
+import { config } from "../config.js";
 
 export const ACCESS_TOKEN_COOKIE_NAME = "excalidash-access-token";
 export const REFRESH_TOKEN_COOKIE_NAME = "excalidash-refresh-token";

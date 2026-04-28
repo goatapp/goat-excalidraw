@@ -3,9 +3,9 @@ import request from "supertest";
 import bcrypt from "bcrypt";
 import jwt, { SignOptions } from "jsonwebtoken";
 import { StringValue } from "ms";
-import { PrismaClient } from "../generated/client";
-import { config } from "../config";
-import { getTestPrisma, setupTestDb } from "./testUtils";
+import { PrismaClient } from "../generated/client/client.js";
+import { config } from "../config.js";
+import { getTestPrisma, resetTestDb, setupTestDb } from "./testUtils.js";
 
 describe("Auth Enabled Toggle Authorization", () => {
   const userAgent = "vitest-auth-enabled";
@@ -19,9 +19,10 @@ describe("Auth Enabled Toggle Authorization", () => {
 
   beforeAll(async () => {
     setupTestDb();
-    prisma = getTestPrisma();
+    prisma = await getTestPrisma();
+    await resetTestDb(prisma);
 
-    ({ app } = await import("../index"));
+    ({ app } = await import("../index.js"));
 
     await prisma.systemConfig.upsert({
       where: { id: "default" },

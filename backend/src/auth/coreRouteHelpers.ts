@@ -1,5 +1,5 @@
-import { PrismaClient } from "../generated/client";
-import { getEffectiveRegistrationEnabled } from "./accessPolicy";
+import { PrismaClient } from "../generated/client/client.js";
+import { getEffectiveRegistrationEnabled } from "./accessPolicy.js";
 
 type AuthMode = "local" | "hybrid" | "oidc_enforced" | "proxy";
 

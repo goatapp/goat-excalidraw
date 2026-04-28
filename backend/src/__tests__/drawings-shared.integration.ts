@@ -3,9 +3,9 @@ import request from "supertest";
 import bcrypt from "bcrypt";
 import jwt, { SignOptions } from "jsonwebtoken";
 import { StringValue } from "ms";
-import { PrismaClient } from "../generated/client";
-import { config } from "../config";
-import { getTestPrisma, setupTestDb } from "./testUtils";
+import { PrismaClient } from "../generated/client/client.js";
+import { config } from "../config.js";
+import { getTestPrisma, resetTestDb, setupTestDb } from "./testUtils.js";
 
 describe("Drawings - Shared With Me", () => {
   const userAgent = "vitest-drawings-shared";
@@ -14,8 +14,9 @@ describe("Drawings - Shared With Me", () => {
 
   beforeAll(async () => {
     setupTestDb();
-    prisma = getTestPrisma();
-    ({ app } = await import("../index"));
+    prisma = await getTestPrisma();
+    await resetTestDb(prisma);
+    ({ app } = await import("../index.js"));
 
     await prisma.systemConfig.upsert({
       where: { id: "default" },

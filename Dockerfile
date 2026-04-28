@@ -1,5 +1,5 @@
 # Stage 1: Build frontend
-FROM node:20-alpine AS frontend-builder
+FROM node:25-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
@@ -17,7 +17,7 @@ ENV VITE_APP_BUILD_LABEL=$VITE_APP_BUILD_LABEL
 RUN npm run build
 
 # Stage 2: Build backend
-FROM node:20-alpine AS backend-builder
+FROM node:25-alpine AS backend-builder
 
 WORKDIR /app
 
@@ -25,17 +25,18 @@ RUN apk add --no-cache python3 make g++
 
 COPY backend/package*.json ./
 COPY backend/tsconfig.json ./
+COPY backend/prisma.config.ts ./
 
 RUN npm ci && npm cache clean --force
 
 COPY backend/prisma ./prisma/
-RUN npx prisma generate
+RUN DATABASE_URL="file:./prisma/dev.db" npx prisma generate
 
 COPY backend/src ./src
 RUN npx tsc
 
 # Stage 3: Production
-FROM node:20-alpine
+FROM node:25-alpine
 
 RUN apk add --no-cache openssl su-exec && \
     addgroup -g 1001 -S nodejs && \
@@ -52,13 +53,14 @@ RUN apk add --no-cache --virtual .build-deps python3 make g++ && \
 
 COPY backend/prisma ./prisma/
 COPY backend/prisma ./prisma_template/
+COPY backend/prisma.config.ts ./
 
 COPY --from=backend-builder /app/dist ./dist
 COPY --from=backend-builder /app/src/generated ./dist/generated
 
 COPY --from=frontend-builder /app/frontend/dist ./public
 
-COPY scripts/s3-sync.js ./scripts/s3-sync.js
+COPY scripts/s3-sync.mjs ./scripts/s3-sync.mjs
 COPY docker-entrypoint.combined.sh ./docker-entrypoint.combined.sh
 RUN chmod +x docker-entrypoint.combined.sh
 

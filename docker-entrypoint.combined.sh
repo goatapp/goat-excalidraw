@@ -46,7 +46,7 @@ export CSRF_SECRET
 # --- S3 restore (before migrations, so restored DB gets migrated) ---
 if [ -n "${S3_BUCKET_NAME:-}" ]; then
     echo "Restoring data from S3..."
-    node /app/scripts/s3-sync.js --restore || echo "S3 restore failed, continuing with local state"
+    node /app/scripts/s3-sync.mjs --restore || echo "S3 restore failed, continuing with local state"
 fi
 
 # --- Schema and migration bootstrap ---
@@ -98,7 +98,7 @@ fi
 # --- Start S3 sync background process ---
 if [ -n "${S3_BUCKET_NAME:-}" ]; then
     echo "Starting S3 sync background process..."
-    su-exec nodejs node /app/scripts/s3-sync.js &
+    su-exec nodejs node /app/scripts/s3-sync.mjs &
 fi
 
 # --- Start application ---

@@ -1,15 +1,18 @@
+import { WebSocketServer, WebSocket } from "ws";
+import { IncomingMessage } from "http";
+import { randomUUID } from "crypto";
 import jwt from "jsonwebtoken";
-import { Server } from "socket.io";
-import { PrismaClient } from "../generated/client";
-import { AuthModeService } from "../auth/authMode";
-import { ACCESS_TOKEN_COOKIE_NAME, parseCookieHeader } from "../auth/cookies";
-import { BOOTSTRAP_USER_ID } from "../auth/authMode";
+import { PrismaClient } from "../generated/client/client.js";
+import { AuthModeService } from "../auth/authMode.js";
+import { ACCESS_TOKEN_COOKIE_NAME, parseCookieHeader } from "../auth/cookies.js";
+import { BOOTSTRAP_USER_ID } from "../auth/authMode.js";
+import { config } from "../config.js";
 import {
   getDrawingAccess,
   canEditDrawing,
   canViewDrawing,
   type DrawingPrincipal,
-} from "../authz/sharing";
+} from "../authz/sharing.js";
 
 interface User {
   id: string;
@@ -20,21 +23,88 @@ interface User {
   isActive: boolean;
 }
 
+interface WsMessage {
+  type: string;
+  data?: any;
+  ackId?: string;
+}
+
+interface SocketState {
+  id: string;
+  ws: WebSocket;
+  principal: DrawingPrincipal | null;
+  authenticated: boolean;
+  rooms: Set<string>;
+  authorizedDrawingAccess: Map<
+    string,
+    { access: "view" | "edit" | "owner"; checkedAtMs: number }
+  >;
+  req: IncomingMessage;
+}
+
 type RegisterSocketHandlersDeps = {
-  io: Server;
+  wss: WebSocketServer;
   prisma: PrismaClient;
   authModeService: AuthModeService;
   jwtSecret: string;
 };
 
 export const registerSocketHandlers = ({
-  io,
+  wss,
   prisma,
   authModeService,
   jwtSecret,
 }: RegisterSocketHandlersDeps) => {
+  const rooms = new Map<string, Set<WebSocket>>();
   const roomUsers = new Map<string, User[]>();
-  const socketPrincipalMap = new Map<string, DrawingPrincipal>();
+  const socketStates = new WeakMap<WebSocket, SocketState>();
+
+  const HEARTBEAT_INTERVAL_MS = 30_000;
+
+  const sendTo = (ws: WebSocket, message: WsMessage) => {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(message));
+    }
+  };
+
+  const broadcastToRoom = (
+    roomId: string,
+    message: WsMessage,
+    exclude?: WebSocket
+  ) => {
+    const members = rooms.get(roomId);
+    if (!members) return;
+    const payload = JSON.stringify(message);
+    for (const ws of members) {
+      if (ws !== exclude && ws.readyState === WebSocket.OPEN) {
+        ws.send(payload);
+      }
+    }
+  };
+
+  const joinRoom = (ws: WebSocket, roomId: string) => {
+    let members = rooms.get(roomId);
+    if (!members) {
+      members = new Set();
+      rooms.set(roomId, members);
+    }
+    members.add(ws);
+    const state = socketStates.get(ws);
+    if (state) state.rooms.add(roomId);
+  };
+
+  const leaveAllRooms = (ws: WebSocket) => {
+    const state = socketStates.get(ws);
+    if (!state) return;
+    for (const roomId of state.rooms) {
+      const members = rooms.get(roomId);
+      if (members) {
+        members.delete(ws);
+        if (members.size === 0) rooms.delete(roomId);
+      }
+    }
+    state.rooms.clear();
+  };
 
   const toPresenceName = (value: unknown): string => {
     if (typeof value !== "string") return "User";
@@ -43,7 +113,6 @@ export const registerSocketHandlers = ({
   };
 
   const toPresenceInitials = (name: string): string => {
-    // Keep consistent with frontend `getInitialsFromName`.
     const trimmed = name.trim();
     if (!trimmed) return "U";
     const parts = trimmed.split(/\s+/).filter(Boolean);
@@ -62,7 +131,9 @@ export const registerSocketHandlers = ({
     return "#4f46e5";
   };
 
-  const getSocketAuthUserId = async (token?: string): Promise<string | null> => {
+  const getSocketAuthUserId = async (
+    token?: string
+  ): Promise<string | null> => {
     const authEnabled = await authModeService.getAuthEnabled();
     if (!authEnabled) {
       return BOOTSTRAP_USER_ID;
@@ -92,202 +163,360 @@ export const registerSocketHandlers = ({
     }
   };
 
-  io.use(async (socket, next) => {
+  const ACCESS_CACHE_TTL_MS = 1500;
+
+  const getCachedOrFreshAccess = async (
+    state: SocketState,
+    drawingId: string
+  ): Promise<"view" | "edit" | "owner" | null> => {
+    const cached = state.authorizedDrawingAccess.get(drawingId);
+    const now = Date.now();
+    if (cached && now - cached.checkedAtMs < ACCESS_CACHE_TTL_MS) {
+      return cached.access;
+    }
+    const access = await getDrawingAccess({
+      prisma,
+      principal: state.principal,
+      drawingId,
+    });
+    if (!canViewDrawing(access)) {
+      state.authorizedDrawingAccess.delete(drawingId);
+      return null;
+    }
+    const normalized = access === "owner" ? "owner" : access;
+    state.authorizedDrawingAccess.set(drawingId, {
+      access: normalized,
+      checkedAtMs: now,
+    });
+    return normalized;
+  };
+
+  const resolveProxyUserId = async (
+    req: IncomingMessage
+  ): Promise<string | null> => {
+    const raw = req.headers[config.proxyAuthHeader];
+    const email = (Array.isArray(raw) ? raw[0] : raw)?.trim().toLowerCase();
+    if (!email) return null;
+
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true, isActive: true },
+    });
+    if (!user || !user.isActive) return null;
+    return user.id;
+  };
+
+  const handleAuth = async (state: SocketState, msg: WsMessage) => {
     try {
-      const tokenFromAuth = socket.handshake.auth?.token as string | undefined;
+      if (config.authMode === "proxy") {
+        const userId = await resolveProxyUserId(state.req);
+        if (userId) {
+          state.principal = { kind: "user", userId };
+        }
+        state.authenticated = true;
+        sendTo(state.ws, { type: "auth-ok" });
+        return;
+      }
+
+      const tokenFromMsg =
+        typeof msg.data?.token === "string" && msg.data.token.trim().length > 0
+          ? msg.data.token
+          : undefined;
       const tokenFromCookie = (() => {
-        const cookies = parseCookieHeader(socket.handshake.headers.cookie);
+        const cookies = parseCookieHeader(state.req.headers.cookie);
         const value = cookies[ACCESS_TOKEN_COOKIE_NAME];
-        return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+        return typeof value === "string" && value.trim().length > 0
+          ? value
+          : undefined;
       })();
-      const token = tokenFromAuth || tokenFromCookie;
+      const token = tokenFromMsg || tokenFromCookie;
       const authEnabled = await authModeService.getAuthEnabled();
       const userId = await getSocketAuthUserId(token);
 
       if (userId) {
-        socketPrincipalMap.set(socket.id, { kind: "user", userId });
-        return next();
+        state.principal = { kind: "user", userId };
+        state.authenticated = true;
+        sendTo(state.ws, { type: "auth-ok" });
+        return;
       }
 
-      // Google-Docs-style "anyone with the link": allow anonymous sockets and enforce access on join-room
-      // using getDrawingAccess (which consults active link-share policies).
-      if (authEnabled) return next();
-
-      return next(new Error("Authentication required"));
-    } catch {
-      next(new Error("Authentication failed"));
-    }
-  });
-
-  io.on("connection", (socket) => {
-    const principal = socketPrincipalMap.get(socket.id) || null;
-    const authorizedDrawingAccess = new Map<
-      string,
-      { access: "view" | "edit" | "owner"; checkedAtMs: number }
-    >();
-    const ACCESS_CACHE_TTL_MS = 1500;
-
-    const getCachedOrFreshAccess = async (
-      drawingId: string
-    ): Promise<"view" | "edit" | "owner" | null> => {
-      const cached = authorizedDrawingAccess.get(drawingId);
-      const now = Date.now();
-      if (cached && now - cached.checkedAtMs < ACCESS_CACHE_TTL_MS) {
-        return cached.access;
+      if (authEnabled) {
+        state.authenticated = true;
+        sendTo(state.ws, { type: "auth-ok" });
+        return;
       }
-      const access = await getDrawingAccess({
-        prisma,
-        principal,
-        drawingId,
+
+      sendTo(state.ws, {
+        type: "auth-error",
+        data: { message: "Authentication required" },
       });
-      if (!canViewDrawing(access)) {
-        authorizedDrawingAccess.delete(drawingId);
-        return null;
+      state.ws.close(1008, "Authentication required");
+    } catch {
+      sendTo(state.ws, {
+        type: "auth-error",
+        data: { message: "Authentication failed" },
+      });
+      state.ws.close(1008, "Authentication failed");
+    }
+  };
+
+  const handleJoinRoom = async (state: SocketState, msg: WsMessage) => {
+    try {
+      const { drawingId, user } = msg.data || {};
+      if (typeof drawingId !== "string") return;
+
+      const access = await getCachedOrFreshAccess(state, drawingId);
+      if (!access) {
+        sendTo(state.ws, {
+          type: "error",
+          data: { message: "You do not have access to this drawing" },
+        });
+        return;
       }
-      const normalized = access === "owner" ? "owner" : access;
-      authorizedDrawingAccess.set(drawingId, { access: normalized, checkedAtMs: now });
-      return normalized;
-    };
 
-    socket.on(
-      "join-room",
-      async (
-        {
-          drawingId,
-          user,
-        }: {
-          drawingId: string;
-          user: Omit<User, "socketId" | "isActive">;
-        },
-        ack?: (payload: { user: Omit<User, "socketId" | "isActive"> }) => void
-      ) => {
-        try {
-          const access = await getCachedOrFreshAccess(drawingId);
-          if (!access) {
-            socket.emit("error", { message: "You do not have access to this drawing" });
-            return;
-          }
+      const roomId = `drawing_${drawingId}`;
+      joinRoom(state.ws, roomId);
 
-          const roomId = `drawing_${drawingId}`;
-          socket.join(roomId);
+      let trustedUserId =
+        typeof user?.id === "string" && user.id.trim().length > 0
+          ? user.id.trim().slice(0, 200)
+          : state.id;
+      let trustedName = toPresenceName(user?.name);
 
-          let trustedUserId =
-            typeof user?.id === "string" && user.id.trim().length > 0
-              ? user.id.trim().slice(0, 200)
-              : socket.id;
-          let trustedName = toPresenceName(user?.name);
+      if (!state.principal) {
+        trustedUserId = `anon:${state.id}`.slice(0, 200);
+      } else if (
+        state.principal?.kind === "user" &&
+        state.principal.userId !== BOOTSTRAP_USER_ID
+      ) {
+        const account = await prisma.user.findUnique({
+          where: { id: state.principal.userId },
+          select: { id: true, name: true },
+        });
+        if (account) {
+          trustedUserId = account.id;
+          trustedName = toPresenceName(account.name);
+        }
+      }
 
-          if (!principal) {
-            // Never trust client-provided ids for anonymous/share-link sessions; prevent spoofing/collisions.
-            trustedUserId = `anon:${socket.id}`.slice(0, 200);
-          } else if (principal?.kind === "user" && principal.userId !== BOOTSTRAP_USER_ID) {
-            const account = await prisma.user.findUnique({
-              where: { id: principal.userId },
-              select: { id: true, name: true },
-            });
-            if (account) {
-              trustedUserId = account.id;
-              trustedName = toPresenceName(account.name);
-            }
-          }
+      const newUser: User = {
+        id: trustedUserId,
+        name: trustedName,
+        initials: toPresenceInitials(trustedName),
+        color: toPresenceColor(user?.color),
+        socketId: state.id,
+        isActive: true,
+      };
 
-          const newUser: User = {
-            id: trustedUserId,
-            name: trustedName,
-            initials: toPresenceInitials(trustedName),
-            color: toPresenceColor(user?.color),
-            socketId: socket.id,
-            isActive: true,
-          };
+      const currentUsers = roomUsers.get(roomId) || [];
+      const filteredUsers = currentUsers.filter((u) => u.id !== newUser.id);
+      filteredUsers.push(newUser);
+      roomUsers.set(roomId, filteredUsers);
 
-          const currentUsers = roomUsers.get(roomId) || [];
-          const filteredUsers = currentUsers.filter((u) => u.id !== newUser.id);
-          filteredUsers.push(newUser);
-          roomUsers.set(roomId, filteredUsers);
+      broadcastToRoom(roomId, {
+        type: "presence-update",
+        data: filteredUsers,
+      });
 
-          io.to(roomId).emit("presence-update", filteredUsers);
-          // Let the client know what the server will use as its canonical presence identity.
-          if (typeof ack === "function") {
-            ack({
+      if (msg.ackId) {
+        sendTo(state.ws, {
+          type: "ack",
+          data: {
+            ackId: msg.ackId,
+            payload: {
               user: {
                 id: newUser.id,
                 name: newUser.name,
                 initials: newUser.initials,
                 color: newUser.color,
               },
-            });
-          }
-        } catch (err) {
-          console.error("Error in join-room handler:", err);
-          socket.emit("error", { message: "Failed to join room" });
-        }
+            },
+          },
+        });
       }
-    );
+    } catch (err) {
+      console.error("Error in join-room handler:", err);
+      sendTo(state.ws, {
+        type: "error",
+        data: { message: "Failed to join room" },
+      });
+    }
+  };
 
-    socket.on("cursor-move", (data) => {
-      const drawingId = typeof data?.drawingId === "string" ? data.drawingId : null;
-      if (!drawingId || !authorizedDrawingAccess.has(drawingId)) {
-        return;
-      }
-      const roomId = `drawing_${drawingId}`;
-      // Don't trust client-provided identity fields; use the server-side presence user.
-      const users = roomUsers.get(roomId) || [];
-      const self = users.find((u) => u.socketId === socket.id);
-      if (!self) return;
-      socket.volatile.to(roomId).emit("cursor-move", {
+  const handleCursorMove = (state: SocketState, msg: WsMessage) => {
+    const data = msg.data;
+    const drawingId =
+      typeof data?.drawingId === "string" ? data.drawingId : null;
+    if (!drawingId || !state.authorizedDrawingAccess.has(drawingId)) return;
+
+    const roomId = `drawing_${drawingId}`;
+    const users = roomUsers.get(roomId) || [];
+    const self = users.find((u) => u.socketId === state.id);
+    if (!self) return;
+
+    const outgoing: WsMessage = {
+      type: "cursor-move",
+      data: {
         ...data,
         drawingId,
         userId: self.id,
         username: self.name,
         color: self.color,
+      },
+    };
+    const payload = JSON.stringify(outgoing);
+
+    const members = rooms.get(roomId);
+    if (!members) return;
+    for (const peer of members) {
+      if (
+        peer !== state.ws &&
+        peer.readyState === WebSocket.OPEN &&
+        peer.bufferedAmount < 65536
+      ) {
+        peer.send(payload);
+      }
+    }
+  };
+
+  const handleElementUpdate = async (state: SocketState, msg: WsMessage) => {
+    const data = msg.data;
+    const drawingId =
+      typeof data?.drawingId === "string" ? data.drawingId : null;
+    if (!drawingId || !state.authorizedDrawingAccess.has(drawingId)) return;
+
+    const joinedAccess = await getCachedOrFreshAccess(state, drawingId);
+    if (!joinedAccess || !canEditDrawing(joinedAccess)) {
+      sendTo(state.ws, {
+        type: "error",
+        data: { message: "Read-only access: cannot edit this drawing" },
       });
-    });
+      return;
+    }
 
-    socket.on("element-update", async (data) => {
-      const drawingId = typeof data?.drawingId === "string" ? data.drawingId : null;
-      if (!drawingId || !authorizedDrawingAccess.has(drawingId)) {
-        return;
-      }
-
-      // Enforce edit permission for every mutation event.
-      const joinedAccess = await getCachedOrFreshAccess(drawingId);
-      if (!joinedAccess || !canEditDrawing(joinedAccess)) {
-        socket.emit("error", { message: "Read-only access: cannot edit this drawing" });
-        return;
-      }
-
-      const roomId = `drawing_${drawingId}`;
-      socket.to(roomId).emit("element-update", data);
-    });
-
-    socket.on(
-      "user-activity",
-      ({ drawingId, isActive }: { drawingId: string; isActive: boolean }) => {
-        if (!authorizedDrawingAccess.has(drawingId)) {
-          return;
-        }
-        const roomId = `drawing_${drawingId}`;
-        const users = roomUsers.get(roomId);
-        if (users) {
-          const user = users.find((u) => u.socketId === socket.id);
-          if (user) {
-            user.isActive = isActive;
-            io.to(roomId).emit("presence-update", users);
-          }
-        }
-      }
+    const roomId = `drawing_${drawingId}`;
+    broadcastToRoom(
+      roomId,
+      { type: "element-update", data },
+      state.ws
     );
+  };
 
-    socket.on("disconnect", () => {
-      socketPrincipalMap.delete(socket.id);
-      roomUsers.forEach((users, roomId) => {
-        const index = users.findIndex((u) => u.socketId === socket.id);
-        if (index !== -1) {
-          users.splice(index, 1);
-          roomUsers.set(roomId, users);
-          io.to(roomId).emit("presence-update", users);
+  const handleUserActivity = (state: SocketState, msg: WsMessage) => {
+    const { drawingId, isActive } = msg.data || {};
+    if (
+      typeof drawingId !== "string" ||
+      !state.authorizedDrawingAccess.has(drawingId)
+    )
+      return;
+
+    const roomId = `drawing_${drawingId}`;
+    const users = roomUsers.get(roomId);
+    if (users) {
+      const user = users.find((u) => u.socketId === state.id);
+      if (user) {
+        user.isActive = isActive;
+        broadcastToRoom(roomId, {
+          type: "presence-update",
+          data: users,
+        });
+      }
+    }
+  };
+
+  const handleDisconnect = (state: SocketState) => {
+    leaveAllRooms(state.ws);
+    roomUsers.forEach((users, roomId) => {
+      const index = users.findIndex((u) => u.socketId === state.id);
+      if (index !== -1) {
+        users.splice(index, 1);
+        roomUsers.set(roomId, users);
+        broadcastToRoom(roomId, {
+          type: "presence-update",
+          data: users,
+        });
+      }
+    });
+  };
+
+  wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
+    const state: SocketState = {
+      id: randomUUID(),
+      ws,
+      principal: null,
+      authenticated: false,
+      rooms: new Set(),
+      authorizedDrawingAccess: new Map(),
+      req,
+    };
+    socketStates.set(ws, state);
+
+    let isAlive = true;
+    const heartbeat = setInterval(() => {
+      if (!isAlive) {
+        clearInterval(heartbeat);
+        ws.terminate();
+        return;
+      }
+      isAlive = false;
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.ping();
+      }
+    }, HEARTBEAT_INTERVAL_MS);
+
+    ws.on("pong", () => {
+      isAlive = true;
+    });
+
+    ws.on("message", async (raw: Buffer | ArrayBuffer | Buffer[]) => {
+      const buf = Buffer.isBuffer(raw)
+        ? raw
+        : Array.isArray(raw)
+          ? Buffer.concat(raw)
+          : Buffer.from(raw);
+      if (buf.byteLength > 50 * 1024 * 1024) {
+        ws.close(1009, "Message too large");
+        return;
+      }
+
+      let msg: WsMessage;
+      try {
+        msg = JSON.parse(buf.toString("utf8"));
+      } catch {
+        return;
+      }
+
+      if (!state.authenticated) {
+        if (msg.type === "auth") {
+          await handleAuth(state, msg);
         }
-      });
+        return;
+      }
+
+      switch (msg.type) {
+        case "join-room":
+          await handleJoinRoom(state, msg);
+          break;
+        case "cursor-move":
+          handleCursorMove(state, msg);
+          break;
+        case "element-update":
+          await handleElementUpdate(state, msg);
+          break;
+        case "user-activity":
+          handleUserActivity(state, msg);
+          break;
+      }
+    });
+
+    ws.on("close", () => {
+      clearInterval(heartbeat);
+      handleDisconnect(state);
+    });
+
+    ws.on("error", () => {
+      clearInterval(heartbeat);
+      handleDisconnect(state);
     });
   });
 };

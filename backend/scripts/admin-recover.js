@@ -4,8 +4,8 @@
  * CLI admin password recovery for ExcaliDash.
  *
  * Examples:
- *   node scripts/admin-recover.cjs --identifier admin@example.com --password "NewStrongPassword!"
- *   node scripts/admin-recover.cjs --identifier admin@example.com --generate
+ *   node scripts/admin-recover.js --identifier admin@example.com --password "NewStrongPassword!"
+ *   node scripts/admin-recover.js --identifier admin@example.com --generate
  *
  * Notes:
  * - Works with SQLite DATABASE_URL (default: file:./prisma/dev.db).
@@ -13,15 +13,16 @@
  * - If there are no active admins, this script can promote the target user to ADMIN.
  */
 
-require("dotenv").config();
+import "dotenv/config";
+import path from "path";
+import crypto from "crypto";
+import { fileURLToPath } from "node:url";
 
-const path = require("path");
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 process.env.DATABASE_URL =
   process.env.DATABASE_URL ||
   `file:${path.resolve(__dirname, "../prisma/dev.db")}`;
-
-const { PrismaClient } = require("../src/generated/client");
-const bcrypt = require("bcrypt");
 
 const parseArgs = (argv) => {
   const args = {};
@@ -41,8 +42,15 @@ const parseArgs = (argv) => {
 };
 
 const generatePassword = () => {
-  const buf = require("crypto").randomBytes(18);
+  const buf = crypto.randomBytes(18);
   return buf.toString("base64").replace(/[+/=]/g, "").slice(0, 24);
+};
+
+const createScriptPrismaClient = async () => {
+  const { PrismaClient } = await import("../src/generated/client/client.js");
+  const { PrismaBetterSqlite3 } = await import("@prisma/adapter-better-sqlite3");
+  const adapter = new PrismaBetterSqlite3({ url: process.env.DATABASE_URL });
+  return new PrismaClient({ adapter });
 };
 
 const main = async () => {
@@ -78,7 +86,8 @@ const main = async () => {
     return;
   }
 
-  const prisma = new PrismaClient();
+  const bcrypt = (await import("bcrypt")).default;
+  const prisma = await createScriptPrismaClient();
 
   try {
     const activeAdminCount = await prisma.user.count({

@@ -1,17 +1,16 @@
 #!/usr/bin/env node
 
-require("dotenv").config();
+import "dotenv/config";
+import path from "path";
+import { execSync } from "child_process";
+import { fileURLToPath } from "node:url";
 
-const path = require("path");
-const { execSync } = require("child_process");
-const { PrismaClient } = require("../src/generated/client");
-
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BOOTSTRAP_USER_ID = "bootstrap-admin";
 const DEFAULT_SYSTEM_CONFIG_ID = "default";
 const backendRoot = path.resolve(__dirname, "..");
 
 const resolveDatabaseUrl = (rawUrl) => {
-  const backendRoot = path.resolve(__dirname, "..");
   const defaultDbPath = path.resolve(backendRoot, "prisma/dev.db");
 
   if (!rawUrl || String(rawUrl).trim().length === 0) {
@@ -70,8 +69,8 @@ const parseArgs = (argv) => {
 
 const usage = () => {
   console.log(`Usage:
-  node scripts/simulate-auth-onboarding.cjs --scenario fresh
-  node scripts/simulate-auth-onboarding.cjs --scenario migration
+  node scripts/simulate-auth-onboarding.js --scenario fresh
+  node scripts/simulate-auth-onboarding.js --scenario migration
 
 Options:
   --dry-run           Show what would change without modifying data
@@ -88,6 +87,13 @@ const assertScenario = (scenario) => {
 
 const nowIso = () => new Date().toISOString();
 
+const createScriptPrismaClient = async () => {
+  const { PrismaClient } = await import("../src/generated/client/client.js");
+  const { PrismaBetterSqlite3 } = await import("@prisma/adapter-better-sqlite3");
+  const adapter = new PrismaBetterSqlite3({ url: process.env.DATABASE_URL });
+  return new PrismaClient({ adapter });
+};
+
 const run = async () => {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) {
@@ -97,7 +103,7 @@ const run = async () => {
 
   assertScenario(args.scenario);
 
-const nodeEnv = process.env.NODE_ENV || "development";
+  const nodeEnv = process.env.NODE_ENV || "development";
   if (nodeEnv === "production" && !args.allowProd) {
     throw new Error(
       "Refusing to run in production. Pass --allow-production only if you explicitly intend this."
@@ -156,7 +162,7 @@ const nodeEnv = process.env.NODE_ENV || "development";
     }
   }
 
-  const prisma = new PrismaClient();
+  const prisma = await createScriptPrismaClient();
 
   try {
     const before = {

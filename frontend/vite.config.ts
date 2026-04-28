@@ -33,10 +33,18 @@ export default defineConfig(({ command }) => {
       'import.meta.env.VITE_APP_VERSION': JSON.stringify(appVersion),
       'import.meta.env.VITE_APP_BUILD_LABEL': JSON.stringify(buildLabel),
     },
-    optimizeDeps: {
-      esbuildOptions: {
-        define: processEnvDefines,
-        target: "es2022",
+    build: {
+      chunkSizeWarningLimit: 1500,
+      rolldownOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes("@excalidraw/excalidraw")) return;
+            if (id.includes("subset-worker")) return;
+            const match = id.match(/\/(chunk-[A-Z0-9]+|subset-shared\.chunk|index)\.js$/);
+            if (match) return `excalidraw-${match[1]}`;
+            return "excalidraw-vendor";
+          },
+        },
       },
     },
     server: {
@@ -46,7 +54,7 @@ export default defineConfig(({ command }) => {
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api/, ""),
         },
-        "/socket.io": {
+        "/ws": {
           target: devBackendTarget,
           changeOrigin: true,
           ws: true,

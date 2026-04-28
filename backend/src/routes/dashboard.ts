@@ -1,2 +1,2 @@
-export { registerDashboardRoutes } from "./dashboard/index";
-export type { DashboardRouteDeps } from "./dashboard/index";
+export { registerDashboardRoutes } from "./dashboard/index.js";
+export type { DashboardRouteDeps } from "./dashboard/index.js";

@@ -4,6 +4,18 @@ import { useAuth } from '../context/AuthContext';
 import { startOidcSignIn } from '../api';
 import { AuthStatusErrorPanel } from './AuthStatusErrorPanel';
 
+const OidcRedirect: React.FC<{ returnTo: string }> = ({ returnTo }) => {
+  useEffect(() => {
+    startOidcSignIn(returnTo);
+  }, [returnTo]);
+
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="text-gray-600 dark:text-gray-400">Redirecting to sign-in...</div>
+    </div>
+  );
+};
+
 interface ProtectedRouteProps {
   children: React.ReactNode;
 }
@@ -21,18 +33,6 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
     authOnboardingRequired,
     user,
   } = useAuth();
-
-  const OidcRedirect: React.FC<{ returnTo: string }> = ({ returnTo }) => {
-    useEffect(() => {
-      startOidcSignIn(returnTo);
-    }, [returnTo]);
-
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-gray-600 dark:text-gray-400">Redirecting to sign-in...</div>
-      </div>
-    );
-  };
 
   if (loading || authEnabled === null) {
     if (authStatusError) {

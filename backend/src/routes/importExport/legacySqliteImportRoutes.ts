@@ -11,7 +11,7 @@ import {
   parseOptionalJson,
   resolveSafeUploadedFilePath,
   sanitizeDrawingData,
-} from "./shared";
+} from "./shared.js";
 
 export const registerLegacySqliteImportRoutes = (deps: RegisterImportExportDeps) => {
   const {
@@ -54,7 +54,7 @@ export const registerLegacySqliteImportRoutes = (deps: RegisterImportExportDeps)
 
       let db: any | null = null;
       try {
-        db = openReadonlySqliteDb(stagedPath);
+        db = await openReadonlySqliteDb(stagedPath);
         const tables: string[] = db
           .prepare("SELECT name FROM sqlite_master WHERE type='table'")
           .all()
@@ -168,7 +168,7 @@ export const registerLegacySqliteImportRoutes = (deps: RegisterImportExportDeps)
 
       let legacyDb: any | null = null;
       try {
-        legacyDb = openReadonlySqliteDb(stagedPath);
+        legacyDb = await openReadonlySqliteDb(stagedPath);
         const tables: string[] = legacyDb
           .prepare("SELECT name FROM sqlite_master WHERE type='table'")
           .all()

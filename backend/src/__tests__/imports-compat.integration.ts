@@ -4,8 +4,12 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import JSZip from "jszip";
-import { getTestPrisma, setupTestDb, cleanupTestDb } from "./testUtils";
-import { BOOTSTRAP_USER_ID } from "../auth/authMode";
+import { fileURLToPath } from "node:url";
+import { PrismaClient } from "../generated/client/client.js";
+import { getTestPrisma, resetTestDb, setupTestDb, cleanupTestDb } from "./testUtils.js";
+import { BOOTSTRAP_USER_ID } from "../auth/authMode.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 type LegacyDbOptions = {
   tableStyle: "prisma" | "plural-lower";
@@ -16,22 +20,20 @@ type LegacyDbOptions = {
 
 const createTempDir = () => fs.mkdtempSync(path.join(os.tmpdir(), "excalidash-legacy-"));
 
-const openWritableDb = (filePath: string): any => {
+const openWritableDb = async (filePath: string): Promise<any> => {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { DatabaseSync } = require("node:sqlite") as any;
+    const { DatabaseSync } = await import("node:sqlite") as any;
     return new DatabaseSync(filePath, { enableForeignKeyConstraints: false });
   } catch (_err) {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const Database = require("better-sqlite3") as any;
+    const Database = (await import("better-sqlite3")).default;
     return new Database(filePath);
   }
 };
 
-const createLegacySqliteDb = (opts: LegacyDbOptions): string => {
+const createLegacySqliteDb = async (opts: LegacyDbOptions): Promise<string> => {
   const dir = createTempDir();
   const filePath = path.join(dir, "legacy-export.db");
-  const db = openWritableDb(filePath);
+  const db = await openWritableDb(filePath);
 
   const tableDrawing = opts.tableStyle === "plural-lower" ? "drawings" : "Drawing";
   const tableCollection = opts.tableStyle === "plural-lower" ? "collections" : "Collection";
@@ -200,10 +202,10 @@ const createExcalidashArchiveWithDuplicateDrawingIds = async (): Promise<string>
   return filePath;
 };
 
-const createLegacySqliteDbWithDuplicateDrawingIds = (): string => {
+const createLegacySqliteDbWithDuplicateDrawingIds = async (): Promise<string> => {
   const dir = createTempDir();
   const filePath = path.join(dir, "legacy-duplicate-ids.db");
-  const db = openWritableDb(filePath);
+  const db = await openWritableDb(filePath);
 
   try {
     db.exec(`
@@ -266,7 +268,7 @@ const createLegacySqliteDbWithDuplicateDrawingIds = (): string => {
 describe("Import compatibility (legacy exports)", () => {
   const uploadsDir = path.resolve(__dirname, "../../uploads");
   const userAgent = "vitest-import-compat";
-  let prisma: ReturnType<typeof getTestPrisma>;
+  let prisma: PrismaClient;
   let app: any;
   let agent: any;
   let csrfHeaderName: string;
@@ -274,10 +276,11 @@ describe("Import compatibility (legacy exports)", () => {
 
   beforeAll(async () => {
     setupTestDb();
-    prisma = getTestPrisma();
+    prisma = await getTestPrisma();
+    await resetTestDb(prisma);
     fs.mkdirSync(uploadsDir, { recursive: true });
 
-    ({ app } = await import("../index"));
+    ({ app } = await import("../index.js"));
 
     agent = request.agent(app);
     const csrfRes = await agent.get("/csrf-token").set("User-Agent", userAgent);
@@ -296,7 +299,7 @@ describe("Import compatibility (legacy exports)", () => {
   });
 
   it("verifies a v0.1.x–v0.3.2-style SQLite export (Drawing/Collection tables) and returns migration info when present", async () => {
-    const legacyDb = createLegacySqliteDb({
+    const legacyDb = await createLegacySqliteDb({
       tableStyle: "prisma",
       includeCollections: true,
       includeMigrationsTable: true,
@@ -318,7 +321,7 @@ describe("Import compatibility (legacy exports)", () => {
   });
 
   it("merge-imports a legacy SQLite export into the current account without replacing the database", async () => {
-    const legacyDb = createLegacySqliteDb({
+    const legacyDb = await createLegacySqliteDb({
       tableStyle: "prisma",
       includeCollections: true,
       includeMigrationsTable: false,
@@ -353,7 +356,7 @@ describe("Import compatibility (legacy exports)", () => {
   });
 
   it("supports older exports with plural/lowercase table names (drawings/collections)", async () => {
-    const legacyDb = createLegacySqliteDb({
+    const legacyDb = await createLegacySqliteDb({
       tableStyle: "plural-lower",
       includeCollections: true,
       includeMigrationsTable: false,
@@ -383,7 +386,7 @@ describe("Import compatibility (legacy exports)", () => {
   it("fails verification if the legacy DB is missing a Drawing table", async () => {
     const dir = createTempDir();
     const filePath = path.join(dir, "invalid.db");
-    const db = openWritableDb(filePath);
+    const db = await openWritableDb(filePath);
     db.exec(`CREATE TABLE "NotDrawing" (id TEXT PRIMARY KEY NOT NULL);`);
     db.close();
 
@@ -422,7 +425,7 @@ describe("Import compatibility (legacy exports)", () => {
   });
 
   it("rejects legacy verify when DB has duplicate drawing IDs", async () => {
-    const legacyDb = createLegacySqliteDbWithDuplicateDrawingIds();
+    const legacyDb = await createLegacySqliteDbWithDuplicateDrawingIds();
     const res = await agent
       .post("/import/sqlite/legacy/verify")
       .set("User-Agent", userAgent)
@@ -434,7 +437,7 @@ describe("Import compatibility (legacy exports)", () => {
   });
 
   it("rejects legacy import when DB has duplicate drawing IDs", async () => {
-    const legacyDb = createLegacySqliteDbWithDuplicateDrawingIds();
+    const legacyDb = await createLegacySqliteDbWithDuplicateDrawingIds();
     const res = await agent
       .post("/import/sqlite/legacy")
       .set("User-Agent", userAgent)

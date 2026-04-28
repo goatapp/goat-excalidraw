@@ -5,7 +5,7 @@ import {
   sanitizeUrl,
   validateImportedDrawing,
   sanitizeDrawingData,
-} from "./security";
+} from "./security.js";
 
 console.log("Starting Security Test Suite...\n");
 
@@ -139,7 +139,7 @@ try {
     `PASS: SVG sanitized: ${!sanitizedDrawing.preview?.includes("<script>")}`
   );
 } catch (error) {
-  console.log("PASS: Sanitization failed as expected:", error.message);
+  console.log("PASS: Sanitization failed as expected:", (error as Error).message);
 }
 console.log("");
 
@@ -191,7 +191,7 @@ try {
     `PASS: Safe URL preserved: "${sanitizedLegitimate.elements[1].link}"`
   );
 } catch (error) {
-  console.log("FAIL: Legitimate drawing should not fail:", error.message);
+  console.log("FAIL: Legitimate drawing should not fail:", (error as Error).message);
 }
 console.log("");
 

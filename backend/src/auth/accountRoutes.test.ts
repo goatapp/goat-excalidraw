@@ -1,7 +1,7 @@
 import express from "express";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { registerAccountRoutes } from "./accountRoutes";
+import { registerAccountRoutes } from "./accountRoutes.js";
 
 const buildApp = () => {
   const router = express.Router();

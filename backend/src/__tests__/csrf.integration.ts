@@ -29,7 +29,7 @@ afterEach(() => {
 
 describe("CSRF - stateless HMAC tokens", () => {
   it("creates a token in payload.signature format and validates for same client id", async () => {
-    const { createCsrfToken, validateCsrfToken } = await import("../security");
+    const { createCsrfToken, validateCsrfToken } = await import("../security.js");
 
     const clientId = "test-client-1";
     const token = createCsrfToken(clientId);
@@ -40,14 +40,14 @@ describe("CSRF - stateless HMAC tokens", () => {
   });
 
   it("rejects validation for a different client id (token binding)", async () => {
-    const { createCsrfToken, validateCsrfToken } = await import("../security");
+    const { createCsrfToken, validateCsrfToken } = await import("../security.js");
 
     const token = createCsrfToken("client-a");
     expect(validateCsrfToken("client-b", token)).toBe(false);
   });
 
   it("rejects malformed tokens", async () => {
-    const { validateCsrfToken } = await import("../security");
+    const { validateCsrfToken } = await import("../security.js");
 
     expect(validateCsrfToken("client", "not-a-token")).toBe(false);
     expect(validateCsrfToken("client", "a.b.c")).toBe(false);
@@ -56,7 +56,7 @@ describe("CSRF - stateless HMAC tokens", () => {
 
   it("revokeCsrfToken is a no-op for stateless tokens (does not break callers)", async () => {
     const { createCsrfToken, validateCsrfToken, revokeCsrfToken } = await import(
-      "../security"
+      "../security.js"
     );
 
     const clientId = "client-revoke";
@@ -71,7 +71,7 @@ describe("CSRF - stateless HMAC tokens", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2025-01-01T00:00:00.000Z"));
 
-    const { createCsrfToken, validateCsrfToken } = await import("../security");
+    const { createCsrfToken, validateCsrfToken } = await import("../security.js");
 
     const clientId = "client-expiry";
     const token = createCsrfToken(clientId);
@@ -87,11 +87,11 @@ describe("CSRF - horizontal scaling (simulated pods)", () => {
     const clientId = "user-123";
 
     vi.resetModules();
-    const podA = await import("../security");
+    const podA = await import("../security.js");
     const token = podA.createCsrfToken(clientId);
 
     vi.resetModules();
-    const podB = await import("../security");
+    const podB = await import("../security.js");
 
     expect(podB.validateCsrfToken(clientId, token)).toBe(true);
   });
@@ -106,7 +106,7 @@ describe("CSRF - horizontal scaling (simulated pods)", () => {
 
     for (let i = 0; i < 3; i++) {
       vi.resetModules();
-      pods.push(await import("../security"));
+      pods.push(await import("../security.js"));
     }
 
     const token = pods[0].createCsrfToken(clientId);
@@ -125,7 +125,7 @@ describe("CSRF - horizontal scaling (simulated pods)", () => {
 
 describe("CSRF - referer origin parsing", () => {
   it("extracts exact origin from a referer URL", async () => {
-    const { getOriginFromReferer } = await import("../security");
+    const { getOriginFromReferer } = await import("../security.js");
 
     expect(getOriginFromReferer("https://example.com/path?x=1")).toBe(
       "https://example.com"
@@ -136,7 +136,7 @@ describe("CSRF - referer origin parsing", () => {
   });
 
   it("does not allow prefix tricks (origin must be parsed)", async () => {
-    const { getOriginFromReferer } = await import("../security");
+    const { getOriginFromReferer } = await import("../security.js");
 
     expect(
       getOriginFromReferer("https://example.com.evil.com/anything")
@@ -148,7 +148,7 @@ describe("CSRF - referer origin parsing", () => {
   });
 
   it("returns null for invalid or non-http(s) referers", async () => {
-    const { getOriginFromReferer } = await import("../security");
+    const { getOriginFromReferer } = await import("../security.js");
 
     expect(getOriginFromReferer("")).toBeNull();
     expect(getOriginFromReferer("not a url")).toBeNull();

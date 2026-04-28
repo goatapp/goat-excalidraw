@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createCsrfToken, validateCsrfToken } from "../security";
+import { createCsrfToken, validateCsrfToken } from "../security.js";
 
 describe("CSRF client identity stability", () => {
   it("keeps token validation stable when using cookie-based client IDs", () => {

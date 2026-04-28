@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compareSemver, parseSemver } from "../semver";
+import { compareSemver, parseSemver } from "../semver.js";
 
 describe("semver utils", () => {
   it("parses v-prefixed tags", () => {

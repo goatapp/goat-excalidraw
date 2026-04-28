@@ -1,7 +1,7 @@
 import express from "express";
 import request from "supertest";
 import { describe, expect, it } from "vitest";
-import { registerCsrfProtection } from "./csrf";
+import { registerCsrfProtection } from "./csrf.js";
 
 describe("CSRF token issuance", () => {
   it("binds first-issued tokens to cookie client identity", async () => {
