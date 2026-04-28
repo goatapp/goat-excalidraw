@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import express from "express";
 import request from "supertest";
-import { registerDrawingRoutes } from "../routes/dashboard/drawings";
+import { registerDrawingRoutes } from "../routes/dashboard/drawings.js";
 
 /**
  * Tests for the Drawing Version History feature:

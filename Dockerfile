@@ -25,11 +25,12 @@ RUN apk add --no-cache python3 make g++
 
 COPY backend/package*.json ./
 COPY backend/tsconfig.json ./
+COPY backend/prisma.config.ts ./
 
 RUN npm ci && npm cache clean --force
 
 COPY backend/prisma ./prisma/
-RUN npx prisma generate
+RUN DATABASE_URL="file:./prisma/dev.db" npx prisma generate
 
 COPY backend/src ./src
 RUN npx tsc
@@ -52,6 +53,7 @@ RUN apk add --no-cache --virtual .build-deps python3 make g++ && \
 
 COPY backend/prisma ./prisma/
 COPY backend/prisma ./prisma_template/
+COPY backend/prisma.config.ts ./
 
 COPY --from=backend-builder /app/dist ./dist
 COPY --from=backend-builder /app/src/generated ./dist/generated

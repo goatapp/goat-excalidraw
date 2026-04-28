@@ -49,7 +49,7 @@ describe("OIDC client configuration", () => {
   });
 
   it("passes the configured id_token_signed_response_alg to the OIDC client", async () => {
-    const { registerOidcRoutes } = await import("./oidcRoutes");
+    const { registerOidcRoutes } = await import("./oidcRoutes.js");
 
     const router = express.Router();
     const app = express();
@@ -115,7 +115,7 @@ describe("OIDC client configuration", () => {
   it("prefers RS256 instead of provider-order fallback when no override is configured", async () => {
     issuerMetadata.id_token_signing_alg_values_supported = ["HS256", "RS256"];
 
-    const { registerOidcRoutes } = await import("./oidcRoutes");
+    const { registerOidcRoutes } = await import("./oidcRoutes.js");
 
     const router = express.Router();
     const app = express();
@@ -180,7 +180,7 @@ describe("OIDC client configuration", () => {
   it("uses a supported asymmetric alg when RS256 is not advertised", async () => {
     issuerMetadata.id_token_signing_alg_values_supported = ["HS256", "PS384"];
 
-    const { registerOidcRoutes } = await import("./oidcRoutes");
+    const { registerOidcRoutes } = await import("./oidcRoutes.js");
 
     const router = express.Router();
     const app = express();
@@ -245,7 +245,7 @@ describe("OIDC client configuration", () => {
   it("falls back to HS* when provider only advertises HS* and client secret is configured", async () => {
     issuerMetadata.id_token_signing_alg_values_supported = ["HS384", "HS256"];
 
-    const { registerOidcRoutes } = await import("./oidcRoutes");
+    const { registerOidcRoutes } = await import("./oidcRoutes.js");
 
     const router = express.Router();
     const app = express();

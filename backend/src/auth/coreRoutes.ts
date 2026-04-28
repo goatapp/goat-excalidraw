@@ -1,31 +1,31 @@
 import express, { Request, Response } from "express";
 import bcrypt from "bcrypt";
 import jwt, { SignOptions } from "jsonwebtoken";
-import { Prisma, PrismaClient } from "../generated/client";
+import { Prisma, PrismaClient } from "../generated/client/client.js";
 import { StringValue } from "ms";
-import { logAuditEvent } from "../utils/audit";
+import { logAuditEvent } from "../utils/audit.js";
 import {
   authOnboardingChoiceSchema,
   authEnabledToggleSchema,
   loginSchema,
   registerSchema,
-} from "./schemas";
-import { getTokenLookupCandidates, hashTokenForStorage } from "./tokenSecurity";
+} from "./schemas.js";
+import { getTokenLookupCandidates, hashTokenForStorage } from "./tokenSecurity.js";
 import {
   issueBootstrapSetupCodeIfRequired,
   verifyBootstrapSetupCode,
-} from "./bootstrapSetupCode";
+} from "./bootstrapSetupCode.js";
 import {
   getEffectiveOidcJitProvisioning,
-} from "./accessPolicy";
+} from "./accessPolicy.js";
 import {
   buildAuthStatusPayload,
   ensureBootstrapUserExists,
   getAuthOnboardingStatus,
   getBootstrapRequired,
   upsertAuthModeState,
-} from "./coreRouteHelpers";
-import { canUseLocalPasswordFlows } from "./localPassword";
+} from "./coreRouteHelpers.js";
+import { canUseLocalPasswordFlows } from "./localPassword.js";
 
 type RegisterCoreRoutesDeps = {
   router: express.Router;

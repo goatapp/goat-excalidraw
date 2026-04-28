@@ -1,8 +1,11 @@
 /* eslint-disable no-console */
-const { execSync } = require("child_process");
-const fs = require("fs");
-const path = require("path");
+import { execSync } from "child_process";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "node:url";
+import "dotenv/config";
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const backendRoot = path.resolve(__dirname, "..");
 
 const resolveDatabaseUrl = (rawUrl) => {
@@ -96,9 +99,15 @@ const shouldForceSingleUserDev =
   process.env.AUTH_MODE !== "oidc_enforced" &&
   /^(1|true|yes)$/i.test(process.env.EXCALIDASH_DEV_SINGLE_USER || "");
 
+const createScriptPrismaClient = async () => {
+  const { PrismaClient } = await import("../src/generated/client/client.js");
+  const { PrismaBetterSqlite3 } = await import("@prisma/adapter-better-sqlite3");
+  const adapter = new PrismaBetterSqlite3({ url: databaseUrl });
+  return new PrismaClient({ adapter });
+};
+
 const forceSingleUserDevMode = async () => {
-  const { PrismaClient } = require("../src/generated/client");
-  const prisma = new PrismaClient();
+  const prisma = await createScriptPrismaClient();
 
   try {
     await prisma.systemConfig.upsert({
@@ -144,7 +153,7 @@ const main = async () => {
           `  If you need to preserve local data, restore the backup and baseline manually.`,
       );
 
-      run("npx prisma migrate reset --force --skip-seed");
+      run("npx prisma migrate reset --force");
     } else {
       throw deploy.error;
     }

@@ -1,5 +1,5 @@
 import express from "express";
-import { DashboardRouteDeps } from "./types";
+import { DashboardRouteDeps } from "./types.js";
 
 export const registerLibraryRoutes = (
   app: express.Express,

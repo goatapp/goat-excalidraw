@@ -12,8 +12,8 @@ import bcrypt from "bcrypt";
 import {
   getTestPrisma,
   setupTestDb,
-} from "./testUtils";
-import { PrismaClient } from "../generated/client";
+} from "./testUtils.js";
+import { PrismaClient } from "../generated/client/client.js";
 
 let prisma: PrismaClient;
 

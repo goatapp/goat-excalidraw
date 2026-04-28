@@ -1,6 +1,6 @@
-import type { PrismaClient } from "../generated/client";
+import type { PrismaClient } from "../generated/client/client.js";
 import crypto from "crypto";
-import { hashTokenForStorage } from "../auth/tokenSecurity";
+import { hashTokenForStorage } from "../auth/tokenSecurity.js";
 
 export type DrawingPermission = "view" | "edit";
 export type DrawingAccess = "none" | DrawingPermission | "owner";

@@ -5,14 +5,14 @@
   "main": "index.js",
   "scripts": {
     "build": "prisma generate && tsc",
-    "predev": "node scripts/predev-migrate.cjs",
-    "dev": "nodemon src/index.ts",
+    "predev": "node scripts/predev-migrate.js",
+    "dev": "nodemon --exec 'node --import tsx/esm' src/index.ts",
     "start": "node dist/index.js",
-    "admin:recover": "node scripts/admin-recover.cjs",
-    "dev:simulate-auth-onboarding:fresh": "node scripts/simulate-auth-onboarding.cjs --scenario fresh",
-    "dev:simulate-auth-onboarding:migration": "node scripts/simulate-auth-onboarding.cjs --scenario migration",
-    "dev:simulate-auth-onboarding:dry-run": "node scripts/simulate-auth-onboarding.cjs --scenario migration --dry-run",
-    "oidc:doctor": "node scripts/oidc-doctor.cjs",
+    "admin:recover": "node scripts/admin-recover.js",
+    "dev:simulate-auth-onboarding:fresh": "node scripts/simulate-auth-onboarding.js --scenario fresh",
+    "dev:simulate-auth-onboarding:migration": "node scripts/simulate-auth-onboarding.js --scenario migration",
+    "dev:simulate-auth-onboarding:dry-run": "node scripts/simulate-auth-onboarding.js --scenario migration --dry-run",
+    "oidc:doctor": "node scripts/oidc-doctor.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
@@ -20,10 +20,11 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
+  "type": "module",
   "dependencies": {
     "@aws-sdk/client-s3": "^3.700.0",
-    "@prisma/client": "^5.22.0",
+    "@prisma/adapter-better-sqlite3": "^7.0.0",
+    "@prisma/client": "^7.0.0",
     "archiver": "^7.0.1",
     "bcrypt": "^6.0.0",
     "better-sqlite3": "^12.4.6",
@@ -39,7 +40,7 @@
     "ms": "^2.1.3",
     "multer": "^2.0.2",
     "openid-client": "^5.7.1",
-    "prisma": "^5.22.0",
+    "prisma": "^7.0.0",
     "uuid": "^14.0.0",
     "ws": "^8.20.0",
     "zod": "^4.1.12"
@@ -59,7 +60,7 @@
     "@types/ws": "^8.18.1",
     "nodemon": "^3.1.11",
     "supertest": "^7.1.4",
-    "ts-node": "^10.9.2",
+    "tsx": "^4.19.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.15"
   }

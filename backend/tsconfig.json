@@ -3,9 +3,10 @@
     "rootDir": "./src",
     "outDir": "./dist",
 
-    "module": "commonjs",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
     "esModuleInterop": true,
-    "target": "esnext",
+    "target": "ES2022",
     "types": ["node"],
     "verbatimModuleSyntax": false,
     "isolatedModules": true,

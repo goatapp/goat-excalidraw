@@ -5,12 +5,12 @@ import {
   getCsrfTokenHeader,
   getOriginFromReferer,
   validateCsrfToken,
-} from "../security";
+} from "../security.js";
 import {
   CSRF_CLIENT_COOKIE_NAME,
   getCsrfClientCookieValue,
   getCsrfValidationClientIds,
-} from "../security/csrfClient";
+} from "../security/csrfClient.js";
 
 const CSRF_CLIENT_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
 const CSRF_RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute

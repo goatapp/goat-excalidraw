@@ -5,7 +5,7 @@ import {
   sanitizeUrl,
   validateImportedDrawing,
   sanitizeDrawingData,
-} from "./security";
+} from "./security.js";
 
 console.log("Starting Security Test Suite...\n");
 

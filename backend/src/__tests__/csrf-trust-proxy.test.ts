@@ -12,7 +12,7 @@ import {
   createCsrfToken,
   validateCsrfToken,
   getCsrfTokenHeader,
-} from "../security";
+} from "../security.js";
 
 const getClientIdFromRequest = (req: express.Request): string => {
   const ip = req.ip || req.connection.remoteAddress || "unknown";

@@ -1,10 +1,16 @@
 /**
  * Test utilities for backend integration tests
  */
-import { PrismaClient } from "../generated/client";
+import { PrismaClient } from "../generated/client/client.js";
+import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import bcrypt from "bcrypt";
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "node:url";
 import { execSync } from "child_process";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const TEST_DB_FILENAME = `test.${process.pid}.${Math.random().toString(16).slice(2)}.db`;
 const TEST_DB_PATH = path.resolve(__dirname, "../../prisma", TEST_DB_FILENAME);
@@ -52,13 +58,8 @@ const withDbPushLock = (fn: () => void) => {
 export const getTestPrisma = () => {
   const databaseUrl = `file:${TEST_DB_PATH}`;
   process.env.DATABASE_URL = databaseUrl;
-  return new PrismaClient({
-    datasources: {
-      db: {
-        url: databaseUrl,
-      },
-    },
-  });
+  const adapter = new PrismaBetterSqlite3({ url: databaseUrl });
+  return new PrismaClient({ adapter });
 };
 
 /**
@@ -67,10 +68,10 @@ export const getTestPrisma = () => {
 export const setupTestDb = () => {
   const databaseUrl = `file:${TEST_DB_PATH}`;
   process.env.DATABASE_URL = databaseUrl;
-  
+
   try {
     withDbPushLock(() => {
-      execSync("npx prisma db push --skip-generate --force-reset", {
+      execSync("npx prisma db push --force-reset", {
         cwd: path.resolve(__dirname, "../../"),
         env: {
           ...process.env,
@@ -98,9 +99,8 @@ export const cleanupTestDb = async (prisma: PrismaClient) => {
  * Create a test user for testing
  */
 export const createTestUser = async (prisma: PrismaClient, email: string = "test@example.com") => {
-  const bcrypt = require("bcrypt");
   const passwordHash = await bcrypt.hash("testpassword", 10);
-  
+
   return await prisma.user.upsert({
     where: { email },
     update: {},
@@ -118,7 +118,7 @@ export const createTestUser = async (prisma: PrismaClient, email: string = "test
 export const initTestDb = async (prisma: PrismaClient) => {
   const testUser = await createTestUser(prisma);
   const trashCollectionId = `trash:${testUser.id}`;
-  
+
   const trash = await prisma.collection.findFirst({
     where: { id: trashCollectionId, userId: testUser.id },
   });
@@ -127,7 +127,7 @@ export const initTestDb = async (prisma: PrismaClient) => {
       data: { id: trashCollectionId, name: "Trash", userId: testUser.id },
     });
   }
-  
+
   return testUser;
 };
 
@@ -137,20 +137,19 @@ export const initTestDb = async (prisma: PrismaClient) => {
  */
 export const generateSampleImageDataUrl = (size: "small" | "medium" | "large" = "small"): string => {
   const smallPng = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
-  
+
   if (size === "small") {
     return `data:image/png;base64,${smallPng}`;
   }
-  
+
   const repetitions = size === "medium" ? 1000 : 10000;
   const paddedBase64 = smallPng.repeat(repetitions);
-  
+
   return `data:image/png;base64,${paddedBase64}`;
 };
 
 /**
  * Generate a large image data URL that exceeds the 10000 char limit
- * This is specifically designed to catch the truncation bug from issue #17
  */
 export const generateLargeImageDataUrl = (): string => {
   const baseImage = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
@@ -163,7 +162,7 @@ export const generateLargeImageDataUrl = (): string => {
  */
 export const createSampleFilesObject = (imageCount: number = 1, size: "small" | "large" = "small") => {
   const files: Record<string, any> = {};
-  
+
   for (let i = 0; i < imageCount; i++) {
     const fileId = `file-${i}-${Date.now()}`;
     files[fileId] = {
@@ -174,7 +173,7 @@ export const createSampleFilesObject = (imageCount: number = 1, size: "small" | 
       lastRetrieved: Date.now(),
     };
   }
-  
+
   return files;
 };
 
@@ -236,36 +235,36 @@ export const compareFilesObjects = (original: Record<string, any>, received: Rec
   differences: string[];
 } => {
   const differences: string[] = [];
-  
+
   const originalKeys = Object.keys(original);
   const receivedKeys = Object.keys(received);
-  
+
   if (originalKeys.length !== receivedKeys.length) {
     differences.push(`Key count mismatch: original=${originalKeys.length}, received=${receivedKeys.length}`);
   }
-  
+
   for (const key of originalKeys) {
     if (!(key in received)) {
       differences.push(`Missing key: ${key}`);
       continue;
     }
-    
+
     const origFile = original[key];
     const recvFile = received[key];
-    
+
     if (origFile.dataURL !== recvFile.dataURL) {
       differences.push(
         `DataURL mismatch for ${key}: ` +
         `original length=${origFile.dataURL?.length ?? 0}, ` +
         `received length=${recvFile.dataURL?.length ?? 0}`
       );
-      
+
       if (recvFile.dataURL && origFile.dataURL?.startsWith(recvFile.dataURL.substring(0, 100))) {
         differences.push(`TRUNCATION DETECTED: dataURL was cut short`);
       }
     }
   }
-  
+
   return {
     isEqual: differences.length === 0,
     differences,

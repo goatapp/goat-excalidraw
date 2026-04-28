@@ -1,12 +1,12 @@
 import express from "express";
-import { Prisma } from "../../generated/client";
-import { DashboardRouteDeps, SortDirection, SortField } from "./types";
+import { Prisma } from "../../generated/client/client.js";
+import { DashboardRouteDeps, SortDirection, SortField } from "./types.js";
 import {
   getUserTrashCollectionId,
   isTrashCollectionId,
   toInternalTrashCollectionId,
   toPublicTrashCollectionId,
-} from "./trash";
+} from "./trash.js";
 import {
   buildShareLinkToken,
   canEditDrawing,
@@ -16,7 +16,7 @@ import {
   isOwnerAccess,
   normalizeDrawingPermission,
   type DrawingPrincipal,
-} from "../../authz/sharing";
+} from "../../authz/sharing.js";
 
 export const registerDrawingRoutes = (
   app: express.Express,

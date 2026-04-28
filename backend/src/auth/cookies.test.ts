@@ -1,12 +1,12 @@
 import type { Request, Response } from "express";
 import ms, { type StringValue } from "ms";
 import { describe, expect, it, vi } from "vitest";
-import { config } from "../config";
+import { config } from "../config.js";
 import {
   ACCESS_TOKEN_COOKIE_NAME,
   REFRESH_TOKEN_COOKIE_NAME,
   setAuthCookies,
-} from "./cookies";
+} from "./cookies.js";
 
 const createRequest = (): Request =>
   ({

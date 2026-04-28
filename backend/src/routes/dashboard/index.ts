@@ -1,8 +1,8 @@
 import express from "express";
-import { registerCollectionRoutes } from "./collections";
-import { registerDrawingRoutes } from "./drawings";
-import { registerLibraryRoutes } from "./library";
-import { DashboardRouteDeps } from "./types";
+import { registerCollectionRoutes } from "./collections.js";
+import { registerDrawingRoutes } from "./drawings.js";
+import { registerLibraryRoutes } from "./library.js";
+import { DashboardRouteDeps } from "./types.js";
 
 export const registerDashboardRoutes = (
   app: express.Express,
@@ -13,4 +13,4 @@ export const registerDashboardRoutes = (
   registerLibraryRoutes(app, deps);
 };
 
-export type { DashboardRouteDeps } from "./types";
+export type { DashboardRouteDeps } from "./types.js";

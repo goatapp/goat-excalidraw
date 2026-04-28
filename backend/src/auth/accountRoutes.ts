@@ -1,8 +1,8 @@
 import express, { Request, Response } from "express";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
-import { PrismaClient } from "../generated/client";
-import { logAuditEvent } from "../utils/audit";
+import { PrismaClient } from "../generated/client/client.js";
+import { logAuditEvent } from "../utils/audit.js";
 import {
   changePasswordSchema,
   mustResetPasswordSchema,
@@ -10,9 +10,9 @@ import {
   passwordResetRequestSchema,
   updateEmailSchema,
   updateProfileSchema,
-} from "./schemas";
-import { canUseLocalPasswordFlows } from "./localPassword";
-import { hashTokenForStorage } from "./tokenSecurity";
+} from "./schemas.js";
+import { canUseLocalPasswordFlows } from "./localPassword.js";
+import { hashTokenForStorage } from "./tokenSecurity.js";
 
 type RegisterAccountRoutesDeps = {
   router: express.Router;

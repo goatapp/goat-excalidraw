@@ -11,7 +11,7 @@ import {
   getSafeZipEntry,
   getUserTrashCollectionId,
   sanitizeDrawingData,
-} from "./shared";
+} from "./shared.js";
 
 const isSafeMulterTempFilename = (value: string): boolean => /^[a-f0-9]{32}$/.test(value);
 

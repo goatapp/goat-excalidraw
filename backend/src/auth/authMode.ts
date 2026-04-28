@@ -1,5 +1,5 @@
-import { PrismaClient } from "../generated/client";
-import { config } from "../config";
+import { PrismaClient } from "../generated/client/client.js";
+import { config } from "../config.js";
 
 export const BOOTSTRAP_USER_ID = "bootstrap-admin";
 export const DEFAULT_SYSTEM_CONFIG_ID = "default";

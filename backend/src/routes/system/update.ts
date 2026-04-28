@@ -1,6 +1,6 @@
 import express from "express";
-import { compareSemver, parseSemver } from "../../utils/semver";
-import type { SystemRouteDeps } from "./index";
+import { compareSemver, parseSemver } from "../../utils/semver.js";
+import type { SystemRouteDeps } from "./index.js";
 
 type UpdateChannel = "stable" | "prerelease";
 

@@ -6,7 +6,7 @@ import {
   getCsrfValidationClientIds,
   getLegacyClientId,
   parseCookies,
-} from "./csrfClient";
+} from "./csrfClient.js";
 
 const makeRequest = (overrides?: Partial<Request>): Request =>
   ({

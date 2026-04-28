@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sanitizeDrawingUpdateData } from "../index";
+import { sanitizeDrawingUpdateData } from "../index.js";
 
 describe("sanitizeDrawingUpdateData regression", () => {
   it("does not inject empty scene fields for preview-only updates", () => {

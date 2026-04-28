@@ -1,6 +1,6 @@
 import crypto from "crypto";
-import { PrismaClient } from "../generated/client";
-import { BOOTSTRAP_USER_ID, DEFAULT_SYSTEM_CONFIG_ID } from "./authMode";
+import { PrismaClient } from "../generated/client/client.js";
+import { BOOTSTRAP_USER_ID, DEFAULT_SYSTEM_CONFIG_ID } from "./authMode.js";
 
 const BOOTSTRAP_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 

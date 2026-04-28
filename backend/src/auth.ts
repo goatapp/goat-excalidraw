@@ -2,38 +2,38 @@ import express, { Request, Response } from "express";
 import crypto from "crypto";
 import jwt, { SignOptions } from "jsonwebtoken";
 import ms, { type StringValue } from "ms";
-import { Prisma, PrismaClient } from "./generated/client";
-import { config } from "./config";
+import { Prisma, PrismaClient } from "./generated/client/client.js";
+import { config } from "./config.js";
 import {
   requireAuth as defaultRequireAuth,
   optionalAuth as defaultOptionalAuth,
   authModeService as defaultAuthModeService,
-} from "./middleware/auth";
+} from "./middleware/auth.js";
 import {
   getCsrfTokenHeader,
   getOriginFromReferer,
   sanitizeText,
   validateCsrfToken,
-} from "./security";
+} from "./security.js";
 import rateLimit, { MemoryStore } from "express-rate-limit";
-import { registerAccountRoutes } from "./auth/accountRoutes";
-import { registerAdminRoutes } from "./auth/adminRoutes";
-import { registerCoreRoutes } from "./auth/coreRoutes";
-import { registerOidcRoutes } from "./auth/oidcRoutes";
-import { prisma as defaultPrisma } from "./db/prisma";
+import { registerAccountRoutes } from "./auth/accountRoutes.js";
+import { registerAdminRoutes } from "./auth/adminRoutes.js";
+import { registerCoreRoutes } from "./auth/coreRoutes.js";
+import { registerOidcRoutes } from "./auth/oidcRoutes.js";
+import { prisma as defaultPrisma } from "./db/prisma.js";
 import {
   BOOTSTRAP_USER_ID,
   DEFAULT_SYSTEM_CONFIG_ID,
   type AuthModeService,
-} from "./auth/authMode";
-import { getCsrfValidationClientIds } from "./security/csrfClient";
+} from "./auth/authMode.js";
+import { getCsrfValidationClientIds } from "./security/csrfClient.js";
 import {
   clearAuthCookies,
   readCookie,
   REFRESH_TOKEN_COOKIE_NAME,
   setAccessTokenCookie,
   setAuthCookies,
-} from "./auth/cookies";
+} from "./auth/cookies.js";
 
 interface JwtPayload {
   userId: string;

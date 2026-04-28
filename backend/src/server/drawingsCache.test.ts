@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createDrawingsCacheStore } from "./drawingsCache";
+import { createDrawingsCacheStore } from "./drawingsCache.js";
 
 describe("drawings cache store", () => {
   let now = 0;

@@ -3,8 +3,8 @@ import path from "path";
 import { promises as fsPromises } from "fs";
 import JSZip from "jszip";
 import { z } from "zod";
-import { Prisma, PrismaClient } from "../../generated/client";
-import { sanitizeDrawingData } from "../../security";
+import { Prisma, PrismaClient } from "../../generated/client/client.js";
+import { sanitizeDrawingData } from "../../security.js";
 
 export class ImportValidationError extends Error {
   status: number;
@@ -222,17 +222,15 @@ export const resolveSafeUploadedFilePath = async (
   return joinedPath;
 };
 
-export const openReadonlySqliteDb = (filePath: string): any => {
+export const openReadonlySqliteDb = async (filePath: string): Promise<any> => {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { DatabaseSync } = require("node:sqlite") as any;
+    const { DatabaseSync } = await import("node:sqlite") as any;
     return new DatabaseSync(filePath, {
       readOnly: true,
       enableForeignKeyConstraints: false,
     });
   } catch {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const Database = require("better-sqlite3") as any;
+    const Database = (await import("better-sqlite3")).default;
     return new Database(filePath, { readonly: true, fileMustExist: true });
   }
 };

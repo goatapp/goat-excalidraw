@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createHttpsRedirectPolicy,
   getHttpsRedirectUrl,
-} from "./httpsRedirectPolicy";
+} from "./httpsRedirectPolicy.js";
 
 const createRequest = (overrides?: {
   host?: string;

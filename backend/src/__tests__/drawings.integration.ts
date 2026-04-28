@@ -18,14 +18,14 @@ import {
   createSampleFilesObject,
   generateLargeImageDataUrl,
   compareFilesObjects,
-} from "./testUtils";
+} from "./testUtils.js";
 import { 
   sanitizeDrawingData, 
   validateImportedDrawing,
   configureSecuritySettings,
   resetSecuritySettings,
   getSecurityConfig,
-} from "../security";
+} from "../security.js";
 
 describe("Security Sanitization - Image Data URLs", () => {
   beforeEach(() => {

@@ -47,7 +47,7 @@ describe("system/update logic", () => {
     const fetchSpy = vi.fn();
     (globalThis as any).fetch = fetchSpy;
 
-    const mod = await import("./update");
+    const mod = await import("./update.js");
     mod.__resetUpdateCacheForTests();
     const latest = await mod.fetchLatest("stable");
 
@@ -66,7 +66,7 @@ describe("system/update logic", () => {
       makeFetchResponse({ status: 200, json: releases, etag: "E1" })
     );
 
-    const mod = await import("./update");
+    const mod = await import("./update.js");
     mod.__resetUpdateCacheForTests();
     const latest = await mod.fetchLatest("stable");
 
@@ -85,7 +85,7 @@ describe("system/update logic", () => {
       makeFetchResponse({ status: 200, json: releases, etag: "E2" })
     );
 
-    const mod = await import("./update");
+    const mod = await import("./update.js");
     mod.__resetUpdateCacheForTests();
     const latest = await mod.fetchLatest("prerelease");
 
@@ -107,7 +107,7 @@ describe("system/update logic", () => {
       .mockResolvedValueOnce(makeFetchResponse({ status: 304, json: null, etag: null }));
     (globalThis as any).fetch = fetchMock;
 
-    const mod = await import("./update");
+    const mod = await import("./update.js");
     mod.__resetUpdateCacheForTests();
     const r1 = await mod.fetchLatest("stable");
 

@@ -151,7 +151,7 @@ const createApp = async (
   issuerUrlOverride: string | null = null,
   prismaOverride?: Record<string, unknown>,
 ) => {
-  const { registerOidcRoutes } = await import("./oidcRoutes");
+  const { registerOidcRoutes } = await import("./oidcRoutes.js");
   const app = express();
   const router = express.Router();
   app.use(router);

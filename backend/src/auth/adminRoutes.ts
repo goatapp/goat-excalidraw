@@ -1,7 +1,7 @@
 import bcrypt from "bcrypt";
 import express, { Request, Response } from "express";
-import { Prisma, PrismaClient } from "../generated/client";
-import { logAuditEvent } from "../utils/audit";
+import { Prisma, PrismaClient } from "../generated/client/client.js";
+import { logAuditEvent } from "../utils/audit.js";
 import {
   adminCreateUserSchema,
   adminRoleUpdateSchema,
@@ -11,9 +11,9 @@ import {
   loginRateLimitUpdateSchema,
   oidcJitProvisioningToggleSchema,
   registrationToggleSchema,
-} from "./schemas";
-import { getEffectiveOidcJitProvisioning } from "./accessPolicy";
-import { hashTokenForStorage } from "./tokenSecurity";
+} from "./schemas.js";
+import { getEffectiveOidcJitProvisioning } from "./accessPolicy.js";
+import { hashTokenForStorage } from "./tokenSecurity.js";
 
 type RegisterAdminRoutesDeps = {
   router: express.Router;

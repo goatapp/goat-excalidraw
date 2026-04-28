@@ -12,7 +12,7 @@ const applyBaseOidcEnv = () => {
 
 const loadConfig = async () => {
   vi.resetModules();
-  return import("./config");
+  return import("./config.js");
 };
 
 afterEach(() => {

@@ -1,10 +1,10 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { PrismaClient } from "../generated/client";
+import { PrismaClient } from "../generated/client/client.js";
 import {
   BOOTSTRAP_USER_ID,
   DEFAULT_SYSTEM_CONFIG_ID,
   createAuthModeService,
-} from "./authMode";
+} from "./authMode.js";
 
 const createPrismaMock = () =>
   ({

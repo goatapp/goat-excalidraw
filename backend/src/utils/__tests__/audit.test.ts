@@ -6,13 +6,13 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
-import { getTestPrisma, setupTestDb, initTestDb, createTestUser } from "../../__tests__/testUtils";
+import { getTestPrisma, setupTestDb, initTestDb, createTestUser } from "../../__tests__/testUtils.js";
 import {
   logAuditEvent,
   getAuditLogs,
   setAuditPrismaProvider,
   type AuditLogData,
-} from "../audit";
+} from "../audit.js";
 
 describe("Audit Logging", () => {
   const prisma = getTestPrisma();
@@ -99,7 +99,7 @@ describe("Audit Logging", () => {
       process.env.ENABLE_AUDIT_LOGGING = "false";
       try {
         vi.resetModules();
-        const audit = await import("../audit");
+        const audit = await import("../audit.js");
         audit.setAuditPrismaProvider(() => prisma);
 
         await expect(audit.logAuditEvent({ action: "should_not_log_disabled" })).resolves.not.toThrow();
@@ -114,7 +114,7 @@ describe("Audit Logging", () => {
           delete process.env.ENABLE_AUDIT_LOGGING;
         }
         vi.resetModules();
-        const audit = await import("../audit");
+        const audit = await import("../audit.js");
         audit.setAuditPrismaProvider(() => prisma);
         process.env.ENABLE_AUDIT_LOGGING = "true";
       }

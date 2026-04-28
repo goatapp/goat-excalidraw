@@ -1,5 +1,5 @@
 import express from "express";
-import { registerUpdateRoutes } from "./update";
+import { registerUpdateRoutes } from "./update.js";
 
 export type SystemRouteDeps = {
   asyncHandler: <T = void>(

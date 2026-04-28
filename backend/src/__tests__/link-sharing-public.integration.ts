@@ -3,13 +3,13 @@ import request from "supertest";
 import bcrypt from "bcrypt";
 import jwt, { SignOptions } from "jsonwebtoken";
 import { StringValue } from "ms";
-import { PrismaClient } from "../generated/client";
-import { config } from "../config";
-import { getTestPrisma, setupTestDb } from "./testUtils";
+import { PrismaClient } from "../generated/client/client.js";
+import { config } from "../config.js";
+import { getTestPrisma, setupTestDb } from "./testUtils.js";
 import {
   ACCESS_TOKEN_COOKIE_NAME,
   REFRESH_TOKEN_COOKIE_NAME,
-} from "../auth/cookies";
+} from "../auth/cookies.js";
 
 describe("Link Sharing - Public By Drawing ID", () => {
   const userAgent = "vitest-link-sharing-public";
@@ -77,7 +77,7 @@ describe("Link Sharing - Public By Drawing ID", () => {
     setupTestDb();
     prisma = getTestPrisma();
 
-    ({ app } = await import("../index"));
+    ({ app } = await import("../index.js"));
 
     await prisma.systemConfig.upsert({
       where: { id: "default" },

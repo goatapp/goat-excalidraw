@@ -3,7 +3,7 @@
  * Sanitizes error messages in production to prevent information leakage
  */
 import { Request, Response, NextFunction } from "express";
-import { config } from "../config";
+import { config } from "../config.js";
 
 export interface AppError extends Error {
   statusCode?: number;

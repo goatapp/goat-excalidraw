@@ -2,17 +2,17 @@ import { WebSocketServer, WebSocket } from "ws";
 import { IncomingMessage } from "http";
 import { randomUUID } from "crypto";
 import jwt from "jsonwebtoken";
-import { PrismaClient } from "../generated/client";
-import { AuthModeService } from "../auth/authMode";
-import { ACCESS_TOKEN_COOKIE_NAME, parseCookieHeader } from "../auth/cookies";
-import { BOOTSTRAP_USER_ID } from "../auth/authMode";
-import { config } from "../config";
+import { PrismaClient } from "../generated/client/client.js";
+import { AuthModeService } from "../auth/authMode.js";
+import { ACCESS_TOKEN_COOKIE_NAME, parseCookieHeader } from "../auth/cookies.js";
+import { BOOTSTRAP_USER_ID } from "../auth/authMode.js";
+import { config } from "../config.js";
 import {
   getDrawingAccess,
   canEditDrawing,
   canViewDrawing,
   type DrawingPrincipal,
-} from "../authz/sharing";
+} from "../authz/sharing.js";
 
 interface User {
   id: string;

@@ -1,9 +1,9 @@
 import crypto from "crypto";
 import express, { Request, Response } from "express";
-import { Prisma, PrismaClient } from "../generated/client";
+import { Prisma, PrismaClient } from "../generated/client/client.js";
 import { generators, Issuer } from "openid-client";
-import { logAuditEvent } from "../utils/audit";
-import { hashTokenForStorage } from "./tokenSecurity";
+import { logAuditEvent } from "../utils/audit.js";
+import { hashTokenForStorage } from "./tokenSecurity.js";
 
 const OIDC_FLOW_COOKIE_NAME = "excalidash-oidc-flow";
 const OIDC_PROVIDER_KEY = "oidc";

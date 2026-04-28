@@ -1,15 +1,15 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
-import { config } from "../config";
-import { PrismaClient } from "../generated/client";
-import { prisma as defaultPrisma } from "../db/prisma";
-import { createAuthModeService, type AuthModeService } from "../auth/authMode";
+import { config } from "../config.js";
+import { PrismaClient } from "../generated/client/client.js";
+import { prisma as defaultPrisma } from "../db/prisma.js";
+import { createAuthModeService, type AuthModeService } from "../auth/authMode.js";
 import {
   ACCESS_TOKEN_COOKIE_NAME,
   REFRESH_TOKEN_COOKIE_NAME,
   readCookie,
-} from "../auth/cookies";
+} from "../auth/cookies.js";
 
 declare global {
   namespace Express {

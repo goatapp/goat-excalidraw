@@ -1,6 +1,6 @@
 import express from "express";
 import { z } from "zod";
-import { Prisma, PrismaClient } from "../../generated/client";
+import { Prisma, PrismaClient } from "../../generated/client/client.js";
 
 export type SortField = "name" | "createdAt" | "updatedAt";
 export type SortDirection = "asc" | "desc";

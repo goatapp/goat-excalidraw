@@ -1,6 +1,6 @@
 import express from "express";
-import { DashboardRouteDeps } from "./types";
-import { getUserTrashCollectionId, isTrashCollectionId } from "./trash";
+import { DashboardRouteDeps } from "./types.js";
+import { getUserTrashCollectionId, isTrashCollectionId } from "./trash.js";
 
 export const registerCollectionRoutes = (
   app: express.Express,
