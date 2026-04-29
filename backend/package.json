@@ -43,7 +43,7 @@
     "openid-client": "^5.7.1",
     "prisma": "^7.0.0",
     "uuid": "^14.0.0",
-    "ws": "^8.20.0",
+    "socket.io": "^4.8.1",
     "zod": "^4.1.12"
   },
   "devDependencies": {
@@ -59,7 +59,7 @@
     "@types/node": "^25.6.0",
     "@types/supertest": "^6.0.3",
     "@types/uuid": "^10.0.0",
-    "@types/ws": "^8.18.1",
+    "@types/socket.io": "^3.0.1",
     "nodemon": "^3.1.11",
     "supertest": "^7.1.4",
     "tsx": "^4.19.0",

@@ -20,6 +20,7 @@
     "@excalidraw/excalidraw": "^0.18.1",
     "@types/lodash": "^4.17.20",
     "axios": "^1.15.0",
+    "socket.io-client": "^4.8.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "jszip": "^3.10.1",
