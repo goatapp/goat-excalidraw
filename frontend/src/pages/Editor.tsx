@@ -19,6 +19,7 @@ import { useAuth } from '../context/AuthContext';
 import { exportFromEditor } from '../utils/exportUtils';
 import { compressDroppedImagePayload, compressExcalidrawFiles } from '../utils/imageCompression';
 import * as api from '../api';
+import { io, type Socket } from 'socket.io-client';
 import { useTheme } from '../context/ThemeContext';
 import {
   buildRemoteSceneUpdate,
@@ -234,8 +235,7 @@ export const Editor: React.FC = () => {
 
   const [peers, setPeers] = useState<Peer[]>([]);
   const [isReady, setIsReady] = useState(false);
-  const socketRef = useRef<WebSocket | null>(null);
-  const sendMsgRef = useRef<((type: string, data?: any, onAck?: (payload: any) => void) => void) | null>(null);
+  const socketRef = useRef<Socket | null>(null);
   const lastCursorEmit = useRef<number>(0);
   const elementVersionMap = useRef<Map<string, ElementVersionInfo>>(new Map());
   const isBootstrappingScene = useRef(true);
@@ -386,7 +386,7 @@ export const Editor: React.FC = () => {
 
   const emitFilesDeltaIfNeeded = useCallback(
     (nextFiles: Record<string, any>) => {
-      if (!sendMsgRef.current || !id) return false;
+      if (!socketRef.current || !id) return false;
       const filesDelta = getFilesDelta(lastSyncedFilesRef.current, nextFiles || {});
       if (Object.keys(filesDelta).length === 0) return false;
 
@@ -402,7 +402,7 @@ export const Editor: React.FC = () => {
         dbg.lastFilesDeltaIds = Object.keys(filesDelta);
       }
 
-      sendMsgRef.current("element-update", {
+      socketRef.current.emit("element-update", {
         drawingId: id,
         elements: [],
         files: filesDelta,
@@ -479,30 +479,17 @@ export const Editor: React.FC = () => {
     const baseUrl = import.meta.env.VITE_API_URL === '/api'
       ? window.location.origin
       : (import.meta.env.VITE_API_URL || import.meta.env.VITE_DEV_BACKEND_URL || 'http://localhost:8000');
-    const wsProtocol = baseUrl.startsWith('https') ? 'wss' : 'ws';
-    const wsUrl = `${wsProtocol}://${new URL(baseUrl).host}/ws`;
 
-    let ackCounter = 0;
-    const pendingAcks = new Map<string, (payload: any) => void>();
-    let intentionalClose = false;
-    let reconnectAttempts = 0;
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let joinRoomRetried = false;
-    const MAX_RECONNECT_DELAY = 30000;
 
-    const sendMsg = (ws: WebSocket, type: string, data?: any, onAck?: (payload: any) => void) => {
-      if (ws.readyState !== WebSocket.OPEN) return;
-      const msg: any = { type, data };
-      if (onAck) {
-        const ackId = `ack_${++ackCounter}`;
-        msg.ackId = ackId;
-        pendingAcks.set(ackId, onAck);
-      }
-      ws.send(JSON.stringify(msg));
-    };
+    const socket = io(baseUrl, {
+      transports: ['websocket', 'polling'],
+      withCredentials: true,
+    });
+    socketRef.current = socket;
 
-    const joinRoom = (ws: WebSocket) => {
-      sendMsg(ws, 'join-room', { drawingId: id, user: me }, (payload: any) => {
+    const joinRoom = () => {
+      socket.emit('join-room', { drawingId: id, user: me }, (payload: any) => {
         const serverUser = payload?.user;
         if (!serverUser || typeof serverUser.id !== "string") return;
         const next: UserIdentity = {
@@ -605,135 +592,90 @@ export const Editor: React.FC = () => {
       remoteFlushRafIdRef.current = requestAnimationFrame(flushRemoteUpdates);
     };
 
-    const handleWsMessage = (event: MessageEvent) => {
-      let msg: any;
-      try { msg = JSON.parse(event.data); } catch { return; }
+    socket.on('connect', () => {
+      if (import.meta.env.DEV) {
+        (window as any).__EXCALIDASH_SOCKET_STATUS__ = { connected: true };
+      }
+      joinRoom();
+    });
 
-      switch (msg.type) {
-        case 'auth-ok':
-          if (socketRef.current) joinRoom(socketRef.current);
-          break;
+    socket.on('disconnect', () => {
+      if (import.meta.env.DEV) {
+        (window as any).__EXCALIDASH_SOCKET_STATUS__ = { connected: false };
+      }
+    });
 
-        case 'auth-error':
-          console.warn("[Editor] WebSocket auth failed:", msg.data);
-          break;
+    socket.on('presence-update', (users: Peer[]) => {
+      lastPresenceUsersRef.current = users;
+      const selfId = socketMeRef.current.id;
+      setPeers(users.filter(u => u.id !== selfId));
 
-        case 'ack': {
-          const ackId = msg.data?.ackId;
-          const cb = pendingAcks.get(ackId);
-          if (cb) { pendingAcks.delete(ackId); cb(msg.data.payload); }
-          break;
-        }
-
-        case 'presence-update': {
-          const users: Peer[] = msg.data;
-          lastPresenceUsersRef.current = users;
-          const selfId = socketMeRef.current.id;
-          setPeers(users.filter(u => u.id !== selfId));
-
-          if (excalidrawAPI.current) {
-            const collaborators = new Map<string, any>(
-              excalidrawAPI.current.getAppState().collaborators || []
-            );
-            users.forEach(user => {
-              if (!user.isActive && user.id !== selfId) {
-                collaborators.delete(user.id);
-              }
-            });
-            const { sceneUpdate } = buildRemoteSceneUpdate({ collaborators });
-            if (sceneUpdate) {
-              excalidrawAPI.current.updateScene(sceneUpdate);
-            }
+      if (excalidrawAPI.current) {
+        const collaborators = new Map<string, any>(
+          excalidrawAPI.current.getAppState().collaborators || []
+        );
+        users.forEach(user => {
+          if (!user.isActive && user.id !== selfId) {
+            collaborators.delete(user.id);
           }
-          break;
-        }
-
-        case 'cursor-move': {
-          const data = msg.data;
-          cursorBuffer.current.set(data.userId, {
-            pointer: data.pointer,
-            button: data.button || 'up',
-            selectedElementIds: data.selectedElementIds || {},
-            username: data.username,
-            color: { background: data.color, stroke: data.color },
-            id: data.userId,
-          });
-          break;
-        }
-
-        case 'element-update': {
-          const { elements, files, elementOrder } = msg.data || {};
-          if (Array.isArray(elements)) {
-            for (const el of elements) {
-              const elId = el?.id;
-              if (typeof elId === "string" && elId.length > 0) {
-                pendingRemoteElementsRef.current.set(elId, el);
-              }
-            }
-          }
-          if (files && typeof files === "object") {
-            pendingRemoteFilesRef.current = {
-              ...pendingRemoteFilesRef.current,
-              ...files,
-            };
-          }
-          if (Array.isArray(elementOrder) && elementOrder.length > 0) {
-            pendingRemoteElementOrderRef.current = elementOrder;
-          }
-          scheduleRemoteFlush();
-          break;
-        }
-
-        case 'error': {
-          const message = typeof msg.data?.message === "string" ? msg.data.message : null;
-          console.warn("[Editor] Socket error:", msg.data);
-          if (message === "You do not have access to this drawing") {
-            if (!joinRoomRetried) {
-              joinRoomRetried = true;
-              socketRef.current?.close();
-              return;
-            }
-            if (id && location.pathname.startsWith("/editor/")) {
-              navigate(`/shared/${id}${location.search}${location.hash}`, { replace: true });
-              return;
-            }
-          }
-          if (message) toast.error(message);
-          break;
+        });
+        const { sceneUpdate } = buildRemoteSceneUpdate({ collaborators });
+        if (sceneUpdate) {
+          excalidrawAPI.current.updateScene(sceneUpdate);
         }
       }
-    };
+    });
 
-    function connect() {
-      const ws = new WebSocket(wsUrl);
-      socketRef.current = ws;
-      sendMsgRef.current = (type, data, onAck) => sendMsg(ws, type, data, onAck);
+    socket.on('cursor-move', (data: any) => {
+      cursorBuffer.current.set(data.userId, {
+        pointer: data.pointer,
+        button: data.button || 'up',
+        selectedElementIds: data.selectedElementIds || {},
+        username: data.username,
+        color: { background: data.color, stroke: data.color },
+        id: data.userId,
+      });
+    });
 
-      ws.onopen = () => {
-        reconnectAttempts = 0;
-        if (import.meta.env.DEV) {
-          (window as any).__EXCALIDASH_SOCKET_STATUS__ = { connected: true };
+    socket.on('element-update', (data: any) => {
+      const { elements, files, elementOrder } = data || {};
+      if (Array.isArray(elements)) {
+        for (const el of elements) {
+          const elId = el?.id;
+          if (typeof elId === "string" && elId.length > 0) {
+            pendingRemoteElementsRef.current.set(elId, el);
+          }
         }
-        sendMsg(ws, 'auth', { token: undefined });
-      };
+      }
+      if (files && typeof files === "object") {
+        pendingRemoteFilesRef.current = {
+          ...pendingRemoteFilesRef.current,
+          ...files,
+        };
+      }
+      if (Array.isArray(elementOrder) && elementOrder.length > 0) {
+        pendingRemoteElementOrderRef.current = elementOrder;
+      }
+      scheduleRemoteFlush();
+    });
 
-      ws.onmessage = handleWsMessage;
-
-      ws.onclose = () => {
-        if (import.meta.env.DEV) {
-          (window as any).__EXCALIDASH_SOCKET_STATUS__ = { connected: false };
+    socket.on('error', (data: any) => {
+      const message = typeof data?.message === "string" ? data.message : null;
+      console.warn("[Editor] Socket error:", data);
+      if (message === "You do not have access to this drawing") {
+        if (!joinRoomRetried) {
+          joinRoomRetried = true;
+          socket.disconnect();
+          socket.connect();
+          return;
         }
-        sendMsgRef.current = null;
-        if (intentionalClose) return;
-        reconnectAttempts++;
-        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY) + Math.random() * 1000;
-        reconnectTimer = setTimeout(connect, delay);
-      };
-
-      ws.onerror = () => {};
-    }
-
-    connect();
+        if (id && location.pathname.startsWith("/editor/")) {
+          navigate(`/shared/${id}${location.search}${location.hash}`, { replace: true });
+          return;
+        }
+      }
+      if (message) toast.error(message);
+    });
 
     const renderLoop = () => {
       if (cursorBuffer.current.size > 0 && excalidrawAPI.current) {
@@ -756,9 +698,7 @@ export const Editor: React.FC = () => {
     renderLoop();
 
     const handleActivity = (isActive: boolean) => {
-      if (sendMsgRef.current) {
-        sendMsgRef.current('user-activity', { drawingId: id, isActive });
-      }
+      socketRef.current?.emit('user-activity', { drawingId: id, isActive });
     };
 
     const onFocus = () => handleActivity(true);
@@ -772,15 +712,17 @@ export const Editor: React.FC = () => {
     document.addEventListener('mouseleave', onMouseLeave);
 
     return () => {
-      intentionalClose = true;
-      if (reconnectTimer) clearTimeout(reconnectTimer);
       window.removeEventListener('focus', onFocus);
       window.removeEventListener('blur', onBlur);
       document.removeEventListener('mouseenter', onMouseEnter);
       document.removeEventListener('mouseleave', onMouseLeave);
-      pendingAcks.clear();
-      sendMsgRef.current = null;
-      socketRef.current?.close();
+      socket.off('connect');
+      socket.off('disconnect');
+      socket.off('presence-update');
+      socket.off('cursor-move');
+      socket.off('element-update');
+      socket.off('error');
+      socket.disconnect();
       socketRef.current = null;
       if (remoteFlushRafIdRef.current !== null) {
         cancelAnimationFrame(remoteFlushRafIdRef.current);
@@ -806,9 +748,9 @@ export const Editor: React.FC = () => {
 
   const onPointerUpdate = useCallback((payload: any) => {
     const now = Date.now();
-    if (now - lastCursorEmit.current > 50 && sendMsgRef.current) {
+    if (now - lastCursorEmit.current > 50 && socketRef.current) {
       const self = socketMeRef.current;
-      sendMsgRef.current('cursor-move', {
+      socketRef.current.emit('cursor-move', {
         pointer: payload.pointer,
         button: payload.button,
         username: self.name,
@@ -1240,7 +1182,7 @@ export const Editor: React.FC = () => {
 
   const broadcastChanges = useMemo(
     () => throttle((elements: readonly any[], currentFiles?: Record<string, any>) => {
-      if (!sendMsgRef.current || !id) return;
+      if (!socketRef.current || !id) return;
 
       const changes: any[] = [];
 
@@ -1274,7 +1216,7 @@ export const Editor: React.FC = () => {
         hasSceneChangesSinceLoadRef.current = true;
         // eslint-disable-next-line react-hooks/purity -- called at event time, not during render
         lastLocalChangeAtRef.current = Date.now();
-        sendMsgRef.current('element-update', {
+        socketRef.current.emit('element-update', {
           drawingId: id,
           elements: changes.length > 0 ? changes : [],
           files: shouldSyncFiles ? filesDelta : undefined,
@@ -1674,7 +1616,7 @@ export const Editor: React.FC = () => {
     const interval = window.setInterval(() => {
       if (isUnmounting.current) return;
       if (isSyncing.current) return;
-      if (!sendMsgRef.current) return;
+      if (!socketRef.current) return;
       if (!excalidrawAPI.current) return;
 
       const nextFiles = excalidrawAPI.current.getFiles?.() || {};

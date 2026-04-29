@@ -4,7 +4,7 @@ import path from "path";
 import fs from "fs";
 import { promises as fsPromises } from "fs";
 import { createServer } from "http";
-import { WebSocketServer } from "ws";
+import { Server } from "socket.io";
 import { Worker } from "worker_threads";
 import multer from "multer";
 import { z } from "zod";
@@ -135,28 +135,12 @@ if (trustProxyValue === true) {
 }
 
 const httpServer = createServer(app);
-const wss = new WebSocketServer({
-  noServer: true,
-  maxPayload: 50 * 1024 * 1024,
-});
-
-httpServer.on("upgrade", (req, socket, head) => {
-  const url = new URL(req.url || "", `http://${req.headers.host}`);
-  if (url.pathname !== "/ws") {
-    socket.destroy();
-    return;
-  }
-
-  const origin = req.headers.origin;
-  if (origin && !isAllowedOrigin(origin)) {
-    socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
-    socket.destroy();
-    return;
-  }
-
-  wss.handleUpgrade(req, socket, head, (ws) => {
-    wss.emit("connection", ws, req);
-  });
+const io = new Server(httpServer, {
+  cors: {
+    origin: (origin, cb) => cb(null, isAllowedOrigin(origin ?? undefined)),
+    credentials: true,
+  },
+  maxHttpBufferSize: 50 * 1024 * 1024,
 });
 const parseJsonField = <T>(
   rawValue: string | null | undefined,
@@ -341,7 +325,7 @@ if (hasFrontend) {
   app.use(express.static(FRONTEND_DIR, { index: false }));
 
   const API_PATH_PREFIXES = [
-    "/api", "/auth", "/health", "/csrf-token", "/ws",
+    "/api", "/auth", "/health", "/csrf-token", "/socket.io/",
     "/drawings", "/collections", "/library", "/import", "/export",
     "/system", "/share", "/admin", "/users",
   ];
@@ -578,7 +562,7 @@ const removeFileIfExists = async (filePath?: string) => {
 };
 
 registerSocketHandlers({
-  wss,
+  io,
   prisma,
   authModeService,
   jwtSecret: config.jwtSecret,
