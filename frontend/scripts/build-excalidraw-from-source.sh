@@ -24,6 +24,11 @@ for pkg in common math element excalidraw; do
   echo "  $tgz"
 done
 
+if [ "${1:-}" = "--pack-only" ]; then
+  echo "Done. Tarballs available in vendor/."
+  exit 0
+fi
+
 echo "Installing from vendor/..."
 (cd "$VENDOR_DIR/.." && npm install \
   ./vendor/excalidraw-common-*.tgz \
