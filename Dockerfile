@@ -10,8 +10,7 @@ COPY frontend/.excalidraw-commit ./
 COPY frontend/scripts ./scripts/
 COPY frontend/vendor* ./vendor/
 RUN if ! ls vendor/*.tgz >/dev/null 2>&1; then \
-      npm install -g yarn@1.22.22 && \
-      npm run excalidraw:build-from-source -- --pack-only; \
+      bash scripts/build-excalidraw-from-source.sh --pack-only; \
     fi
 RUN sed -i '/"resolved": "file:vendor\/excalidraw-/{n;s/"integrity": "sha512-[^"]*"/"integrity": ""/;}' package-lock.json && \
     npm install && npm cache clean --force

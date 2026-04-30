@@ -13,8 +13,7 @@ COPY frontend/vendor* ./vendor/
 
 # Build excalidraw from source if vendor tarballs don't exist
 RUN if ! ls vendor/*.tgz >/dev/null 2>&1; then \
-      npm install -g yarn@1.22.22 && \
-      npm run excalidraw:build-from-source -- --pack-only; \
+      bash scripts/build-excalidraw-from-source.sh --pack-only; \
     fi
 
 # Install dependencies (strip integrity hashes for vendor tarballs that may differ)
