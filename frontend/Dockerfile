@@ -13,6 +13,7 @@ COPY frontend/vendor* ./vendor/
 
 # Build excalidraw from source if vendor tarballs don't exist
 RUN if ! ls vendor/*.tgz >/dev/null 2>&1; then \
+      npm install -g corepack && \
       corepack enable && \
       corepack prepare yarn@1.22.22 --activate && \
       npm run excalidraw:build-from-source -- --pack-only; \
