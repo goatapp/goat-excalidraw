@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  EXCALIDRAW_COMMIT: "278cd357724b17e1119b6c76416520c42958d0e3"
+
 jobs:
   build-excalidraw:
     name: Build @excalidraw from source
@@ -14,12 +17,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Cache vendor tarballs
+        id: vendor-cache
+        uses: actions/cache@v4
+        with:
+          path: frontend/vendor
+          key: excalidraw-vendor-${{ env.EXCALIDRAW_COMMIT }}
+
       - name: Setup Node.js
+        if: steps.vendor-cache.outputs.cache-hit != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '25'
 
       - name: Build @excalidraw packages from source
+        if: steps.vendor-cache.outputs.cache-hit != 'true'
         run: |
           corepack enable
           corepack prepare yarn@1.22.22 --activate
