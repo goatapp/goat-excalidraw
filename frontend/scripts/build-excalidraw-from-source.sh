@@ -2,7 +2,8 @@
 set -euo pipefail
 
 REPO_URL="https://github.com/excalidraw/excalidraw.git"
-EXCALIDRAW_COMMIT="278cd357724b17e1119b6c76416520c42958d0e3"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+EXCALIDRAW_COMMIT="$(tr -d '[:space:]' < "$SCRIPT_DIR/../.excalidraw-commit")"
 CLONE_DIR=$(mktemp -d)
 VENDOR_DIR="$(cd "$(dirname "$0")/.." && pwd)/vendor"
 

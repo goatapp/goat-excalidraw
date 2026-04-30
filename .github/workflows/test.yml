@@ -6,9 +6,6 @@ on:
   pull_request:
     branches: [main]
 
-env:
-  EXCALIDRAW_COMMIT: "278cd357724b17e1119b6c76416520c42958d0e3"
-
 jobs:
   build-excalidraw:
     name: Build @excalidraw from source
@@ -17,12 +14,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Read excalidraw commit SHA
+        id: read-commit
+        run: echo "sha=$(tr -d '[:space:]' < frontend/.excalidraw-commit)" >> "$GITHUB_OUTPUT"
+
       - name: Cache vendor tarballs
         id: vendor-cache
         uses: actions/cache@v4
         with:
           path: frontend/vendor
-          key: excalidraw-vendor-${{ env.EXCALIDRAW_COMMIT }}
+          key: excalidraw-vendor-${{ steps.read-commit.outputs.sha }}
 
       - name: Setup Node.js
         if: steps.vendor-cache.outputs.cache-hit != 'true'
@@ -97,6 +98,11 @@ jobs:
           name: excalidraw-vendor
           path: frontend/vendor
 
+      - name: Strip vendor tarball integrity hashes
+        run: |
+          cd frontend
+          sed -i '/"resolved": "file:vendor\/excalidraw-/{n;s/"integrity": "sha512-[^"]*"/"integrity": ""/;}' package-lock.json
+
       - name: Install frontend dependencies
         run: |
           cd frontend
@@ -144,6 +150,11 @@ jobs:
         with:
           name: excalidraw-vendor
           path: frontend/vendor
+
+      - name: Strip vendor tarball integrity hashes
+        run: |
+          cd frontend
+          sed -i '/"resolved": "file:vendor\/excalidraw-/{n;s/"integrity": "sha512-[^"]*"/"integrity": ""/;}' package-lock.json
 
       - name: Install frontend dependencies
         run: |
