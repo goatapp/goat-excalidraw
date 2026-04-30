@@ -1,14 +1,26 @@
 # Build stage
 FROM node:25-alpine AS builder
 
+RUN apk add --no-cache git bash
+
 WORKDIR /app/frontend
 
 # Copy package files first for better caching
 COPY frontend/package*.json ./
-COPY frontend/vendor ./vendor/
+COPY frontend/.excalidraw-commit ./
+COPY frontend/scripts ./scripts/
+COPY frontend/vendor* ./vendor/
 
-# Install dependencies
-RUN npm ci && npm cache clean --force
+# Build excalidraw from source if vendor tarballs don't exist
+RUN if ! ls vendor/*.tgz >/dev/null 2>&1; then \
+      corepack enable && \
+      corepack prepare yarn@1.22.22 --activate && \
+      npm run excalidraw:build-from-source -- --pack-only; \
+    fi
+
+# Install dependencies (strip integrity hashes for vendor tarballs that may differ)
+RUN sed -i '/"resolved": "file:vendor\/excalidraw-/{n;s/"integrity": "sha512-[^"]*"/"integrity": ""/;}' package-lock.json && \
+    npm install && npm cache clean --force
 
 # Copy source code and config files
 COPY frontend/ ./
