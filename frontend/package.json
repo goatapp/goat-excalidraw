@@ -12,15 +12,18 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e:ui": "playwright test --ui",
+    "excalidraw:build-from-source": "bash scripts/build-excalidraw-from-source.sh"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/utilities": "^3.2.2",
-    "@excalidraw/excalidraw": "^0.18.1",
+    "@excalidraw/common": "file:vendor/excalidraw-common-0.18.0.tgz",
+    "@excalidraw/element": "file:vendor/excalidraw-element-0.18.0.tgz",
+    "@excalidraw/excalidraw": "file:vendor/excalidraw-excalidraw-0.18.0.tgz",
+    "@excalidraw/math": "file:vendor/excalidraw-math-0.18.0.tgz",
     "@types/lodash": "^4.17.20",
     "axios": "^1.15.0",
-    "socket.io-client": "^4.8.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "jszip": "^3.10.1",
@@ -29,6 +32,7 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.12.0",
+    "socket.io-client": "^4.8.1",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0"
   },
@@ -51,7 +55,7 @@
     "jsdom": "^27.2.0",
     "postcss": "^8.5.10",
     "tailwindcss": "^3.4.1",
-    "typescript": "~5.9.3",
+    "typescript": "^6.0.3",
     "typescript-eslint": "^8.46.3",
     "vite": "^8.0.0",
     "vitest": "^4.1.5"

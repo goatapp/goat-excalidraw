@@ -5,6 +5,7 @@ import clsx from 'clsx';
 import {
   Excalidraw,
   CaptureUpdateAction,
+  CommandPalette,
   MainMenu,
   convertToExcalidrawElements,
   exportToSvg,
@@ -186,7 +187,7 @@ export const Editor: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const { theme } = useTheme();
+  const { theme, themePreference, setThemePreference } = useTheme();
   const { user } = useAuth();
   const autoHideStorageKey = id ? `excalidash:editor:${id}:autoHideEnabled` : null;
   const getStoredAutoHideEnabled = useCallback((): boolean => {
@@ -1904,21 +1905,31 @@ export const Editor: React.FC = () => {
             onChange={handleCanvasChange}
             onPointerUpdate={onPointerUpdate}
             onLibraryChange={handleLibraryChange}
-            excalidrawAPI={setExcalidrawAPI}
+            onExcalidrawAPI={setExcalidrawAPI}
             UIOptions={UIOptions}
-            viewModeEnabled={!canEdit}
+            viewModeEnabled={!canEdit || undefined}
           >
             <MainMenu>
-              <MainMenu.DefaultItems.ToggleTheme />
+              <MainMenu.DefaultItems.LoadScene />
+              <MainMenu.DefaultItems.Export />
               <MainMenu.DefaultItems.SaveAsImage />
-              <MainMenu.DefaultItems.ClearCanvas />
-              <MainMenu.DefaultItems.ChangeCanvasBackground />
+              <MainMenu.DefaultItems.CommandPalette />
+              <MainMenu.DefaultItems.SearchMenu />
               <MainMenu.DefaultItems.Help />
+              <MainMenu.DefaultItems.ClearCanvas />
               <MainMenu.Separator />
+              <MainMenu.DefaultItems.Preferences />
+              <MainMenu.DefaultItems.ToggleTheme
+                allowSystemTheme
+                theme={themePreference}
+                onSelect={setThemePreference}
+              />
               <MainMenu.ItemCustom>
                 <LanguageSelector langCode={langCode} onChange={setLangCode} />
               </MainMenu.ItemCustom>
+              <MainMenu.DefaultItems.ChangeCanvasBackground />
             </MainMenu>
+            <CommandPalette />
           </Excalidraw>
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-gray-500 dark:text-gray-400">

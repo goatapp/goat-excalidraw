@@ -37,12 +37,12 @@ export default defineConfig(({ command }) => {
       chunkSizeWarningLimit: 1500,
       rolldownOptions: {
         output: {
-          manualChunks(id) {
+          manualChunks(id) { // TODO: revisit this currently just surfaces a warning about font subsetting
             if (!id.includes("@excalidraw/excalidraw")) return;
-            if (id.includes("subset-worker")) return;
-            const match = id.match(/\/(chunk-[A-Z0-9]+|subset-shared\.chunk|index)\.js$/);
-            if (match) return `excalidraw-${match[1]}`;
-            return "excalidraw-vendor";
+            if (id.includes("subset-worker") || id.includes("subset-shared")) return;
+            if (id.includes("chunk-Z5NKEFVG") || id.includes("chunk-SRAX5OIU"))
+              return "excalidraw-wasm";
+            return "excalidraw-core";
           },
         },
       },

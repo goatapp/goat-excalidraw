@@ -4,6 +4,7 @@ FROM node:25-alpine AS frontend-builder
 WORKDIR /app/frontend
 
 COPY frontend/package*.json ./
+COPY frontend/vendor ./vendor/
 RUN npm ci && npm cache clean --force
 
 COPY frontend/ ./
