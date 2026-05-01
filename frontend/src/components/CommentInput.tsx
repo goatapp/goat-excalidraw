@@ -88,7 +88,7 @@ export const CommentInput: React.FC<Props> = ({
     if (lastAt >= 0) {
       const before = text.slice(0, lastAt);
       const after = text.slice(cursorPos);
-      setText(`${before}@${user.name} ${after}`);
+      setText(`${before}@[${user.name}] ${after}`);
     }
     setShowMentions(false);
     ta?.focus();
