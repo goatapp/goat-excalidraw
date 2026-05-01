@@ -253,6 +253,7 @@ app.use(
         baseUri: ["'none'"],
         formAction: ["'none'"],
         frameAncestors: ["'none'"],
+        frameSrc: ["https://drive.google.com", "https://www.youtube.com", "https://youtu.be", "https://www.figma.com"],
         objectSrc: ["'none'"],
         imgSrc: ["'self'", "data:", "blob:"],
         connectSrc: [
