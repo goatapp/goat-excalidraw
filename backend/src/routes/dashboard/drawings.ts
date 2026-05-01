@@ -17,6 +17,7 @@ import {
   normalizeDrawingPermission,
   type DrawingPrincipal,
 } from "../../authz/sharing.js";
+import { SYSTEM_USER_EMAIL } from "../../services/teamCollections.js";
 
 export const registerDrawingRoutes = (
   app: express.Express,
@@ -106,13 +107,25 @@ export const registerDrawingRoutes = (
         collectionFilterKey = "trash";
       } else {
         const collection = await prisma.collection.findFirst({
-          where: { id: normalizedCollectionId, userId: req.user.id },
+          where: { id: normalizedCollectionId },
         });
         if (!collection) {
           return res.status(404).json({ error: "Collection not found" });
         }
-        where.collectionId = normalizedCollectionId;
-        collectionFilterKey = `id:${normalizedCollectionId}`;
+        if (collection.userId !== req.user.id) {
+          const share = await prisma.collectionShare.findUnique({
+            where: { collectionId_granteeUserId: { collectionId: normalizedCollectionId, granteeUserId: req.user.id } },
+          });
+          if (!share) {
+            return res.status(404).json({ error: "Collection not found" });
+          }
+          delete (where as any).userId;
+          (where as any).collectionId = normalizedCollectionId;
+          collectionFilterKey = `shared:${normalizedCollectionId}:${share.role}`;
+        } else {
+          where.collectionId = normalizedCollectionId;
+          collectionFilterKey = `id:${normalizedCollectionId}`;
+        }
       }
     } else {
       where.OR = [
@@ -420,9 +433,15 @@ export const registerDrawingRoutes = (
 
     if (targetCollectionId && !isTrashCollectionId(targetCollectionId, req.user.id)) {
       const collection = await prisma.collection.findFirst({
-        where: { id: targetCollectionId, userId: req.user.id },
+        where: { id: targetCollectionId },
       });
       if (!collection) return res.status(404).json({ error: "Collection not found" });
+      if (collection.userId !== req.user.id) {
+        const share = await prisma.collectionShare.findFirst({
+          where: { collectionId: targetCollectionId, granteeUserId: req.user.id, role: "edit" },
+        });
+        if (!share) return res.status(403).json({ error: "No edit access to this collection" });
+      }
     } else if (targetCollectionIdRaw === "trash") {
       await ensureTrashCollection(prisma, req.user.id);
     }
@@ -657,7 +676,31 @@ export const registerDrawingRoutes = (
     });
   }));
 
-  // Owner-only: resolve users by name/email in the context of a drawing you own (reduces enumeration risk).
+  const canManageDrawingSharing = async (
+    userId: string,
+    drawingId: string,
+  ): Promise<{ drawing: { userId: string; collectionId: string | null } } | null> => {
+    const drawing = await prisma.drawing.findUnique({
+      where: { id: drawingId },
+      select: { userId: true, collectionId: true },
+    });
+    if (!drawing) return null;
+    if (drawing.userId === userId) return { drawing };
+    if (drawing.collectionId) {
+      const share = await prisma.collectionShare.findUnique({
+        where: {
+          collectionId_granteeUserId: {
+            collectionId: drawing.collectionId,
+            granteeUserId: userId,
+          },
+        },
+        select: { role: true },
+      });
+      if (share?.role === "edit") return { drawing };
+    }
+    return null;
+  };
+
   app.get("/drawings/:id/share-resolve", requireAuth, asyncHandler(async (req, res) => {
     if (!req.user) return res.status(401).json({ error: "Unauthorized" });
 
@@ -666,8 +709,8 @@ export const registerDrawingRoutes = (
     const q = qRaw.toLowerCase();
     if (q.length < 3) return res.json({ users: [] });
 
-    const drawing = await prisma.drawing.findUnique({ where: { id }, select: { userId: true } });
-    if (!drawing || drawing.userId !== req.user.id) {
+    const result = await canManageDrawingSharing(req.user.id, id);
+    if (!result) {
       return res.status(404).json({ error: "Drawing not found" });
     }
 
@@ -675,6 +718,7 @@ export const registerDrawingRoutes = (
       where: {
         isActive: true,
         id: { not: req.user.id },
+        email: { not: SYSTEM_USER_EMAIL },
         OR: [
           { email: { contains: q } },
           { name: { contains: q } },
@@ -692,8 +736,8 @@ export const registerDrawingRoutes = (
     if (!req.user) return res.status(401).json({ error: "Unauthorized" });
     const id = req.params.id as string;
 
-    const drawing = await prisma.drawing.findUnique({ where: { id }, select: { userId: true } });
-    if (!drawing || drawing.userId !== req.user.id) {
+    const result = await canManageDrawingSharing(req.user.id, id);
+    if (!result) {
       return res.status(404).json({ error: "Drawing not found" });
     }
 
@@ -725,15 +769,45 @@ export const registerDrawingRoutes = (
       }),
     ]);
 
-    return res.json({ permissions, linkShares });
+    let collectionCollaborators: {
+      granteeUserId: string;
+      role: string;
+      collectionId: string;
+      collectionName: string;
+      granteeUser: { id: string; name: string | null; email: string };
+    }[] = [];
+
+    if (result.drawing.collectionId) {
+      const shares = await prisma.collectionShare.findMany({
+        where: {
+          collectionId: result.drawing.collectionId,
+          granteeUser: { email: { not: SYSTEM_USER_EMAIL } },
+        },
+        select: {
+          granteeUserId: true,
+          role: true,
+          collection: { select: { id: true, name: true } },
+          granteeUser: { select: { id: true, name: true, email: true } },
+        },
+      });
+      collectionCollaborators = shares.map(s => ({
+        granteeUserId: s.granteeUserId,
+        role: s.role,
+        collectionId: s.collection.id,
+        collectionName: s.collection.name,
+        granteeUser: s.granteeUser,
+      }));
+    }
+
+    return res.json({ permissions, linkShares, collectionCollaborators });
   }));
 
   app.post("/drawings/:id/permissions", requireAuth, asyncHandler(async (req, res) => {
     if (!req.user) return res.status(401).json({ error: "Unauthorized" });
     const id = req.params.id as string;
 
-    const drawing = await prisma.drawing.findUnique({ where: { id }, select: { userId: true } });
-    if (!drawing || drawing.userId !== req.user.id) {
+    const result = await canManageDrawingSharing(req.user.id, id);
+    if (!result) {
       return res.status(404).json({ error: "Drawing not found" });
     }
 
@@ -791,8 +865,8 @@ export const registerDrawingRoutes = (
     const id = req.params.id as string;
     const permId = req.params.permId as string;
 
-    const drawing = await prisma.drawing.findUnique({ where: { id }, select: { userId: true } });
-    if (!drawing || drawing.userId !== req.user.id) {
+    const result = await canManageDrawingSharing(req.user.id, id);
+    if (!result) {
       return res.status(404).json({ error: "Drawing not found" });
     }
 
@@ -819,8 +893,8 @@ export const registerDrawingRoutes = (
     if (!req.user) return res.status(401).json({ error: "Unauthorized" });
     const id = req.params.id as string;
 
-    const drawing = await prisma.drawing.findUnique({ where: { id }, select: { userId: true } });
-    if (!drawing || drawing.userId !== req.user.id) {
+    const result = await canManageDrawingSharing(req.user.id, id);
+    if (!result) {
       return res.status(404).json({ error: "Drawing not found" });
     }
 
@@ -902,8 +976,8 @@ export const registerDrawingRoutes = (
     const id = req.params.id as string;
     const shareId = req.params.shareId as string;
 
-    const drawing = await prisma.drawing.findUnique({ where: { id }, select: { userId: true } });
-    if (!drawing || drawing.userId !== req.user.id) {
+    const result = await canManageDrawingSharing(req.user.id, id);
+    if (!result) {
       return res.status(404).json({ error: "Drawing not found" });
     }
 

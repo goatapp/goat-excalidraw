@@ -18,6 +18,7 @@ interface LayoutProps {
   onEditCollection: (id: string, name: string) => void;
   onDeleteCollection: (id: string) => void;
   onDrop?: (e: React.DragEvent, collectionId: string | null) => void;
+  onShareCollection?: (id: string) => void;
 }
 
 export const Layout: React.FC<LayoutProps> = ({
@@ -28,7 +29,8 @@ export const Layout: React.FC<LayoutProps> = ({
   onCreateCollection,
   onEditCollection,
   onDeleteCollection,
-  onDrop
+  onDrop,
+  onShareCollection,
 }) => {
   const location = useLocation();
   const [sidebarWidth, setSidebarWidth] = useState(260);
@@ -160,6 +162,7 @@ export const Layout: React.FC<LayoutProps> = ({
               onEditCollection={onEditCollection}
               onDeleteCollection={onDeleteCollection}
               onDrop={onDrop}
+              onShareCollection={onShareCollection}
             />
 
             <div
@@ -186,6 +189,7 @@ export const Layout: React.FC<LayoutProps> = ({
               onEditCollection={onEditCollection}
               onDeleteCollection={onDeleteCollection}
               onDrop={onDrop}
+              onShareCollection={onShareCollection}
             />
             
             <div

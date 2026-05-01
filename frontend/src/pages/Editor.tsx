@@ -1929,7 +1929,7 @@ export const Editor: React.FC = () => {
               )}
             </button>
           ) : null}
-          {accessLevel === "owner" && id ? (
+          {(accessLevel === "owner" || accessLevel === "edit") && id ? (
             <button
               onClick={() => setIsShareOpen(true)}
               className="p-2 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-lg text-gray-600 dark:text-gray-300 transition-colors"
@@ -2236,6 +2236,7 @@ export const Editor: React.FC = () => {
             drawingName={drawingName}
             isOpen={isShareOpen}
             onClose={() => setIsShareOpen(false)}
+            accessLevel={accessLevel === "none" ? undefined : accessLevel}
           />
           <HistoryPanel
             drawingId={id}

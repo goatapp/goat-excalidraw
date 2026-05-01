@@ -25,6 +25,7 @@ model User {
   auditLogs           AuditLog[]
   comments            Comment[]
   commentReactions    CommentReaction[]
+  collectionSharesGranted CollectionShare[] @relation("CollectionShareGrantee")
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
 }
@@ -52,6 +53,7 @@ model Collection {
   userId    String
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   drawings  Drawing[]
+  shares    CollectionShare[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
@@ -219,4 +221,20 @@ model CommentReaction {
 
   @@unique([commentId, userId, emoji])
   @@index([commentId])
+}
+
+model CollectionShare {
+  id              String     @id @default(uuid())
+  collectionId    String
+  collection      Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  granteeUserId   String
+  granteeUser     User       @relation("CollectionShareGrantee", fields: [granteeUserId], references: [id], onDelete: Cascade)
+  role            String     // "view" | "edit"
+  createdByUserId String
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@unique([collectionId, granteeUserId])
+  @@index([granteeUserId])
+  @@index([collectionId])
 }

@@ -20,4 +20,25 @@ export interface Collection {
   id: string;
   name: string;
   createdAt: number;
+  isOwner?: boolean;
+  sharedRole?: "view" | "edit" | null;
+  isShared?: boolean;
+}
+
+export type CollectionShareRole = "view" | "edit";
+
+export interface CollectionShareUser {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export interface CollectionShareRow {
+  id: string;
+  collectionId: string;
+  granteeUserId: string;
+  granteeUser: CollectionShareUser;
+  role: CollectionShareRole;
+  createdAt: string;
+  updatedAt: string;
 }

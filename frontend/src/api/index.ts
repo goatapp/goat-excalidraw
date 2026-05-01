@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { Drawing, Collection, DrawingSummary } from "../types";
+import type { Drawing, Collection, DrawingSummary, CollectionShareRow, CollectionShareRole } from "../types";
 import { normalizePreviewSvg } from "../utils/previewSvg";
 
 export const API_URL = import.meta.env.VITE_API_URL || "/api";
@@ -539,14 +539,30 @@ export type DrawingLinkShareRow = {
   lastUsedAt: string | null;
 };
 
+export type CollectionCollaboratorRow = {
+  granteeUserId: string;
+  role: "view" | "edit";
+  collectionId: string;
+  collectionName: string;
+  granteeUser: ShareResolvedUser;
+};
+
 export const getDrawingSharing = async (drawingId: string): Promise<{
   permissions: DrawingPermissionRow[];
   linkShares: DrawingLinkShareRow[];
+  collectionCollaborators: CollectionCollaboratorRow[];
 }> => {
-  const response = await api.get<{ permissions: DrawingPermissionRow[]; linkShares: DrawingLinkShareRow[] }>(
+  const response = await api.get<{
+    permissions: DrawingPermissionRow[];
+    linkShares: DrawingLinkShareRow[];
+    collectionCollaborators?: CollectionCollaboratorRow[];
+  }>(
     `/drawings/${drawingId}/sharing`
   );
-  return response.data;
+  return {
+    ...response.data,
+    collectionCollaborators: response.data.collectionCollaborators ?? [],
+  };
 };
 
 export const upsertDrawingPermission = async (
@@ -669,6 +685,44 @@ export const deleteCollection = async (id: string) => {
   return response.data;
 };
 
+// --- Collection Sharing ---
+
+export const getCollectionShares = async (collectionId: string): Promise<{ shares: CollectionShareRow[] }> => {
+  const response = await api.get<{ shares: CollectionShareRow[] }>(`/collections/${collectionId}/shares`);
+  return response.data;
+};
+
+export const resolveCollectionShareUsers = async (collectionId: string, q: string): Promise<ShareResolvedUser[]> => {
+  const response = await api.get<{ users: ShareResolvedUser[] }>(`/collections/${collectionId}/share-resolve`, {
+    params: { q },
+  });
+  return response.data.users;
+};
+
+export const addCollectionShare = async (
+  collectionId: string,
+  params: { granteeUserId: string; role: CollectionShareRole }
+): Promise<{ share: CollectionShareRow }> => {
+  const response = await api.post<{ share: CollectionShareRow }>(`/collections/${collectionId}/shares`, params);
+  return response.data;
+};
+
+export const updateCollectionShare = async (
+  collectionId: string,
+  userId: string,
+  params: { role: CollectionShareRole }
+): Promise<{ success: true }> => {
+  const response = await api.patch<{ success: true }>(`/collections/${collectionId}/shares/${userId}`, params);
+  return response.data;
+};
+
+export const removeCollectionShare = async (
+  collectionId: string,
+  userId: string
+): Promise<{ success: true }> => {
+  const response = await api.delete<{ success: true }>(`/collections/${collectionId}/shares/${userId}`);
+  return response.data;
+};
 
 // --- Comments ---
 

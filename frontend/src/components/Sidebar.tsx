@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LayoutGrid, Folder, Plus, Trash2, Edit2, Archive, FolderOpen, Settings as SettingsIcon, User, LogOut, Shield } from 'lucide-react';
+import { LayoutGrid, Folder, Plus, Trash2, Edit2, Archive, FolderOpen, Settings as SettingsIcon, User, LogOut, Shield, Users } from 'lucide-react';
 import type { Collection } from '../types';
 import clsx from 'clsx';
 import { ConfirmModal } from './ConfirmModal';
@@ -16,6 +16,7 @@ interface SidebarProps {
   onEditCollection: (id: string, name: string) => void;
   onDeleteCollection: (id: string) => void;
   onDrop?: (e: React.DragEvent, collectionId: string | null) => void;
+  onShareCollection?: (id: string) => void;
 }
 
 interface SidebarItemProps {
@@ -118,7 +119,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCreateCollection,
   onEditCollection,
   onDeleteCollection,
-  onDrop
+  onDrop,
+  onShareCollection,
 }) => {
   const navigate = useNavigate();
   const { logout, user, authEnabled, isProxyAuth } = useAuth();
@@ -243,27 +245,46 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </form>
             )}
 
-            {collections.filter(c => c.name !== 'Trash').map((collection) => (
-              <SidebarItem
-                key={collection.id}
-                id={collection.id}
-                icon={selectedCollectionId === collection.id ? <FolderOpen size={18} /> : <Folder size={18} />}
-                label={collection.name}
-                isActive={selectedCollectionId === collection.id}
-                onClick={() => onSelectCollection(collection.id)}
-                onDoubleClick={() => {
-                  setEditingId(collection.id);
-                  setEditName(collection.name);
-                }}
-                onContextMenu={(e) => handleItemContextMenu(e, collection.id)}
-                isEditing={editingId === collection.id}
-                editValue={editName}
-                onEditChange={setEditName}
-                onEditSubmit={handleEditSubmit}
-                onEditBlur={() => setEditingId(null)}
-                onDrop={onDrop}
-              />
-            ))}
+            {collections.filter(c => c.name !== 'Trash').map((collection) => {
+              const isOwned = collection.isOwner !== false;
+              return (
+                <SidebarItem
+                  key={collection.id}
+                  id={collection.id}
+                  icon={
+                    !isOwned
+                      ? <Users size={18} />
+                      : selectedCollectionId === collection.id ? <FolderOpen size={18} /> : <Folder size={18} />
+                  }
+                  label={collection.name}
+                  isActive={selectedCollectionId === collection.id}
+                  onClick={() => onSelectCollection(collection.id)}
+                  onDoubleClick={isOwned ? () => {
+                    setEditingId(collection.id);
+                    setEditName(collection.name);
+                  } : undefined}
+                  onContextMenu={isOwned ? (e) => handleItemContextMenu(e, collection.id) : undefined}
+                  isEditing={editingId === collection.id}
+                  editValue={editName}
+                  onEditChange={setEditName}
+                  onEditSubmit={handleEditSubmit}
+                  onEditBlur={() => setEditingId(null)}
+                  onDrop={isOwned ? onDrop : undefined}
+                  extraAction={isOwned ? (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onShareCollection?.(collection.id);
+                      }}
+                      className="p-1 text-slate-400 dark:text-neutral-500 hover:text-indigo-600 dark:hover:text-neutral-200 hover:bg-indigo-50 dark:hover:bg-neutral-800 rounded-md transition-all"
+                      title="Share Collection"
+                    >
+                      <Users size={14} strokeWidth={2.5} />
+                    </button>
+                  ) : undefined}
+                />
+              );
+            })}
           </div>
         </nav>
 
@@ -379,6 +400,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
           >
             {contextMenu.type === 'item' && contextMenu.id ? (
               <>
+                <button
+                  onClick={() => {
+                    onShareCollection?.(contextMenu.id!);
+                    setContextMenu(null);
+                  }}
+                  className="w-full px-3 py-2 text-sm text-left text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-2"
+                >
+                  <Users size={14} /> Share Collection
+                </button>
+
                 <button
                   onClick={() => {
                     const collection = collections.find(c => c.id === contextMenu.id);
