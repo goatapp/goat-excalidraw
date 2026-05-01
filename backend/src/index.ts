@@ -260,6 +260,7 @@ app.use(
           "'self'",
           ...allowedOrigins.map((o) => o.replace(/^http/, "ws")),
           "https://esm.sh",
+          "https://libraries.excalidraw.com",
         ],
         workerSrc: ["'self'", "blob:"],
       },
