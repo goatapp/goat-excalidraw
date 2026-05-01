@@ -52,8 +52,6 @@ export const Settings: React.FC = () => {
     const [backupImportSuccess, setBackupImportSuccess] = useState(false);
     const [backupImportError, setBackupImportError] = useState<{ isOpen: boolean; message: string }>({ isOpen: false, message: '' });
 
-    const appVersion = import.meta.env.VITE_APP_VERSION || 'Unknown version';
-    const buildLabel = import.meta.env.VITE_APP_BUILD_LABEL;
     const isManagedAuthMode = authMode !== 'local';
 
 
@@ -468,25 +466,6 @@ export const Settings: React.FC = () => {
                         </button>
                     </div>
 
-                    <div className="flex flex-col items-center justify-center gap-3 sm:gap-4 p-4 sm:p-6 lg:p-8 bg-white dark:bg-neutral-900 border-2 border-black dark:border-neutral-700 rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.2)]">
-                        <div className="w-12 h-12 sm:w-16 sm:h-16 bg-gray-50 dark:bg-neutral-800 rounded-2xl flex items-center justify-center border-2 border-gray-100 dark:border-neutral-700">
-                            <Info size={32} className="text-gray-600 dark:text-gray-400 hidden sm:block" />
-                            <Info size={24} className="text-gray-600 dark:text-gray-400 sm:hidden" />
-                        </div>
-                        <div className="text-center">
-                            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1">Version Info</h3>
-                            <div className="text-[10px] sm:text-xs text-slate-500 dark:text-neutral-400 font-bold flex flex-col items-center gap-1">
-                                <span className="text-sm sm:text-base text-slate-900 dark:text-white">
-                                    {appVersion}
-                                </span>
-                                {buildLabel && (
-                                    <span className="uppercase tracking-wide text-red-500 dark:text-red-400">
-                                        {buildLabel}
-                                    </span>
-                                )}
-                            </div>
-                        </div>
-                    </div>
                 </div>
             </details>
 
