@@ -5,7 +5,6 @@ import { Sidebar } from './Sidebar';
 import { Logo } from './Logo';
 import { UploadStatus } from './UploadStatus';
 import { ImpersonationBanner } from './ImpersonationBanner';
-import { UpdateBanner } from './UpdateBanner';
 import type { Collection } from '../types';
 import clsx from 'clsx';
 
@@ -130,7 +129,6 @@ export const Layout: React.FC<LayoutProps> = ({
 
             <div className="flex-1 min-w-0 overflow-y-auto no-scrollbar">
               <div className="w-full mx-auto p-4 sm:p-6 lg:p-8 min-h-full">
-                <UpdateBanner />
                 <ImpersonationBanner />
                 {children}
               </div>
@@ -201,7 +199,6 @@ export const Layout: React.FC<LayoutProps> = ({
           </aside>
           <main className="flex-1 min-w-0 bg-white/40 dark:bg-neutral-900/40 backdrop-blur-sm rounded-2xl border border-white/50 dark:border-neutral-800/50 shadow-sm h-full transition-colors duration-200 overflow-y-auto no-scrollbar">
             <div className="w-full mx-auto p-4 sm:p-6 lg:p-8 min-h-full">
-              <UpdateBanner />
               <ImpersonationBanner />
               {children}
             </div>
