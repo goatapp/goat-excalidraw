@@ -526,9 +526,23 @@ export const registerDrawingRoutes = (
         (data as Prisma.DrawingUncheckedUpdateInput).collectionId = trashCollectionId;
       } else if (payload.collectionId) {
         const collection = await prisma.collection.findFirst({
-          where: { id: payload.collectionId, userId: ownerUserId },
+          where: { id: payload.collectionId },
         });
         if (!collection) return res.status(404).json({ error: "Collection not found" });
+        if (collection.userId !== ownerUserId) {
+          const share = await prisma.collectionShare.findUnique({
+            where: {
+              collectionId_granteeUserId: {
+                collectionId: payload.collectionId,
+                granteeUserId: req.user!.id,
+              },
+            },
+            select: { role: true },
+          });
+          if (share?.role !== "edit") {
+            return res.status(403).json({ error: "No edit access to target collection" });
+          }
+        }
         (data as Prisma.DrawingUncheckedUpdateInput).collectionId = payload.collectionId;
       } else {
         (data as Prisma.DrawingUncheckedUpdateInput).collectionId = null;

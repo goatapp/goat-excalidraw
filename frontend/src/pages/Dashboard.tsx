@@ -858,7 +858,7 @@ export const Dashboard: React.FC = () => {
                     >
                       <Inbox size={14} /> Unorganized
                     </button>
-                    {collections.filter(c => c.id !== 'trash').map(c => (
+                    {collections.filter(c => c.id !== 'trash' && (c.isOwner || c.sharedRole === 'edit')).map(c => (
                       <button
                         key={c.id}
                         onClick={() => handleBulkMove(c.id)}

@@ -447,7 +447,9 @@ export const DrawingCard: React.FC<DrawingCardProps> = ({
                         Unorganized
                         {drawing.collectionId === null && <Check size={10} />}
                       </button>
-                      {collections.map(c => (
+                      {collections
+                        .filter(c => c.isOwner || c.sharedRole === 'edit')
+                        .map(c => (
                         <button
                           key={c.id}
                           onClick={() => { onMoveToCollection(drawing.id, c.id); setContextMenu(null); }}

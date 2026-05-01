@@ -247,6 +247,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
             {collections.filter(c => c.name !== 'Trash').map((collection) => {
               const isOwned = collection.isOwner !== false;
+              const canEdit = isOwned || collection.sharedRole === 'edit';
               return (
                 <SidebarItem
                   key={collection.id}
@@ -269,7 +270,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   onEditChange={setEditName}
                   onEditSubmit={handleEditSubmit}
                   onEditBlur={() => setEditingId(null)}
-                  onDrop={isOwned ? onDrop : undefined}
+                  onDrop={canEdit ? onDrop : undefined}
                   extraAction={isOwned ? (
                     <button
                       onClick={(e) => {
