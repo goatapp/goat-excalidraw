@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { renderBody } from "./comment-utils";
 import { createPortal } from "react-dom";
 import {
   X,
@@ -46,21 +47,6 @@ function timeAgo(dateStr: string): string {
   return `${days}d ago`;
 }
 
-function renderBody(body: string): React.ReactNode {
-  const parts = body.split(/(@\w[\w\s]*?)(?=\s|$|@)/g);
-  return parts.map((part, i) =>
-    part.startsWith("@") ? (
-      <span
-        key={i}
-        className="text-indigo-500 dark:text-indigo-400 font-medium bg-indigo-50 dark:bg-indigo-900/30 px-0.5 rounded"
-      >
-        {part}
-      </span>
-    ) : (
-      <span key={i}>{part}</span>
-    )
-  );
-}
 
 export const CommentPopover: React.FC<Props> = ({
   comment,

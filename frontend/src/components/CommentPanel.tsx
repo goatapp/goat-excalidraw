@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { createPortal } from "react-dom";
 import { X, MessageCircle, Plus, Search } from "lucide-react";
 import * as api from "../api";
+import { renderBody } from "./comment-utils";
 
 type Props = {
   drawingId: string;
@@ -195,7 +196,7 @@ export const CommentPanel: React.FC<Props> = ({
                       </span>
                     </div>
                     <p className="text-sm text-neutral-600 dark:text-neutral-400 line-clamp-2">
-                      {comment.body}
+                      {renderBody(comment.body)}
                     </p>
                     <div className="flex items-center gap-3 mt-1.5">
                       {comment.replyCount > 0 && (
