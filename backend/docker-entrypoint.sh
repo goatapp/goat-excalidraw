@@ -76,6 +76,8 @@ chmod 600 "${CSRF_SECRET_FILE}"
 if [ -f "/app/prisma/dev.db" ]; then
     echo "Database file found, ensuring write permissions..."
     chmod 600 /app/prisma/dev.db
+    [ -f "/app/prisma/dev.db-wal" ] && chmod 600 /app/prisma/dev.db-wal
+    [ -f "/app/prisma/dev.db-shm" ] && chmod 600 /app/prisma/dev.db-shm
 fi
 
 # 3. Run Migrations (Drop privileges to nodejs)

@@ -124,9 +124,15 @@ async function syncDatabase() {
 
   const snapshotPath = `${DB_PATH}.s3backup`;
   try {
-    const db = new Database(DB_PATH, { readonly: true });
+    const db = new Database(DB_PATH, { readonly: true, timeout: 5000 });
+    db.pragma("journal_mode=WAL");
     await db.backup(snapshotPath);
     db.close();
+
+    if (!fs.existsSync(snapshotPath)) {
+      console.error("[s3-sync] Backup file was not created");
+      return;
+    }
 
     const hash = fileHash(snapshotPath);
     if (hash === lastDbHash) {
