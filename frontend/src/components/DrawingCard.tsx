@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { PenTool, Trash2, FolderInput, ArrowRight, Check, Clock, Copy, Download, Loader2 } from 'lucide-react';
+import { PenTool, Trash2, FolderInput, ArrowRight, Check, Clock, Copy, Download, Loader2, MessageCircle } from 'lucide-react';
 import type { DrawingSummary, Collection, Drawing } from '../types';
 import { formatDistanceToNow } from 'date-fns';
 import clsx from 'clsx';
@@ -269,6 +269,13 @@ export const DrawingCard: React.FC<DrawingCardProps> = ({
           )}
         >
           <div className="absolute inset-0 opacity-[0.3] bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] [background-size:24px_24px]"></div>
+
+          {(drawing.unresolvedCommentCount ?? 0) > 0 && (
+            <div className="absolute bottom-2 left-2 z-10 flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 text-[10px] font-bold shadow-sm">
+              <MessageCircle size={10} />
+              {drawing.unresolvedCommentCount}
+            </div>
+          )}
 
           {previewSvg ? (
             <div

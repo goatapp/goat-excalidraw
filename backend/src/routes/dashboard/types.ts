@@ -1,5 +1,6 @@
 import express from "express";
 import { z } from "zod";
+import type { Server as SocketIOServer } from "socket.io";
 import { Prisma, PrismaClient } from "../../generated/client/client.js";
 
 export type SortField = "name" | "createdAt" | "updatedAt";
@@ -53,4 +54,5 @@ export type DashboardRouteDeps = {
     enableAuditLogging: boolean;
   };
   logAuditEvent: LogAuditEvent;
+  io?: SocketIOServer;
 };

@@ -7,6 +7,7 @@ export interface DrawingSummary {
   version: number;
   preview?: string | null;
   accessLevel?: "none" | "view" | "edit" | "owner";
+  unresolvedCommentCount?: number;
 }
 
 export interface Drawing extends DrawingSummary {

@@ -162,6 +162,10 @@ export const registerDrawingRoutes = (
       return res.send(cachedBody);
     }
 
+    const unresolvedCommentCount: Prisma.DrawingSelect["_count"] = {
+      select: { comments: { where: { parentId: null, resolved: false } } },
+    };
+
     const summarySelect: Prisma.DrawingSelect = {
       id: true,
       name: true,
@@ -170,6 +174,7 @@ export const registerDrawingRoutes = (
       version: true,
       createdAt: true,
       updatedAt: true,
+      _count: unresolvedCommentCount,
     };
 
     const orderBy: Prisma.DrawingOrderByWithRelationInput =
@@ -182,17 +187,26 @@ export const registerDrawingRoutes = (
     const queryOptions: Prisma.DrawingFindManyArgs = { where, orderBy };
     if (parsedLimit !== undefined) queryOptions.take = parsedLimit;
     if (parsedOffset !== undefined) queryOptions.skip = parsedOffset;
-    if (!shouldIncludeData) queryOptions.select = summarySelect;
+    if (!shouldIncludeData) {
+      queryOptions.select = summarySelect;
+    } else {
+      queryOptions.include = { _count: unresolvedCommentCount };
+    }
 
     const [drawings, totalCount] = await Promise.all([
       prisma.drawing.findMany(queryOptions),
       prisma.drawing.count({ where }),
     ]);
 
+    const flattenCommentCount = (d: any) => {
+      const { _count, ...rest } = d;
+      return { ...rest, unresolvedCommentCount: _count?.comments ?? 0 };
+    };
+
     let responsePayload: any[] = drawings as any[];
     if (shouldIncludeData) {
       responsePayload = (drawings as any[]).map((d: any) => ({
-        ...d,
+        ...flattenCommentCount(d),
         collectionId: toPublicTrashCollectionId(d.collectionId, req.user!.id),
         elements: parseJsonField(d.elements, []),
         appState: parseJsonField(d.appState, {}),
@@ -200,7 +214,7 @@ export const registerDrawingRoutes = (
       }));
     } else {
       responsePayload = (drawings as any[]).map((d: any) => ({
-        ...d,
+        ...flattenCommentCount(d),
         collectionId: toPublicTrashCollectionId(d.collectionId, req.user!.id),
       }));
     }
@@ -272,6 +286,10 @@ export const registerDrawingRoutes = (
       whereDrawing.name = { contains: searchTerm };
     }
 
+    const sharedUnresolvedCount: Prisma.DrawingSelect["_count"] = {
+      select: { comments: { where: { parentId: null, resolved: false } } },
+    };
+
     const summarySelect: Prisma.DrawingSelect = {
       id: true,
       name: true,
@@ -285,12 +303,23 @@ export const registerDrawingRoutes = (
         where: { granteeUserId: req.user.id },
         select: { permission: true },
       },
+      _count: sharedUnresolvedCount,
     };
 
     const queryOptions: Prisma.DrawingFindManyArgs = { where: whereDrawing, orderBy };
     if (parsedLimit !== undefined) queryOptions.take = parsedLimit;
     if (parsedOffset !== undefined) queryOptions.skip = parsedOffset;
-    if (!shouldIncludeData) queryOptions.select = summarySelect;
+    if (!shouldIncludeData) {
+      queryOptions.select = summarySelect;
+    } else {
+      queryOptions.include = {
+        _count: sharedUnresolvedCount,
+        permissions: {
+          where: { granteeUserId: req.user.id },
+          select: { permission: true },
+        },
+      };
+    }
 
     const [drawings, totalCount] = await Promise.all([
       prisma.drawing.findMany(queryOptions),
@@ -300,12 +329,12 @@ export const registerDrawingRoutes = (
     const normalize = (d: any) => {
       const rawPerm = Array.isArray(d?.permissions) ? d.permissions[0]?.permission : null;
       const perm = normalizeDrawingPermission(rawPerm) ?? "view";
-      const { permissions: _permissions, ...rest } = d;
+      const { permissions: _permissions, _count, ...rest } = d;
       return {
         ...rest,
-        // Collections are owner-scoped; don't leak the owner's collection ids to viewers.
         collectionId: null,
         accessLevel: perm,
+        unresolvedCommentCount: _count?.comments ?? 0,
       };
     };
 

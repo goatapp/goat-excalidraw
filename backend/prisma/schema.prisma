@@ -23,6 +23,8 @@ model User {
   passwordResetTokens PasswordResetToken[]
   refreshTokens       RefreshToken[]
   auditLogs           AuditLog[]
+  comments            Comment[]
+  commentReactions    CommentReaction[]
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
 }
@@ -71,6 +73,7 @@ model Drawing {
   permissions  DrawingPermission[]
   linkShares   DrawingLinkShare[]
   snapshots    DrawingSnapshot[]
+  comments     Comment[]
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
@@ -182,4 +185,38 @@ model AuthIdentity {
   @@unique([issuer, subject])
   @@unique([provider, userId])
   @@index([userId])
+}
+
+model Comment {
+  id        String             @id @default(uuid())
+  drawingId String
+  drawing   Drawing            @relation(fields: [drawingId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parentId  String?
+  parent    Comment?           @relation("CommentThread", fields: [parentId], references: [id], onDelete: Cascade)
+  replies   Comment[]          @relation("CommentThread")
+  body      String
+  anchorX   Float?
+  anchorY   Float?
+  resolved  Boolean            @default(false)
+  reactions CommentReaction[]
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  @@index([drawingId, createdAt])
+  @@index([parentId])
+}
+
+model CommentReaction {
+  id        String   @id @default(uuid())
+  commentId String
+  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emoji     String
+  createdAt DateTime @default(now())
+
+  @@unique([commentId, userId, emoji])
+  @@index([commentId])
 }

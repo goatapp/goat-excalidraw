@@ -284,6 +284,75 @@ export async function listCollections(
   return (await response.json()) as CollectionRecord[];
 }
 
+// --- Comments ---
+
+export interface CommentRecord {
+  id: string;
+  body: string;
+  anchorX: number | null;
+  anchorY: number | null;
+  resolved: boolean;
+  createdAt: string;
+  updatedAt: string;
+  user: { id: string; name: string; email: string };
+  replyCount: number;
+  parentId: string | null;
+  reactions: { emoji: string; count: number; userReacted: boolean }[];
+}
+
+export async function createComment(
+  request: APIRequestContext,
+  drawingId: string,
+  data: { body: string; parentId?: string; anchorX?: number; anchorY?: number }
+): Promise<CommentRecord> {
+  const headers = await withCsrfHeaders(request, { "Content-Type": "application/json" });
+  let response = await request.post(`${API_URL}/drawings/${drawingId}/comments`, {
+    headers,
+    data,
+  });
+  if (!response.ok() && response.status() === 403) {
+    await refreshCsrfInfo(request);
+    const retryHeaders = await withCsrfHeaders(request, { "Content-Type": "application/json" });
+    response = await request.post(`${API_URL}/drawings/${drawingId}/comments`, {
+      headers: retryHeaders,
+      data,
+    });
+  }
+  if (!response.ok()) {
+    const text = await response.text();
+    throw new Error(`Failed to create comment: ${response.status()} ${text}`);
+  }
+  const result = (await response.json()) as { comment: CommentRecord };
+  return result.comment;
+}
+
+export async function getComments(
+  request: APIRequestContext,
+  drawingId: string
+): Promise<{ comments: CommentRecord[]; totalCount: number }> {
+  const response = await request.get(`${API_URL}/drawings/${drawingId}/comments`);
+  expect(response.ok()).toBe(true);
+  return (await response.json()) as { comments: CommentRecord[]; totalCount: number };
+}
+
+export async function deleteComment(
+  request: APIRequestContext,
+  drawingId: string,
+  commentId: string
+): Promise<void> {
+  const headers = await withCsrfHeaders(request);
+  let response = await request.delete(`${API_URL}/drawings/${drawingId}/comments/${commentId}`, { headers });
+  if (!response.ok() && response.status() === 403) {
+    await refreshCsrfInfo(request);
+    const retryHeaders = await withCsrfHeaders(request);
+    response = await request.delete(`${API_URL}/drawings/${drawingId}/comments/${commentId}`, { headers: retryHeaders });
+  }
+  if (!response.ok() && response.status() !== 404) {
+    const text = await response.text();
+    throw new Error(`Failed to delete comment ${commentId}: ${response.status()} ${text}`);
+  }
+}
+
 export async function deleteCollection(
   request: APIRequestContext,
   id: string

@@ -662,6 +662,7 @@ registerDashboardRoutes(app, {
   MAX_PAGE_SIZE,
   config,
   logAuditEvent,
+  io,
 });
 
 registerImportExportRoutes({

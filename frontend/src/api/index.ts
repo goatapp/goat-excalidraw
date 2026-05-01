@@ -670,6 +670,137 @@ export const deleteCollection = async (id: string) => {
 };
 
 
+// --- Comments ---
+
+export type CommentUser = {
+  id: string;
+  name: string;
+  email: string;
+};
+
+export type CommentReaction = {
+  emoji: string;
+  count: number;
+  userReacted: boolean;
+};
+
+export type Comment = {
+  id: string;
+  body: string;
+  anchorX: number | null;
+  anchorY: number | null;
+  resolved: boolean;
+  createdAt: string;
+  updatedAt: string;
+  user: CommentUser;
+  replyCount: number;
+  parentId: string | null;
+  reactions: CommentReaction[];
+};
+
+export const getComments = async (
+  drawingId: string,
+  options?: { limit?: number; offset?: number }
+): Promise<{ comments: Comment[]; totalCount: number }> => {
+  const params: Record<string, number> = {};
+  if (options?.limit) params.limit = options.limit;
+  if (options?.offset) params.offset = options.offset;
+  const response = await api.get(`/drawings/${drawingId}/comments`, {
+    params,
+  });
+  return response.data;
+};
+
+export const getCommentReplies = async (
+  drawingId: string,
+  commentId: string
+): Promise<{ replies: Comment[] }> => {
+  const response = await api.get(
+    `/drawings/${drawingId}/comments/${commentId}/replies`
+  );
+  return response.data;
+};
+
+export const createComment = async (
+  drawingId: string,
+  params: {
+    body: string;
+    parentId?: string;
+    anchorX?: number;
+    anchorY?: number;
+  }
+): Promise<{ comment: Comment }> => {
+  const response = await api.post(
+    `/drawings/${drawingId}/comments`,
+    params
+  );
+  return response.data;
+};
+
+export const updateComment = async (
+  drawingId: string,
+  commentId: string,
+  params: { body: string }
+): Promise<{ comment: Comment }> => {
+  const response = await api.put(
+    `/drawings/${drawingId}/comments/${commentId}`,
+    params
+  );
+  return response.data;
+};
+
+export const deleteComment = async (
+  drawingId: string,
+  commentId: string
+): Promise<{ success: true }> => {
+  const response = await api.delete(
+    `/drawings/${drawingId}/comments/${commentId}`
+  );
+  return response.data;
+};
+
+export const resolveComment = async (
+  drawingId: string,
+  commentId: string
+): Promise<{ comment: Comment }> => {
+  const response = await api.patch(
+    `/drawings/${drawingId}/comments/${commentId}/resolve`
+  );
+  return response.data;
+};
+
+export const addReaction = async (
+  drawingId: string,
+  commentId: string,
+  emoji: string
+): Promise<void> => {
+  await api.post(
+    `/drawings/${drawingId}/comments/${commentId}/reactions`,
+    { emoji }
+  );
+};
+
+export const removeReaction = async (
+  drawingId: string,
+  commentId: string,
+  emoji: string
+): Promise<void> => {
+  await api.delete(
+    `/drawings/${drawingId}/comments/${commentId}/reactions/${encodeURIComponent(emoji)}`
+  );
+};
+
+export const getDrawingCollaborators = async (
+  drawingId: string
+): Promise<{ id: string; name: string }[]> => {
+  const response = await api.get<{ users: { id: string; name: string }[] }>(
+    `/drawings/${drawingId}/collaborators`
+  );
+  return response.data.users;
+};
+
+// --- Library ---
+
 type LibraryItem = Record<string, unknown>;
 
 export const getLibrary = async (): Promise<LibraryItem[]> => {
