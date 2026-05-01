@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, Download, Loader2, ChevronUp, ChevronDown, Share2, History } from 'lucide-react';
+import { ArrowLeft, Download, Loader2, ChevronUp, ChevronDown, Share2, History, Video } from 'lucide-react';
 import clsx from 'clsx';
 import {
   Excalidraw,
@@ -1816,6 +1816,13 @@ export const Editor: React.FC = () => {
               <Share2 size={20} />
             </button>
           ) : null}
+          <button
+            onClick={() => window.open('https://meet.google.com/new', '_blank', 'noopener,noreferrer')}
+            className="p-2 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-lg text-gray-600 dark:text-gray-300 transition-colors"
+            title="Start Google Meet"
+          >
+            <Video size={20} />
+          </button>
           <button
             onClick={() => {
               const next = !autoHideEnabled;
