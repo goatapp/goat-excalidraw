@@ -5,7 +5,6 @@ import * as api from '../api';
 import type { Collection } from '../types';
 import { Upload, Moon, Sun, Info, Archive, Zap, ZapOff } from 'lucide-react';
 import { ConfirmModal } from '../components/ConfirmModal';
-import { importLegacyFiles } from '../utils/importUtils';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 
@@ -15,19 +14,6 @@ export const Settings: React.FC = () => {
     const { theme, toggleTheme } = useTheme();
     const { authEnabled, user, authMode } = useAuth();
 
-    const [legacyDbImportConfirmation, setLegacyDbImportConfirmation] = useState<{
-        isOpen: boolean;
-        file: File | null;
-        info: null | {
-            drawings: number;
-            collections: number;
-            legacyLatestMigration: string | null;
-            currentLatestMigration: string | null;
-        };
-    }>({ isOpen: false, file: null, info: null });
-    const [importError, setImportError] = useState<{ isOpen: boolean; message: string }>({ isOpen: false, message: '' });
-    const [importSuccess, setImportSuccess] = useState<{ isOpen: boolean; message: React.ReactNode }>({ isOpen: false, message: '' });
-    const [legacyDbImportLoading, setLegacyDbImportLoading] = useState(false);
     const [authToggleLoading, setAuthToggleLoading] = useState(false);
     const [authToggleError, setAuthToggleError] = useState<string | null>(null);
     const [authToggleConfirm, setAuthToggleConfirm] = useState<{ isOpen: boolean; nextEnabled: boolean | null }>({
@@ -174,43 +160,6 @@ export const Settings: React.FC = () => {
             setBackupImportError({ isOpen: true, message });
         } finally {
             setBackupImportLoading(false);
-        }
-    };
-
-    const verifyLegacyDbFile = async (file: File) => {
-        setLegacyDbImportLoading(true);
-        try {
-            const formData = new FormData();
-            formData.append('db', file);
-            const response = await api.api.post<{
-                valid: boolean;
-                drawings: number;
-                collections: number;
-                latestMigration: string | null;
-                currentLatestMigration: string | null;
-            }>('/import/sqlite/legacy/verify', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' },
-            });
-
-            setLegacyDbImportConfirmation({
-                isOpen: true,
-                file,
-                info: {
-                    drawings: response.data.drawings,
-                    collections: response.data.collections,
-                    legacyLatestMigration: response.data.latestMigration ?? null,
-                    currentLatestMigration: response.data.currentLatestMigration ?? null,
-                },
-            });
-        } catch (err: unknown) {
-            console.error('Legacy DB verify failed:', err);
-            let message = 'Failed to verify legacy database file.';
-            if (api.isAxiosError(err)) {
-                message = err.response?.data?.message || err.response?.data?.error || message;
-            }
-            setImportError({ isOpen: true, message });
-        } finally {
-            setLegacyDbImportLoading(false);
         }
     };
 
@@ -412,137 +361,8 @@ export const Settings: React.FC = () => {
                         </div>
                     </button>
 
-                    <div className="relative">
-                        <input
-                            type="file"
-                            multiple
-                            accept=".sqlite,.db,.json,.excalidraw,.zip"
-                            className="hidden"
-                            id="settings-import-legacy"
-                            onChange={async (e) => {
-                                const files = Array.from(e.target.files || []);
-                                if (files.length === 0) return;
-
-                                const databaseFile = files.find(f => f.name.endsWith('.sqlite') || f.name.endsWith('.db'));
-                                if (databaseFile) {
-                                    if (files.length > 1) {
-                                        setImportError({ isOpen: true, message: 'Please import legacy database files separately from other files.' });
-                                        e.target.value = '';
-                                        return;
-                                    }
-
-                                    await verifyLegacyDbFile(databaseFile);
-                                    e.target.value = '';
-                                    return;
-                                }
-
-                                const result = await importLegacyFiles(files, null, () => { });
-
-                                if (result.failed > 0) {
-                                    setImportError({
-                                        isOpen: true,
-                                        message: `Import complete with errors.\nSuccess: ${result.success}\nFailed: ${result.failed}\nErrors:\n${result.errors.join('\n')}`
-                                    });
-                                } else {
-                                    setImportSuccess({ isOpen: true, message: `Imported ${result.success} file(s).` });
-                                }
-
-                                e.target.value = '';
-                            }}
-                        />
-                        <button
-                            onClick={() => document.getElementById('settings-import-legacy')?.click()}
-                            disabled={legacyDbImportLoading}
-                            className="w-full h-full flex flex-col items-center justify-center gap-3 sm:gap-4 p-4 sm:p-6 lg:p-8 bg-white dark:bg-neutral-900 border-2 border-black dark:border-neutral-700 rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.2)] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] dark:hover:shadow-[6px_6px_0px_0px_rgba(255,255,255,0.2)] hover:-translate-y-1 transition-all duration-200 group"
-                        >
-                            <div className="w-12 h-12 sm:w-16 sm:h-16 bg-amber-50 dark:bg-neutral-800 rounded-2xl flex items-center justify-center border-2 border-amber-100 dark:border-neutral-700">
-                                <Upload size={32} className="text-amber-600 dark:text-amber-400 hidden sm:block" />
-                                <Upload size={24} className="text-amber-600 dark:text-amber-400 sm:hidden" />
-                            </div>
-                            <div className="text-center">
-                                <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1">Legacy Import</h3>
-                                <p className="text-xs text-slate-500 dark:text-neutral-400 font-medium max-w-[200px] mx-auto">Import `.excalidraw`, legacy JSON, or merge a legacy `.db`</p>
-                            </div>
-                        </button>
-                    </div>
-
                 </div>
             </details>
-
-            <ConfirmModal
-                isOpen={legacyDbImportConfirmation.isOpen}
-                title="Merge-import legacy database?"
-                message={
-                    <div className="space-y-2">
-                        <div>This will merge legacy data into your account (it will not replace the server database).</div>
-                        {legacyDbImportConfirmation.info && (
-                            <div className="text-sm text-slate-700 dark:text-neutral-200 space-y-1">
-                                <div>Drawings: {legacyDbImportConfirmation.info.drawings}</div>
-                                <div>Collections: {legacyDbImportConfirmation.info.collections}</div>
-                                <div>Legacy migration: {legacyDbImportConfirmation.info.legacyLatestMigration || 'Unknown'}</div>
-                                <div>Current migration: {legacyDbImportConfirmation.info.currentLatestMigration || 'Unknown'}</div>
-                            </div>
-                        )}
-                    </div>
-                }
-                confirmText="Merge Import"
-                cancelText="Cancel"
-                onConfirm={async () => {
-                    const file = legacyDbImportConfirmation.file;
-                    if (!file) return;
-                    setLegacyDbImportConfirmation({ isOpen: false, file: null, info: null });
-
-                    const formData = new FormData();
-                    formData.append('db', file);
-
-                    try {
-                        const response = await api.api.post<{
-                            success: boolean;
-                            collections: { created: number; updated: number; idConflicts: number };
-                            drawings: { created: number; updated: number; idConflicts: number };
-                        }>('/import/sqlite/legacy', formData, {
-                            headers: { 'Content-Type': 'multipart/form-data' },
-                        });
-
-                        setImportSuccess({
-                            isOpen: true,
-                            message: `Legacy DB imported. Collections: +${response.data.collections.created} / ~${response.data.collections.updated}. Drawings: +${response.data.drawings.created} / ~${response.data.drawings.updated}.`,
-                        });
-                    } catch (err: unknown) {
-                        console.error(err);
-                        let message = 'Failed to import legacy database.';
-                        if (api.isAxiosError(err)) {
-                            message = err.response?.data?.message || err.response?.data?.error || message;
-                        }
-                        setImportError({ isOpen: true, message });
-                    }
-                }}
-                onCancel={() => setLegacyDbImportConfirmation({ isOpen: false, file: null, info: null })}
-            />
-
-            <ConfirmModal
-                isOpen={importError.isOpen}
-                title="Import Failed"
-                message={importError.message}
-                confirmText="OK"
-                cancelText=""
-                showCancel={false}
-                isDangerous={false}
-                onConfirm={() => setImportError({ isOpen: false, message: '' })}
-                onCancel={() => setImportError({ isOpen: false, message: '' })}
-            />
-
-            <ConfirmModal
-                isOpen={importSuccess.isOpen}
-                title="Import Successful"
-                message={importSuccess.message}
-                confirmText="OK"
-                showCancel={false}
-                isDangerous={false}
-                variant="success"
-                onConfirm={() => setImportSuccess({ isOpen: false, message: '' })}
-                onCancel={() => setImportSuccess({ isOpen: false, message: '' })}
-            />
 
             <ConfirmModal
                 isOpen={authToggleConfirm.isOpen}
