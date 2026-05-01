@@ -514,7 +514,8 @@ export const Editor: React.FC = () => {
     const flushRemoteUpdates = () => {
       remoteFlushScheduledRef.current = false;
       remoteFlushRafIdRef.current = null;
-      if (!excalidrawAPI.current) return;
+      const api = getAPI();
+      if (!api) return;
 
       const hasPendingElements = pendingRemoteElementsRef.current.size > 0;
       const hasPendingFiles = Object.keys(pendingRemoteFilesRef.current || {}).length > 0;
@@ -541,15 +542,15 @@ export const Editor: React.FC = () => {
           nextFiles,
           shouldUpdateFiles,
         } = buildRemoteSceneUpdate({
-          localElements: excalidrawAPI.current.getSceneElementsIncludingDeleted(),
+          localElements: api.getSceneElementsIncludingDeleted(),
           pendingElements,
           elementOrder,
           lastSyncedFiles: lastSyncedFilesRef.current,
           incomingFiles,
         });
 
-        if (shouldUpdateFiles && typeof excalidrawAPI.current.addFiles === "function") {
-          excalidrawAPI.current.addFiles(Object.values(incomingFiles));
+        if (shouldUpdateFiles && typeof api.addFiles === "function") {
+          api.addFiles(Object.values(incomingFiles));
         }
 
         if (mergedElements) {
@@ -561,11 +562,11 @@ export const Editor: React.FC = () => {
           });
 
           if (sceneUpdate) {
-            excalidrawAPI.current.updateScene(sceneUpdate);
+            api.updateScene(sceneUpdate);
           }
           latestElementsRef.current = mergedElements;
         } else if (sceneUpdate) {
-          excalidrawAPI.current.updateScene(sceneUpdate);
+          api.updateScene(sceneUpdate);
         }
 
         if (shouldUpdateFiles) {
@@ -611,9 +612,10 @@ export const Editor: React.FC = () => {
       const selfId = socketMeRef.current.id;
       setPeers(users.filter(u => u.id !== selfId));
 
-      if (excalidrawAPI.current) {
+      const api = getAPI();
+      if (api) {
         const collaborators = new Map<string, any>(
-          excalidrawAPI.current.getAppState().collaborators || []
+          api.getAppState().collaborators || []
         );
         users.forEach(user => {
           if (!user.isActive && user.id !== selfId) {
@@ -622,7 +624,7 @@ export const Editor: React.FC = () => {
         });
         const { sceneUpdate } = buildRemoteSceneUpdate({ collaborators });
         if (sceneUpdate) {
-          excalidrawAPI.current.updateScene(sceneUpdate);
+          api.updateScene(sceneUpdate);
         }
       }
     });
@@ -679,9 +681,10 @@ export const Editor: React.FC = () => {
     });
 
     const renderLoop = () => {
-      if (cursorBuffer.current.size > 0 && excalidrawAPI.current) {
+      const api = getAPI();
+      if (cursorBuffer.current.size > 0 && api) {
         const collaborators = new Map<string, any>(
-          excalidrawAPI.current.getAppState().collaborators || []
+          api.getAppState().collaborators || []
         );
 
         cursorBuffer.current.forEach((data, userId) => {
@@ -691,7 +694,7 @@ export const Editor: React.FC = () => {
         cursorBuffer.current.clear();
         const { sceneUpdate } = buildRemoteSceneUpdate({ collaborators });
         if (sceneUpdate) {
-          excalidrawAPI.current.updateScene(sceneUpdate);
+          api.updateScene(sceneUpdate);
         }
       }
       animationFrameId.current = requestAnimationFrame(renderLoop);
@@ -764,6 +767,11 @@ export const Editor: React.FC = () => {
   }, [id]);
 
   const excalidrawAPI = useRef<any>(null);
+  const getAPI = useCallback(() => {
+    const api = excalidrawAPI.current;
+    if (!api || api.isDestroyed) return null;
+    return api;
+  }, []);
 
   const setExcalidrawAPI = useCallback((api: any) => {
     // eslint-disable-next-line react-hooks/immutability -- ref set from Excalidraw callback, not during render
@@ -772,7 +780,9 @@ export const Editor: React.FC = () => {
       (window as any).__EXCALIDASH_EXCALIDRAW_API__ = api;
     }
 
-    if (api && typeof api.addFiles === "function" && !patchedAddFilesApisRef.current.has(api as object)) {
+    if (!api) return;
+
+    if (typeof api.addFiles === "function" && !patchedAddFilesApisRef.current.has(api as object)) {
       patchedAddFilesApisRef.current.add(api as object);
       const originalAddFiles = api.addFiles.bind(api);
       api.addFiles = (filesInput: Record<string, any> | any[]) => {
@@ -796,7 +806,7 @@ export const Editor: React.FC = () => {
   }, [emitFilesDeltaIfNeeded, id]);
 
   useEffect(() => {
-    if (!isReady || !excalidrawAPI.current) return;
+    if (!isReady || !getAPI()) return;
 
     const hash = window.location.hash;
     if (!hash.includes('addLibrary=')) return;
@@ -853,14 +863,17 @@ export const Editor: React.FC = () => {
           throw new Error('Library file is too large');
         }
 
-        await excalidrawAPI.current.updateLibrary({
+        const excalidraw = getAPI();
+        if (!excalidraw) return;
+
+        await excalidraw.updateLibrary({
           libraryItems: blob,
           merge: true,
           defaultStatus: "published",
           openLibraryMenu: true,
         });
 
-        const updatedItems = excalidrawAPI.current.getAppState().libraryItems || [];
+        const updatedItems = excalidraw.getAppState().libraryItems || [];
         if (user) {
           await api.updateLibrary([...updatedItems]);
         }
@@ -930,10 +943,11 @@ export const Editor: React.FC = () => {
         const compressedFilesResult = await compressExcalidrawFiles(persistableFiles);
         if (compressedFilesResult.changed) {
           persistableFiles = compressedFilesResult.files;
-          if (excalidrawAPI.current && typeof excalidrawAPI.current.addFiles === "function") {
+          const excalidraw = getAPI();
+          if (excalidraw && typeof excalidraw.addFiles === "function") {
             isSyncing.current = true;
             try {
-              excalidrawAPI.current.addFiles(Object.values(persistableFiles));
+              excalidraw.addFiles(Object.values(persistableFiles));
             } finally {
               isSyncing.current = false;
             }
@@ -1187,7 +1201,7 @@ export const Editor: React.FC = () => {
 
       const changes: any[] = [];
 
-      const nextFiles = currentFiles || excalidrawAPI.current?.getFiles() || {};
+      const nextFiles = currentFiles || getAPI()?.getFiles() || {};
       const normalizedElements = normalizeImageElementStatus(elements, nextFiles);
 
       const nextOrderSig = computeElementOrderSig(normalizedElements);
@@ -1399,16 +1413,17 @@ export const Editor: React.FC = () => {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault();
         if (!canEdit) return;
-        if (excalidrawAPI.current && saveDataRef.current && savePreviewRef.current) {
-          const elements = excalidrawAPI.current.getSceneElementsIncludingDeleted();
+        const excalidraw = getAPI();
+        if (excalidraw && saveDataRef.current && savePreviewRef.current) {
+          const elements = excalidraw.getSceneElementsIncludingDeleted();
           const {
             snapshot: safeElements,
             prevented,
             staleEmptySnapshot,
             staleNonRenderableSnapshot,
           } = resolveSafeSnapshot(elements);
-          const appState = excalidrawAPI.current.getAppState();
-          const files = excalidrawAPI.current.getFiles() || {};
+          const appState = excalidraw.getAppState();
+          const files = excalidraw.getFiles() || {};
           latestFilesRef.current = files;
           if (prevented) {
             console.warn("[Editor] Prevented stale Ctrl+S snapshot overwrite", {
@@ -1443,13 +1458,14 @@ export const Editor: React.FC = () => {
 
     latestAppStateRef.current = appState;
 
-    const currentFiles = files || excalidrawAPI.current?.getFiles() || {};
+    const excalidraw = getAPI();
+    const currentFiles = files || excalidraw?.getFiles() || {};
     if (Object.keys(currentFiles).length > 0) {
       latestFilesRef.current = currentFiles;
     }
 
-    const allElements = excalidrawAPI.current
-      ? excalidrawAPI.current.getSceneElementsIncludingDeleted()
+    const allElements = excalidraw
+      ? excalidraw.getSceneElementsIncludingDeleted()
       : elements;
 
     if (!hasHydratedInitialScene.current) {
@@ -1541,7 +1557,8 @@ export const Editor: React.FC = () => {
 
   const handleCanvasDropCapture = useCallback(
     async (event: React.DragEvent<HTMLDivElement>) => {
-      if (!canEdit || !excalidrawAPI.current) return;
+      const excalidraw = getAPI();
+      if (!canEdit || !excalidraw) return;
 
       const allDroppedFiles = Array.from(event.dataTransfer?.files || []);
       const droppedImages = getDroppedImageFiles(event.dataTransfer);
@@ -1552,7 +1569,7 @@ export const Editor: React.FC = () => {
       event.preventDefault();
       event.stopPropagation();
 
-      const appState = excalidrawAPI.current.getAppState?.();
+      const appState = excalidraw.getAppState?.();
       if (!appState) return;
 
       try {
@@ -1590,10 +1607,10 @@ export const Editor: React.FC = () => {
           })
         );
 
-        excalidrawAPI.current.addFiles(fileRecords);
-        excalidrawAPI.current.updateScene({
+        excalidraw.addFiles(fileRecords);
+        excalidraw.updateScene({
           elements: [
-            ...excalidrawAPI.current.getSceneElementsIncludingDeleted(),
+            ...excalidraw.getSceneElementsIncludingDeleted(),
             ...imageElements,
           ],
           appState: {
@@ -1618,9 +1635,10 @@ export const Editor: React.FC = () => {
       if (isUnmounting.current) return;
       if (isSyncing.current) return;
       if (!socketRef.current) return;
-      if (!excalidrawAPI.current) return;
+      const excalidraw = getAPI();
+      if (!excalidraw) return;
 
-      const nextFiles = excalidrawAPI.current.getFiles?.() || {};
+      const nextFiles = excalidraw.getFiles?.() || {};
       const didEmit = emitFilesDeltaIfNeeded(nextFiles);
 
       if (didEmit && latestAppStateRef.current && debouncedSaveRef.current) {
@@ -1669,7 +1687,8 @@ export const Editor: React.FC = () => {
     let shouldNavigate = false;
 
     try {
-      if (!(excalidrawAPI.current && saveDataRef.current && savePreviewRef.current)) {
+      const excalidraw = getAPI();
+      if (!(excalidraw && saveDataRef.current && savePreviewRef.current)) {
         shouldNavigate = true;
       } else if (!canEdit) {
         shouldNavigate = true;
@@ -1681,15 +1700,15 @@ export const Editor: React.FC = () => {
       } else if (!id) {
         shouldNavigate = true;
       } else {
-        const elements = excalidrawAPI.current.getSceneElementsIncludingDeleted();
+        const elements = excalidraw.getSceneElementsIncludingDeleted();
         const {
           snapshot: safeElements,
           prevented,
           staleEmptySnapshot,
           staleNonRenderableSnapshot,
         } = resolveSafeSnapshot(elements);
-        const appState = excalidrawAPI.current.getAppState();
-        const files = excalidrawAPI.current.getFiles() || {};
+        const appState = excalidraw.getAppState();
+        const files = excalidraw.getFiles() || {};
         latestFilesRef.current = files;
         if (prevented) {
           console.warn("[Editor] Prevented stale back-navigation snapshot overwrite", {
@@ -1818,10 +1837,11 @@ export const Editor: React.FC = () => {
 
           <button
             onClick={() => {
-              if (excalidrawAPI.current) {
-                const elements = excalidrawAPI.current.getSceneElementsIncludingDeleted();
-                const appState = excalidrawAPI.current.getAppState();
-                const files = excalidrawAPI.current.getFiles() || {};
+              const excalidraw = getAPI();
+              if (excalidraw) {
+                const elements = excalidraw.getSceneElementsIncludingDeleted();
+                const appState = excalidraw.getAppState();
+                const files = excalidraw.getFiles() || {};
                 exportFromEditor(drawingName, elements, appState, files);
                 toast.success('Drawing exported');
               }
@@ -1956,23 +1976,24 @@ export const Editor: React.FC = () => {
               setIsHistoryOpen(false);
             }}
             onPreview={(snapshot) => {
-              if (!excalidrawAPI.current) return;
+              const excalidraw = getAPI();
+              if (!excalidraw) return;
               if (snapshot) {
                 // Save current state before first preview
                 if (!previewBackup.current) {
                   previewBackup.current = {
-                    elements: excalidrawAPI.current.getSceneElementsIncludingDeleted(),
-                    appState: excalidrawAPI.current.getAppState(),
-                    files: excalidrawAPI.current.getFiles(),
+                    elements: excalidraw.getSceneElementsIncludingDeleted(),
+                    appState: excalidraw.getAppState(),
+                    files: excalidraw.getFiles(),
                   };
                 }
                 // Show snapshot on canvas (read-only preview)
                 const elements = Array.isArray(snapshot.elements) ? snapshot.elements : [];
                 const files = snapshot.files || {};
                 if (Object.keys(files).length > 0) {
-                  excalidrawAPI.current.addFiles(Object.values(files));
+                  excalidraw.addFiles(Object.values(files));
                 }
-                excalidrawAPI.current.updateScene({
+                excalidraw.updateScene({
                   elements,
                   appState: {
                     ...snapshot.appState,
@@ -1983,13 +2004,13 @@ export const Editor: React.FC = () => {
               } else {
                 // Restore original state
                 if (previewBackup.current) {
-                  excalidrawAPI.current.updateScene({
+                  excalidraw.updateScene({
                     elements: previewBackup.current.elements as any[],
                     appState: previewBackup.current.appState,
                     captureUpdate: CaptureUpdateAction.NEVER,
                   });
                   if (previewBackup.current.files) {
-                    excalidrawAPI.current.addFiles(Object.values(previewBackup.current.files));
+                    excalidraw.addFiles(Object.values(previewBackup.current.files));
                   }
                   previewBackup.current = null;
                 }
