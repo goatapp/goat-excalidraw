@@ -176,7 +176,7 @@ export const Login: React.FC = () => {
             </p>
           ) : mustReset ? (
             <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-              Your admin requires you to set a new password before using ExcaliDash.
+              Your admin requires you to set a new password before using ExcaliGOAT.
             </p>
           ) : (
             <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">

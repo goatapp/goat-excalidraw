@@ -252,7 +252,7 @@ export const Profile: React.FC = () => {
                                         Password reset required
                                     </p>
                                     <p className="text-sm text-amber-800 dark:text-amber-200/80 font-medium mt-1">
-                                        Change your password below before using ExcaliDash.
+                                        Change your password below before using ExcaliGOAT.
                                     </p>
                                 </div>
                             )}

@@ -173,8 +173,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="p-4 sm:p-5 pb-2">
           <h1 className="text-2xl text-slate-900 dark:text-white flex items-center gap-3 tracking-tight" style={{ fontFamily: 'Excalifont' }}>
             <Logo className="w-10 h-10" />
-            <span className="mt-1">ExcaliDash</span>
-            <span className="text-xs font-bold text-red-500 mt-2" style={{ fontFamily: 'sans-serif' }}>BETA</span>
+            <span className="mt-1">ExcaliGOAT</span>
           </h1>
         </div>
 
