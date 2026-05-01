@@ -11,6 +11,7 @@ import {
   canViewDrawing,
   type DrawingPrincipal,
 } from "../authz/sharing.js";
+import { logger } from "../utils/logger.js";
 
 interface User {
   id: string;
@@ -229,7 +230,7 @@ export const registerSocketHandlers = ({
             });
           }
         } catch (err) {
-          console.error("Error in join-room handler:", err);
+          logger.error({ err }, "Error in join-room handler");
           socket.emit("error", { message: "Failed to join room" });
         }
       }

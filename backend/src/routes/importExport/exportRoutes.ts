@@ -1,5 +1,6 @@
 import archiver from "archiver";
 import { Prisma } from "../../generated/client/client.js";
+import { logger } from "../../utils/logger.js";
 import {
   RegisterImportExportDeps,
   assertSafeArchivePath,
@@ -126,7 +127,7 @@ export const registerExcalidashExportRoute = (deps: RegisterImportExportDeps) =>
     });
 
     archive.on("error", (err) => {
-      console.error("Archive error:", err);
+      logger.error({ err }, "Archive error");
       abortArchive();
 
       if (res.headersSent) {

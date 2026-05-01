@@ -10,6 +10,7 @@ import {
   REFRESH_TOKEN_COOKIE_NAME,
   readCookie,
 } from "../auth/cookies.js";
+import { logger } from "../utils/logger.js";
 
 declare global {
   namespace Express {
@@ -150,11 +151,11 @@ const resolveProxyUser = async (
       },
       select: { id: true, username: true, email: true, name: true, role: true, isActive: true },
     });
-    console.log(`[proxy-auth] Auto-provisioned user ${email} with role ${targetRole}`);
+    logger.info({ email, role: targetRole }, "Auto-provisioned proxy auth user");
   } else if (isAdmin && user.role !== "ADMIN") {
     await prisma.user.update({ where: { id: user.id }, data: { role: "ADMIN" } });
     user = { ...user, role: "ADMIN" };
-    console.log(`[proxy-auth] Promoted ${email} to ADMIN`);
+    logger.info({ email }, "Promoted proxy auth user to ADMIN");
   }
 
   if (!user.isActive) return null;
@@ -262,7 +263,7 @@ export const createAuthMiddleware = ({
         req.user = user;
         return next();
       } catch (error) {
-        console.error("Error in proxy auth:", error);
+        logger.error({ err: error }, "Error in proxy auth");
         res.status(500).json({ error: "Internal server error", message: "Failed to resolve proxy user" });
         return;
       }
@@ -283,7 +284,7 @@ export const createAuthMiddleware = ({
         return next();
       }
     } catch (error) {
-      console.error("Error reading auth mode:", error);
+      logger.error({ err: error }, "Error reading auth mode");
       res.status(500).json({
         error: "Internal server error",
         message: "Failed to read authentication mode",
@@ -359,7 +360,7 @@ export const createAuthMiddleware = ({
 
       next();
     } catch (error) {
-      console.error("Error verifying user:", error);
+      logger.error({ err: error }, "Error verifying user");
       res.status(500).json({
         error: "Internal server error",
         message: "Failed to verify user",
@@ -377,7 +378,7 @@ export const createAuthMiddleware = ({
         const user = await resolveProxyUser(req, prisma);
         if (user) req.user = user;
       } catch (error) {
-        console.error("Error in proxy optional auth:", error);
+        logger.error({ err: error }, "Error in proxy optional auth");
       }
       return next();
     }
@@ -399,7 +400,7 @@ export const createAuthMiddleware = ({
         return next();
       }
     } catch (error) {
-      console.error("Error reading auth mode:", error);
+      logger.error({ err: error }, "Error reading auth mode");
       return next();
     }
 
@@ -446,7 +447,7 @@ export const createAuthMiddleware = ({
         };
       }
     } catch (error) {
-      console.error("Error in optional auth:", error);
+      logger.error({ err: error }, "Error in optional auth");
     }
 
     next();

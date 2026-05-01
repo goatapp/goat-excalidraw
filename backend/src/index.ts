@@ -10,6 +10,7 @@ import multer from "multer";
 import { z } from "zod";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
+import { pinoHttp } from "pino-http";
 import { v4 as uuidv4 } from "uuid";
 import { PrismaClient, Prisma } from "./generated/client/client.js";
 import {
@@ -37,10 +38,11 @@ import {
 } from "./server/httpsRedirectPolicy.js";
 import { issueBootstrapSetupCodeIfRequired } from "./auth/bootstrapSetupCode.js";
 import { fileURLToPath } from "node:url";
+import { logger } from "./utils/logger.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const backendRoot = path.resolve(__dirname, "../");
-console.log("Resolved DATABASE_URL:", process.env.DATABASE_URL);
+logger.info({ databaseUrl: process.env.DATABASE_URL }, "Resolved DATABASE_URL");
 
 const normalizeOrigins = (rawOrigins?: string | null): string[] => {
   const fallback = "http://localhost:6767";
@@ -65,7 +67,7 @@ const normalizeOrigins = (rawOrigins?: string | null): string[] => {
 };
 
 const allowedOrigins = normalizeOrigins(config.frontendUrl);
-console.log("Allowed origins:", allowedOrigins);
+logger.info({ allowedOrigins }, "Allowed origins");
 
 const isDev = (process.env.NODE_ENV || "development") !== "production";
 const isLocalDevOrigin = (origin: string): boolean => {
@@ -109,7 +111,7 @@ const initializeUploadDir = async () => {
   try {
     await fsPromises.mkdir(uploadDir, { recursive: true });
   } catch (error) {
-    console.error("Failed to create upload directory:", error);
+    logger.error({ err: error }, "Failed to create upload directory");
   }
 };
 
@@ -128,9 +130,9 @@ const trustProxyValue =
 app.set("trust proxy", trustProxyValue);
 
 if (trustProxyValue === true) {
-  console.log("[config] trust proxy: enabled (handles multiple proxy layers)");
+  logger.info("trust proxy: enabled (handles multiple proxy layers)");
 } else {
-  console.log(`[config] trust proxy: ${trustProxyValue}`);
+  logger.info({ trustProxy: trustProxyValue }, "trust proxy configured");
 }
 
 const httpServer = createServer(app);
@@ -149,10 +151,7 @@ const parseJsonField = <T>(
   try {
     return JSON.parse(rawValue) as T;
   } catch (error) {
-    console.warn("Failed to parse JSON field", {
-      error,
-      valuePreview: rawValue.slice(0, 50),
-    });
+    logger.warn({ err: error, valuePreview: rawValue.slice(0, 50) }, "Failed to parse JSON field");
     return fallback;
   }
 };
@@ -226,6 +225,30 @@ app.use((req, res, next) => {
   next();
 });
 
+app.use(
+  pinoHttp({
+    logger,
+    genReqId: (req) => req.headers["x-request-id"] as string,
+    customLogLevel: (_req, res, err) => {
+      if (res.statusCode >= 500 || err) return "error";
+      if (res.statusCode >= 400) return "warn";
+      return "debug";
+    },
+    serializers: {
+      req: (req) => ({
+        method: req.method,
+        url: req.url,
+      }),
+      res: (res) => ({
+        statusCode: res.statusCode,
+      }),
+    },
+    autoLogging: {
+      ignore: (req) => req.url === "/health" || req.url === "/api/health",
+    },
+  })
+);
+
 const shouldEnforceHttps =
   config.nodeEnv === "production" &&
   config.enforceHttpsRedirect &&
@@ -282,21 +305,6 @@ app.use(
 );
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
-
-app.use((req, res, next) => {
-  const requestId = req.headers["x-request-id"] || "unknown";
-  const userEmail = req.user?.email || req.headers[config.proxyAuthHeader] as string || "anonymous";
-
-  res.on("finish", () => {
-    if (res.statusCode >= 400) {
-      console.error(
-        `[ERROR] ${req.method} ${req.path} - ${res.statusCode} - User: ${userEmail} - IP: ${req.ip} - RequestID: ${requestId}`
-      );
-    }
-  });
-
-  next();
-});
 
 
 const RATE_LIMIT_WINDOW = 15 * 60 * 1000;
@@ -381,7 +389,7 @@ const drawingCreateSchema = drawingBaseSchema
         Object.assign(data, sanitized);
         return true;
       } catch (error) {
-        console.error("Sanitization failed:", error);
+        logger.error({ err: error }, "Sanitization failed");
         return false;
       }
     },
@@ -443,7 +451,7 @@ export const sanitizeDrawingUpdateData = (
     }
     return true;
   } catch (error) {
-    console.error("Sanitization failed:", error);
+    logger.error({ err: error }, "Sanitization failed");
     if (!needsSanitization) {
       return true;
     }
@@ -485,7 +493,7 @@ const validateSqliteHeader = (filePath: string): boolean => {
     fs.closeSync(fd);
 
     if (bytesRead < 16) {
-      console.warn("File too small to be a valid SQLite database");
+      logger.warn("File too small to be a valid SQLite database");
       return false;
     }
 
@@ -496,16 +504,12 @@ const validateSqliteHeader = (filePath: string): boolean => {
 
     const isValid = buffer.equals(expectedHeader);
     if (!isValid) {
-      console.warn("Invalid SQLite file header detected", {
-        filePath,
-        header: buffer.toString("hex"),
-        expected: expectedHeader.toString("hex"),
-      });
+      logger.warn({ filePath, header: buffer.toString("hex"), expected: expectedHeader.toString("hex") }, "Invalid SQLite file header detected");
     }
 
     return isValid;
   } catch (error) {
-    console.error("Failed to validate SQLite header:", error);
+    logger.error({ err: error }, "Failed to validate SQLite header");
     return false;
   }
 };
@@ -533,7 +537,7 @@ const verifyDatabaseIntegrityAsync = (filePath: string): Promise<boolean> => {
 
     worker.on("message", (isValid: boolean) => finish(isValid));
     worker.on("error", (err) => {
-      console.error("Worker error:", err);
+      logger.error({ err }, "Worker error");
       finish(false);
     });
     worker.on("exit", (code) => {
@@ -543,7 +547,7 @@ const verifyDatabaseIntegrityAsync = (filePath: string): Promise<boolean> => {
     });
 
     timeoutHandle = setTimeout(() => {
-      console.warn("Integrity check worker timed out", { filePath });
+      logger.warn({ filePath }, "Integrity check worker timed out");
       worker.terminate();
       finish(false);
     }, 10000);
@@ -558,7 +562,7 @@ const removeFileIfExists = async (filePath?: string) => {
     });
     await fsPromises.unlink(filePath);
   } catch (error) {
-    console.error("Failed to remove file", { filePath, error });
+    logger.error({ filePath, err: error }, "Failed to remove file");
   }
 };
 
@@ -630,7 +634,7 @@ if (enableOnboardingGate) {
         redirectTo: "/auth-setup",
       });
     } catch (error) {
-      console.error("Auth onboarding gate error:", error);
+      logger.error({ err: error }, "Auth onboarding gate error");
       return next();
     }
   });
@@ -699,10 +703,10 @@ setInterval(async () => {
       where: { createdAt: { lt: cutoff } },
     });
     if (result.count > 0) {
-      console.log(`[Cleanup] Deleted ${result.count} old drawing snapshots`);
+      logger.info({ deletedCount: result.count }, "Deleted old drawing snapshots");
     }
   } catch (err) {
-    console.error("[Cleanup] Snapshot cleanup failed:", err);
+    logger.error({ err }, "Snapshot cleanup failed");
   }
 }, 60 * 60 * 1000);
 
@@ -717,10 +721,8 @@ if (isMain) {
         reason: "startup",
       });
     } catch (error) {
-      console.error("Failed to issue bootstrap setup code:", error);
+      logger.error({ err: error }, "Failed to issue bootstrap setup code");
     }
-    console.log(`Server running on port ${PORT}`);
-    console.log(`Environment: ${config.nodeEnv}`);
-    console.log(`Frontend URL: ${config.frontendUrl}`);
+    logger.info({ port: PORT, env: config.nodeEnv, frontendUrl: config.frontendUrl }, "Server running");
   });
 }

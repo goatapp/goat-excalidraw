@@ -5,6 +5,7 @@ import { z } from "zod";
 import DOMPurify from "dompurify";
 import { JSDOM } from "jsdom";
 import crypto from "crypto";
+import { logger } from "./utils/logger.js";
 
 const window = new JSDOM("").window;
 const purify = DOMPurify(window);
@@ -544,7 +545,7 @@ export const sanitizeDrawingData = (data: {
       preview: sanitizedPreview,
     };
   } catch (error) {
-    console.error("Data sanitization failed:", error);
+    logger.error({ err: error }, "Data sanitization failed");
     throw new Error("Invalid or malicious drawing data detected");
   }
 };
@@ -568,7 +569,7 @@ export const validateImportedDrawing = (data: any): boolean => {
 
     return true;
   } catch (error) {
-    console.error("Imported drawing validation failed:", error);
+    logger.error({ err: error }, "Imported drawing validation failed");
     return false;
   }
 };
@@ -592,13 +593,9 @@ const getCsrfSecret = (): Buffer => {
 
   cachedCsrfSecret = crypto.randomBytes(32);
   const envLabel = process.env.NODE_ENV ? ` (${process.env.NODE_ENV})` : "";
-  console.warn(
-    `[SECURITY WARNING] CSRF_SECRET is not set${envLabel}.\n` +
-      `Using an ephemeral per-process secret.\n` +
-      `  - Tokens will expire on container restart\n` +
-      `  - Horizontal scaling (k8s) will NOT work\n` +
-      `  - Generate a secret: openssl rand -base64 32\n` +
-      `  - Set environment variable: CSRF_SECRET=<generated-secret>`
+  logger.warn(
+    { env: process.env.NODE_ENV },
+    "CSRF_SECRET is not set. Using an ephemeral per-process secret. Tokens will expire on restart and horizontal scaling will NOT work. Generate with: openssl rand -base64 32"
   );
   return cachedCsrfSecret;
 };

@@ -14,6 +14,7 @@ import {
 } from "./schemas.js";
 import { getEffectiveOidcJitProvisioning } from "./accessPolicy.js";
 import { hashTokenForStorage } from "./tokenSecurity.js";
+import { logger } from "../utils/logger.js";
 
 type RegisterAdminRoutesDeps = {
   router: express.Router;
@@ -177,7 +178,7 @@ export const registerAdminRoutes = (deps: RegisterAdminRoutesDeps) => {
 
       res.json({ registrationEnabled: updated.registrationEnabled });
     } catch (error) {
-      console.error("Registration toggle error:", error);
+      logger.error({ err: error }, "Registration toggle error");
       res.status(500).json({
         error: "Internal server error",
         message: "Failed to update registration setting",
@@ -224,7 +225,7 @@ export const registerAdminRoutes = (deps: RegisterAdminRoutesDeps) => {
         ),
       });
     } catch (error) {
-      console.error("OIDC JIT provisioning toggle error:", error);
+      logger.error({ err: error }, "OIDC JIT provisioning toggle error");
       res.status(500).json({
         error: "Internal server error",
         message: "Failed to update OIDC provisioning setting",
@@ -281,7 +282,7 @@ export const registerAdminRoutes = (deps: RegisterAdminRoutesDeps) => {
 
       res.json({ user: updated });
     } catch (error) {
-      console.error("Admin role update error:", error);
+      logger.error({ err: error }, "Admin role update error");
       res.status(500).json({
         error: "Internal server error",
         message: "Failed to update user role",
@@ -311,7 +312,7 @@ export const registerAdminRoutes = (deps: RegisterAdminRoutesDeps) => {
 
       res.json({ users });
     } catch (error) {
-      console.error("List users error:", error);
+      logger.error({ err: error }, "List users error");
       res.status(500).json({
         error: "Internal server error",
         message: "Failed to list users",
@@ -347,7 +348,7 @@ export const registerAdminRoutes = (deps: RegisterAdminRoutesDeps) => {
         },
       });
     } catch (error) {
-      console.error("List impersonation targets error:", error);
+      logger.error({ err: error }, "List impersonation targets error");
       res.status(500).json({
         error: "Internal server error",
         message: "Failed to list impersonation targets",
@@ -364,7 +365,7 @@ export const registerAdminRoutes = (deps: RegisterAdminRoutesDeps) => {
       const cfg = parseLoginRateLimitConfig(systemConfig);
       res.json({ config: cfg });
     } catch (error) {
-      console.error("Get login rate limit config error:", error);
+      logger.error({ err: error }, "Get login rate limit config error");
       res.status(500).json({
         error: "Internal server error",
         message: "Failed to fetch login rate limit config",
@@ -410,7 +411,7 @@ export const registerAdminRoutes = (deps: RegisterAdminRoutesDeps) => {
 
       res.json({ config: nextConfig });
     } catch (error) {
-      console.error("Update login rate limit config error:", error);
+      logger.error({ err: error }, "Update login rate limit config error");
       res.status(500).json({
         error: "Internal server error",
         message: "Failed to update login rate limit config",
@@ -448,7 +449,7 @@ export const registerAdminRoutes = (deps: RegisterAdminRoutesDeps) => {
 
       res.json({ ok: true });
     } catch (error) {
-      console.error("Reset login rate limit error:", error);
+      logger.error({ err: error }, "Reset login rate limit error");
       res.status(500).json({
         error: "Internal server error",
         message: "Failed to reset login rate limit",
@@ -541,7 +542,7 @@ export const registerAdminRoutes = (deps: RegisterAdminRoutesDeps) => {
 
       res.status(201).json({ user });
     } catch (error) {
-      console.error("Create user error:", error);
+      logger.error({ err: error }, "Create user error");
       res.status(500).json({
         error: "Internal server error",
         message: "Failed to create user",
@@ -650,7 +651,7 @@ export const registerAdminRoutes = (deps: RegisterAdminRoutesDeps) => {
           message: "User with this username already exists",
         });
       }
-      console.error("Update user error:", error);
+      logger.error({ err: error }, "Update user error");
       res.status(500).json({
         error: "Internal server error",
         message: "Failed to update user",
@@ -718,7 +719,7 @@ export const registerAdminRoutes = (deps: RegisterAdminRoutesDeps) => {
         });
       } catch {
         if (process.env.NODE_ENV === "development") {
-          console.debug("Refresh token revocation skipped (feature disabled or table missing)");
+          logger.debug("Refresh token revocation skipped (feature disabled or table missing)");
         }
       }
 
@@ -740,7 +741,7 @@ export const registerAdminRoutes = (deps: RegisterAdminRoutesDeps) => {
         tempPassword,
       });
     } catch (error) {
-      console.error("Reset password error:", error);
+      logger.error({ err: error }, "Reset password error");
       res.status(500).json({
         error: "Internal server error",
         message: "Failed to reset password",
@@ -793,7 +794,7 @@ export const registerAdminRoutes = (deps: RegisterAdminRoutesDeps) => {
           });
         } catch {
           if (process.env.NODE_ENV === "development") {
-            console.debug("Refresh token storage skipped (feature disabled or table missing)");
+            logger.debug("Refresh token storage skipped (feature disabled or table missing)");
           }
         }
       }
@@ -820,7 +821,7 @@ export const registerAdminRoutes = (deps: RegisterAdminRoutesDeps) => {
         },
       });
     } catch (error) {
-      console.error("Impersonation error:", error);
+      logger.error({ err: error }, "Impersonation error");
       res.status(500).json({
         error: "Internal server error",
         message: "Failed to impersonate user",

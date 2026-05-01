@@ -1,5 +1,6 @@
 import express from "express";
 import { Prisma } from "../../generated/client/client.js";
+import { logger } from "../../utils/logger.js";
 import { DashboardRouteDeps, SortDirection, SortField } from "./types.js";
 import {
   getUserTrashCollectionId,
@@ -483,9 +484,7 @@ export const registerDrawingRoutes = (
 
     const parsed = drawingUpdateSchema.safeParse(req.body);
     if (!parsed.success) {
-      if (config.nodeEnv === "development") {
-        console.error("[API] Validation failed", { id, errors: parsed.error.issues });
-      }
+      logger.debug({ id, errors: parsed.error.issues }, "Drawing update validation failed");
       return respondWithValidationErrors(res, parsed.error.issues);
     }
 
