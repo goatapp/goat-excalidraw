@@ -291,7 +291,7 @@ export const Settings: React.FC = () => {
 
             </div>
 
-            <details className="mt-8 bg-white/30 dark:bg-neutral-900/30 border border-slate-200/70 dark:border-neutral-800/70 rounded-2xl p-4 sm:p-6">
+            {user?.role === 'ADMIN' && <details className="mt-8 bg-white/30 dark:bg-neutral-900/30 border border-slate-200/70 dark:border-neutral-800/70 rounded-2xl p-4 sm:p-6">
                 <summary className="cursor-pointer select-none font-bold text-slate-800 dark:text-neutral-200">
                     Advanced / Legacy
                 </summary>
@@ -362,7 +362,7 @@ export const Settings: React.FC = () => {
                     </button>
 
                 </div>
-            </details>
+            </details>}
 
             <ConfirmModal
                 isOpen={authToggleConfirm.isOpen}
