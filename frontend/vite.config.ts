@@ -37,12 +37,26 @@ export default defineConfig(({ command }) => {
       chunkSizeWarningLimit: 1500,
       rolldownOptions: {
         output: {
-          manualChunks(id) { // TODO: revisit this currently just surfaces a warning about font subsetting
-            if (!id.includes("@excalidraw/excalidraw")) return;
-            if (id.includes("subset-worker") || id.includes("subset-shared")) return;
-            if (id.includes("chunk-Z5NKEFVG") || id.includes("chunk-SRAX5OIU"))
-              return "excalidraw-wasm";
-            return "excalidraw-core";
+          codeSplitting: {
+            groups: [
+              {
+                name: "excalidraw-worker",
+                test: (id: string) =>
+                  id.includes("@excalidraw/excalidraw") &&
+                  (id.includes("subset-worker") ||
+                    id.includes("subset-shared") ||
+                    id.includes("chunk-Z5NKEFVG") ||
+                    id.includes("chunk-SRAX5OIU") ||
+                    id.includes("chunk-A66AFZZU")),
+                priority: 10,
+                minSize: 0,
+              },
+              {
+                name: "excalidraw-core",
+                test: /@excalidraw[\\/]excalidraw/,
+                priority: 1,
+              },
+            ],
           },
         },
       },
