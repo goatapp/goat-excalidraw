@@ -843,6 +843,21 @@ export const Editor: React.FC = () => {
     return api;
   }, []);
 
+  const scrollToComment = useCallback((anchorX: number, anchorY: number) => {
+    const excalidraw = getAPI();
+    if (!excalidraw) return;
+    const appState = excalidraw.getAppState();
+    const zoom = appState.zoom.value;
+    const { width, height } = appState;
+    excalidraw.updateScene({
+      appState: {
+        scrollX: width / (2 * zoom) - anchorX,
+        scrollY: height / (2 * zoom) - anchorY,
+      },
+      captureUpdate: CaptureUpdateAction.NEVER,
+    });
+  }, [getAPI]);
+
   const setExcalidrawAPI = useCallback((api: any) => {
     // eslint-disable-next-line react-hooks/immutability -- ref set from Excalidraw callback, not during render
     excalidrawAPI.current = api;
@@ -1427,7 +1442,18 @@ export const Editor: React.FC = () => {
         });
 
         // Load comments and collaborators for @mentions
-        api.getComments(id).then(({ comments: c }) => setComments(c)).catch(() => {});
+        api.getComments(id).then(({ comments: c }) => {
+          setComments(c);
+          const params = new URLSearchParams(window.location.search);
+          const linkedCommentId = params.get('comment');
+          if (linkedCommentId && c.some(x => x.id === linkedCommentId)) {
+            setActiveCommentId(linkedCommentId);
+            const target = c.find(x => x.id === linkedCommentId);
+            if (target?.anchorX != null && target?.anchorY != null) {
+              setTimeout(() => scrollToComment(target.anchorX!, target.anchorY!), 500);
+            }
+          }
+        }).catch(() => {});
         api.getDrawingCollaborators(id).then(setMentionUsers).catch(() => {});
       } catch (err) {
         console.error('Failed to load drawing', err);
@@ -2248,13 +2274,7 @@ export const Editor: React.FC = () => {
               // Scroll canvas to the comment's anchor
               const c = comments.find(x => x.id === commentId);
               if (c?.anchorX != null && c?.anchorY != null) {
-                const excalidraw = getAPI();
-                if (excalidraw) {
-                  excalidraw.scrollToContent(undefined, {
-                    fitToContent: false,
-                    viewportZoomFactor: undefined,
-                  });
-                }
+                scrollToComment(c.anchorX, c.anchorY);
               }
             }}
             onStartPlacing={() => setIsPlacingComment(true)}
