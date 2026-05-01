@@ -5,6 +5,8 @@ import {
   Check,
   Link2,
   ClipboardCheck,
+  ChevronLeft,
+  ChevronRight,
   MoreVertical,
   Pencil,
   Trash2,
@@ -25,6 +27,9 @@ type Props = {
   onCommentUpdated: (comment: api.Comment) => void;
   onCommentDeleted: (commentId: string) => void;
   onReplyAdded: (parentId: string) => void;
+  onNavigate?: (direction: "prev" | "next") => void;
+  navIndex?: number;
+  navTotal?: number;
   users?: { id: string; name: string }[];
 };
 
@@ -68,6 +73,9 @@ export const CommentPopover: React.FC<Props> = ({
   onCommentUpdated,
   onCommentDeleted,
   onReplyAdded,
+  onNavigate,
+  navIndex,
+  navTotal,
   users,
 }) => {
   const [replies, setReplies] = useState<api.Comment[]>([]);
@@ -416,7 +424,29 @@ export const CommentPopover: React.FC<Props> = ({
     >
       <div className="w-80 bg-white dark:bg-neutral-900 border-2 border-neutral-200 dark:border-neutral-700 rounded-xl shadow-xl">
         {/* Header */}
-        <div className="flex items-center justify-end gap-1 px-3 pt-2">
+        <div className="flex items-center gap-1 px-3 pt-2">
+          {onNavigate && navTotal != null && navTotal > 1 && (
+            <div className="flex items-center gap-0.5 mr-auto">
+              <button
+                onClick={() => onNavigate("prev")}
+                className="p-0.5 rounded text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors"
+                title="Previous comment"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <button
+                onClick={() => onNavigate("next")}
+                className="p-0.5 rounded text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors"
+                title="Next comment"
+              >
+                <ChevronRight size={16} />
+              </button>
+              <span className="text-[10px] text-neutral-400 dark:text-neutral-500 ml-1 tabular-nums">
+                {navIndex != null ? navIndex + 1 : "?"}/{navTotal}
+              </span>
+            </div>
+          )}
+          <div className="flex items-center gap-1 ml-auto">
           {canEdit && (
             <button
               onClick={handleResolve}
@@ -456,6 +486,7 @@ export const CommentPopover: React.FC<Props> = ({
           >
             <X size={16} />
           </button>
+          </div>
         </div>
 
         {/* Content */}

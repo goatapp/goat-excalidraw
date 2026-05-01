@@ -695,6 +695,7 @@ export const Editor: React.FC = () => {
 
     // Comment real-time events
     socket.on('comment-added', (data: { comment: api.Comment }) => {
+      if (data.comment.user.id === user?.id) return;
       setComments(prev => {
         if (prev.some(c => c.id === data.comment.id)) return prev;
         if (data.comment.parentId) {
@@ -708,18 +709,21 @@ export const Editor: React.FC = () => {
       });
     });
     socket.on('comment-updated', (data: { comment: any }) => {
+      if (data.comment.user?.id === user?.id) return;
       setComments(prev =>
         prev.map(c => c.id === data.comment.id ? { ...c, body: data.comment.body, updatedAt: data.comment.updatedAt } : c)
       );
     });
-    socket.on('comment-deleted', (data: { commentId: string }) => {
+    socket.on('comment-deleted', (data: { commentId: string; parentId?: string }) => {
       setComments(prev => prev.filter(c => c.id !== data.commentId));
       setActiveCommentId(prev => prev === data.commentId ? null : prev);
     });
     socket.on('comment-resolved', (data: { commentId: string; resolved: boolean }) => {
-      setComments(prev =>
-        prev.map(c => c.id === data.commentId ? { ...c, resolved: data.resolved } : c)
-      );
+      if (data.commentId) {
+        setComments(prev =>
+          prev.map(c => c.id === data.commentId ? { ...c, resolved: data.resolved } : c)
+        );
+      }
     });
     socket.on('comment-reacted', (data: { commentId: string; emoji: string; userId: string; action: 'add' | 'remove' }) => {
       if (data.userId === user?.id) return;
@@ -1918,9 +1922,9 @@ export const Editor: React.FC = () => {
               title="Comments"
             >
               <MessageCircle size={20} />
-              {comments.length > 0 && (
+              {comments.filter(c => !c.resolved).length > 0 && (
                 <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-indigo-600 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
-                  {comments.length > 9 ? "9+" : comments.length}
+                  {comments.filter(c => !c.resolved).length > 9 ? "9+" : comments.filter(c => !c.resolved).length}
                 </span>
               )}
             </button>
@@ -2117,6 +2121,15 @@ export const Editor: React.FC = () => {
           const zoom = commentAppState.zoom.value;
           const vx = (c.anchorX + commentAppState.scrollX) * zoom;
           const vy = (c.anchorY + commentAppState.scrollY) * zoom;
+
+          const navOrder = [...comments]
+            .filter(x => x.anchorX != null && x.anchorY != null)
+            .sort((a, b) => {
+              if (a.resolved !== b.resolved) return a.resolved ? 1 : -1;
+              return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+            });
+          const navIndex = navOrder.findIndex(x => x.id === activeCommentId);
+
           return (
             <CommentPopover
               comment={c}
@@ -2137,6 +2150,19 @@ export const Editor: React.FC = () => {
                 setComments(prev => prev.map(x =>
                   x.id === parentId ? { ...x, replyCount: x.replyCount + 1 } : x
                 ));
+              }}
+              navIndex={navIndex}
+              navTotal={navOrder.length}
+              onNavigate={(dir) => {
+                if (navOrder.length === 0) return;
+                const next = dir === "next"
+                  ? (navIndex + 1) % navOrder.length
+                  : (navIndex - 1 + navOrder.length) % navOrder.length;
+                const target = navOrder[next];
+                setActiveCommentId(target.id);
+                if (target.anchorX != null && target.anchorY != null) {
+                  scrollToComment(target.anchorX, target.anchorY);
+                }
               }}
               users={mentionUsers}
             />

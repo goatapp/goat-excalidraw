@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { createPortal } from "react-dom";
-import { X, MessageCircle, Plus } from "lucide-react";
+import { X, MessageCircle, Plus, Search } from "lucide-react";
 import * as api from "../api";
 
 type Props = {
@@ -35,8 +35,19 @@ export const CommentPanel: React.FC<Props> = ({
   currentUserId,
 }) => {
   const [sortBy, setSortBy] = useState<"date" | "unresolved">("date");
+  const [searchQuery, setSearchQuery] = useState("");
 
-  const sorted = [...comments].sort((a, b) => {
+  const filtered = searchQuery.trim()
+    ? comments.filter((c) => {
+        const q = searchQuery.toLowerCase();
+        return (
+          c.body.toLowerCase().includes(q) ||
+          c.user.name.toLowerCase().includes(q)
+        );
+      })
+    : comments;
+
+  const sorted = [...filtered].sort((a, b) => {
     if (sortBy === "unresolved") {
       if (a.resolved !== b.resolved) return a.resolved ? 1 : -1;
     }
@@ -115,6 +126,22 @@ export const CommentPanel: React.FC<Props> = ({
           </button>
         </div>
 
+        {/* Search */}
+        {comments.length > 0 && (
+          <div className="px-4 py-2 border-b border-neutral-100 dark:border-neutral-800">
+            <div className="relative">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search comments..."
+                className="w-full pl-8 pr-3 py-1.5 text-sm bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 dark:placeholder-neutral-500 outline-none focus:border-indigo-400 dark:focus:border-indigo-500 transition-colors"
+              />
+            </div>
+          </div>
+        )}
+
         {/* Comment list */}
         <div className="flex-1 overflow-y-auto p-3">
           {comments.length === 0 ? (
@@ -124,6 +151,11 @@ export const CommentPanel: React.FC<Props> = ({
               <span className="text-xs text-center">
                 Click the + button to add a comment on the canvas.
               </span>
+            </div>
+          ) : sorted.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-neutral-400 gap-2">
+              <Search size={24} />
+              <span className="text-sm font-medium">No matches</span>
             </div>
           ) : (
             <div className="space-y-2">
