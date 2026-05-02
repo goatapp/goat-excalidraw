@@ -694,21 +694,51 @@ export { app, httpServer };
 const isMain = process.argv[1] &&
   import.meta.url === new URL(`file://${path.resolve(process.argv[1])}`).href;
 
-// Snapshot cleanup: delete snapshots older than 2 days (runs hourly)
-const SNAPSHOT_RETENTION_MS = 2 * 24 * 60 * 60 * 1000;
-setInterval(async () => {
+const cleanupSnapshots = async () => {
+  let totalDeleted = 0;
   try {
-    const cutoff = new Date(Date.now() - SNAPSHOT_RETENTION_MS);
-    const result = await prisma.drawingSnapshot.deleteMany({
+    const cutoff = new Date(Date.now() - config.snapshotMaxAgeDays * 24 * 60 * 60 * 1000);
+    const ageResult = await prisma.drawingSnapshot.deleteMany({
       where: { createdAt: { lt: cutoff } },
     });
-    if (result.count > 0) {
-      logger.info({ deletedCount: result.count }, "Deleted old drawing snapshots");
+    totalDeleted += ageResult.count;
+  } catch (err) {
+    logger.error({ err }, "Snapshot age cleanup failed");
+  }
+
+  try {
+    const maxPerDrawing = config.snapshotMaxPerDrawing;
+    const drawingsWithExcess = await prisma.$queryRawUnsafe<{ drawingId: string; cnt: number }[]>(
+      `SELECT drawingId, COUNT(*) as cnt FROM DrawingSnapshot GROUP BY drawingId HAVING cnt > ?`,
+      maxPerDrawing,
+    );
+
+    for (const { drawingId } of drawingsWithExcess) {
+      const keepBoundary = await prisma.drawingSnapshot.findMany({
+        where: { drawingId },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        skip: maxPerDrawing,
+        select: { createdAt: true },
+      });
+      if (keepBoundary.length > 0) {
+        const result = await prisma.drawingSnapshot.deleteMany({
+          where: { drawingId, createdAt: { lte: keepBoundary[0].createdAt } },
+        });
+        totalDeleted += result.count;
+      }
     }
   } catch (err) {
-    logger.error({ err }, "Snapshot cleanup failed");
+    logger.error({ err }, "Snapshot per-drawing cleanup failed");
   }
-}, 60 * 60 * 1000);
+
+  if (totalDeleted > 0) {
+    logger.info({ deletedCount: totalDeleted }, "Snapshot cleanup completed");
+  }
+};
+
+const cleanupIntervalMs = config.snapshotCleanupIntervalHours * 60 * 60 * 1000;
+setInterval(cleanupSnapshots, cleanupIntervalMs);
 
 if (isMain) {
   httpServer.listen(PORT, async () => {
@@ -724,5 +754,6 @@ if (isMain) {
       logger.error({ err: error }, "Failed to issue bootstrap setup code");
     }
     logger.info({ port: PORT, env: config.nodeEnv, frontendUrl: config.frontendUrl }, "Server running");
+    cleanupSnapshots();
   });
 }

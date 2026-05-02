@@ -31,6 +31,9 @@ interface Config {
   bootstrapSetupCodeMaxAttempts: number;
   proxyAuthHeader: string;
   proxyAdminEmails: Set<string>;
+  snapshotMaxAgeDays: number;
+  snapshotMaxPerDrawing: number;
+  snapshotCleanupIntervalHours: number;
 }
 
 export type AuthMode = "local" | "hybrid" | "oidc_enforced" | "proxy";
@@ -340,6 +343,9 @@ export const config: Config = {
       .map((e) => e.trim().toLowerCase())
       .filter((e) => e.length > 0)
   ),
+  snapshotMaxAgeDays: getRequiredEnvNumber("SNAPSHOT_MAX_AGE_DAYS", 30),
+  snapshotMaxPerDrawing: getRequiredEnvNumber("SNAPSHOT_MAX_PER_DRAWING", 50),
+  snapshotCleanupIntervalHours: getRequiredEnvNumber("SNAPSHOT_CLEANUP_INTERVAL_HOURS", 1),
 };
 
 if (config.nodeEnv === "production") {

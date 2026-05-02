@@ -828,4 +828,41 @@ export const registerAdminRoutes = (deps: RegisterAdminRoutesDeps) => {
       });
     }
   });
+
+  router.get("/snapshot-stats", requireAuth, async (req: Request, res: Response) => {
+    try {
+      if (!(await ensureAuthEnabled(res))) return;
+      if (!requireAdmin(req, res)) return;
+
+      const [totalCount, topDrawings] = await Promise.all([
+        prisma.drawingSnapshot.count(),
+        prisma.$queryRawUnsafe<{ drawingId: string; cnt: number }[]>(
+          `SELECT s.drawingId, COUNT(*) as cnt FROM DrawingSnapshot s GROUP BY s.drawingId ORDER BY cnt DESC LIMIT 10`,
+        ),
+      ]);
+
+      const drawingIds = topDrawings.map((d) => d.drawingId);
+      const drawings = drawingIds.length > 0
+        ? await prisma.drawing.findMany({
+            where: { id: { in: drawingIds } },
+            select: { id: true, name: true },
+          })
+        : [];
+      const nameMap = new Map(drawings.map((d) => [d.id, d.name]));
+
+      const topByCount = topDrawings.map((d) => ({
+        drawingId: d.drawingId,
+        drawingName: nameMap.get(d.drawingId) ?? "(deleted)",
+        snapshotCount: Number(d.cnt),
+      }));
+
+      res.json({ totalCount, topByCount });
+    } catch (error) {
+      logger.error({ err: error }, "Snapshot stats error");
+      res.status(500).json({
+        error: "Internal server error",
+        message: "Failed to fetch snapshot stats",
+      });
+    }
+  });
 };
