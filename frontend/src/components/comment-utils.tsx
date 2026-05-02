@@ -1,7 +1,9 @@
 import React from "react";
+import { replaceEmojiShortcodes } from "./emoji-shortcodes";
 
 export function renderBody(body: string): React.ReactNode {
-  const parts = body.split(/(@\[[^\]]+\])/g);
+  const resolved = replaceEmojiShortcodes(body, 0).text;
+  const parts = resolved.split(/(@\[[^\]]+\])/g);
   return parts.map((part, i) =>
     part.startsWith("@[") ? (
       <span

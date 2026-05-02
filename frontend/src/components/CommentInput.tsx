@@ -1,6 +1,7 @@
 import React, { useCallback, useRef, useState } from "react";
 import { Send, Smile, AtSign } from "lucide-react";
 import { EmojiPicker } from "./EmojiPicker";
+import { replaceEmojiShortcodes } from "./emoji-shortcodes";
 
 type Props = {
   onSubmit: (body: string) => Promise<void>;
@@ -49,11 +50,18 @@ export const CommentInput: React.FC<Props> = ({
   };
 
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const val = e.target.value;
+    const ta = textareaRef.current;
+    const raw = e.target.value;
+    const { text: val, cursorOffset } = replaceEmojiShortcodes(raw, ta?.selectionStart ?? raw.length);
     setText(val);
+    if (cursorOffset !== 0 && ta) {
+      requestAnimationFrame(() => {
+        const pos = (ta.selectionStart ?? val.length) + cursorOffset;
+        ta.setSelectionRange(pos, pos);
+      });
+    }
 
     // Auto-resize
-    const ta = textareaRef.current;
     if (ta) {
       ta.style.height = "auto";
       ta.style.height = Math.min(ta.scrollHeight, 120) + "px";
