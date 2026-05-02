@@ -829,6 +829,83 @@ export const registerAdminRoutes = (deps: RegisterAdminRoutesDeps) => {
     }
   });
 
+  router.get("/stats", requireAuth, async (req: Request, res: Response) => {
+    try {
+      if (!(await ensureAuthEnabled(res))) return;
+      if (!requireAdmin(req, res)) return;
+
+      const now = new Date();
+      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+      const [
+        totalDrawings,
+        totalUsers,
+        activeUsers7d,
+        activeUsers30d,
+        totalCollections,
+        totalSnapshots,
+        drawingsPerCollection,
+        drawingStorageRows,
+        snapshotStorageRows,
+      ] = await Promise.all([
+        prisma.drawing.count(),
+        prisma.user.count(),
+        prisma.user.count({ where: { isActive: true, updatedAt: { gte: sevenDaysAgo } } }),
+        prisma.user.count({ where: { isActive: true, updatedAt: { gte: thirtyDaysAgo } } }),
+        prisma.collection.count(),
+        prisma.drawingSnapshot.count(),
+        prisma.$queryRawUnsafe<{ collectionId: string | null; cnt: number }[]>(
+          `SELECT collectionId, COUNT(*) as cnt FROM Drawing GROUP BY collectionId ORDER BY cnt DESC LIMIT 10`,
+        ),
+        prisma.$queryRawUnsafe<{ bytes: number }[]>(
+          `SELECT COALESCE(SUM(LENGTH(elements) + LENGTH(appState) + LENGTH(files) + LENGTH(COALESCE(preview, ''))), 0) as bytes FROM Drawing`,
+        ),
+        prisma.$queryRawUnsafe<{ bytes: number }[]>(
+          `SELECT COALESCE(SUM(LENGTH(elements) + LENGTH(appState) + LENGTH(files)), 0) as bytes FROM DrawingSnapshot`,
+        ),
+      ]);
+
+      const drawingStorageBytes = Number(drawingStorageRows[0]?.bytes ?? 0);
+      const snapshotStorageBytes = Number(snapshotStorageRows[0]?.bytes ?? 0);
+
+      const collectionIds = drawingsPerCollection
+        .map((r) => r.collectionId)
+        .filter((id): id is string => id !== null);
+      const collections = collectionIds.length > 0
+        ? await prisma.collection.findMany({
+            where: { id: { in: collectionIds } },
+            select: { id: true, name: true },
+          })
+        : [];
+      const nameMap = new Map(collections.map((c) => [c.id, c.name]));
+
+      const topCollections = drawingsPerCollection.map((r) => ({
+        collectionId: r.collectionId,
+        collectionName: r.collectionId ? (nameMap.get(r.collectionId) ?? "(deleted)") : "(uncategorized)",
+        drawingCount: Number(r.cnt),
+      }));
+
+      res.json({
+        totalDrawings,
+        totalUsers,
+        activeUsers7d,
+        activeUsers30d,
+        totalCollections,
+        totalSnapshots,
+        drawingStorageBytes,
+        snapshotStorageBytes,
+        topCollections,
+      });
+    } catch (error) {
+      logger.error({ err: error }, "Admin stats error");
+      res.status(500).json({
+        error: "Internal server error",
+        message: "Failed to fetch stats",
+      });
+    }
+  });
+
   router.get("/snapshot-stats", requireAuth, async (req: Request, res: Response) => {
     try {
       if (!(await ensureAuthEnabled(res))) return;

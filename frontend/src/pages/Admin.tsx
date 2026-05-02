@@ -9,6 +9,7 @@ import { Toaster, toast } from 'sonner';
 import { getPasswordPolicy, validatePassword } from '../utils/passwordPolicy';
 import { PasswordRequirements } from '../components/PasswordRequirements';
 import { AccessControlCard } from './admin/AccessControlCard';
+import { AnalyticsCard } from './admin/AnalyticsCard';
 import { LoginRateLimitCard } from './admin/LoginRateLimitCard';
 import { UserActionModals } from './admin/UserActionModals';
 import { UsersTable } from './admin/UsersTable';
@@ -19,6 +20,18 @@ import {
   readImpersonationState,
   USER_KEY,
 } from '../utils/impersonation';
+
+type AdminStats = {
+  totalDrawings: number;
+  totalUsers: number;
+  activeUsers7d: number;
+  activeUsers30d: number;
+  totalCollections: number;
+  totalSnapshots: number;
+  drawingStorageBytes: number;
+  snapshotStorageBytes: number;
+  topCollections: { collectionId: string | null; collectionName: string; drawingCount: number }[];
+};
 
 type LoginRateLimitFormState = {
   enabled: boolean;
@@ -74,6 +87,9 @@ export const Admin: React.FC = () => {
   const lastAutoSaveAttemptKeyRef = useRef<string | null>(null);
   const [resetIdentifier, setResetIdentifier] = useState('');
   const [resetLoading, setResetLoading] = useState(false);
+
+  const [adminStats, setAdminStats] = useState<AdminStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
 
   const normalizedLoginRateLimit = useMemo<LoginRateLimitFormState>(
     () => ({
@@ -330,12 +346,29 @@ export const Admin: React.FC = () => {
     }
   };
 
+  const loadAdminStats = async () => {
+    setStatsLoading(true);
+    try {
+      const response = await api.api.get<AdminStats>('/auth/stats');
+      setAdminStats(response.data);
+    } catch (err: unknown) {
+      let message = 'Failed to load analytics';
+      if (api.isAxiosError(err)) {
+        message = err.response?.data?.message || err.response?.data?.error || message;
+      }
+      setError(message);
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!authEnabled || !isAdmin) return;
     void loadCollections();
     void loadUsers();
     void loadLoginRateLimitConfig();
     void loadRegistrationStatus();
+    void loadAdminStats();
   }, [authEnabled, isAdmin]);
 
   useEffect(() => {
@@ -720,6 +753,12 @@ export const Admin: React.FC = () => {
           </form>
         </div>
       )}
+
+      <AnalyticsCard
+        stats={adminStats}
+        loading={statsLoading}
+        onRefresh={loadAdminStats}
+      />
 
       <AccessControlCard
         registrationEnabled={registrationEnabled}
