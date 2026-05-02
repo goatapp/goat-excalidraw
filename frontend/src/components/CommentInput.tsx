@@ -1,4 +1,5 @@
 import React, { useCallback, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Send, Smile, AtSign } from "lucide-react";
 import { EmojiPicker } from "./EmojiPicker";
 import { replaceEmojiShortcodes } from "./emoji-shortcodes";
@@ -8,6 +9,8 @@ type Props = {
   placeholder?: string;
   autoFocus?: boolean;
   users?: { id: string; name: string }[];
+  initialValue?: string;
+  onCancel?: () => void;
 };
 
 export const CommentInput: React.FC<Props> = ({
@@ -15,13 +18,16 @@ export const CommentInput: React.FC<Props> = ({
   placeholder = "Add a comment...",
   autoFocus = false,
   users,
+  initialValue = "",
+  onCancel,
 }) => {
-  const [text, setText] = useState("");
+  const [text, setText] = useState(initialValue);
   const [submitting, setSubmitting] = useState(false);
   const [showEmoji, setShowEmoji] = useState(false);
   const [showMentions, setShowMentions] = useState(false);
   const [mentionFilter, setMentionFilter] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const handleSubmit = useCallback(async () => {
     const trimmed = text.trim();
@@ -44,8 +50,12 @@ export const CommentInput: React.FC<Props> = ({
       handleSubmit();
     }
     if (e.key === "Escape") {
-      setShowEmoji(false);
-      setShowMentions(false);
+      if (showEmoji || showMentions) {
+        setShowEmoji(false);
+        setShowMentions(false);
+      } else if (onCancel) {
+        onCancel();
+      }
     }
   };
 
@@ -107,7 +117,7 @@ export const CommentInput: React.FC<Props> = ({
   );
 
   return (
-    <div className="relative">
+    <div ref={containerRef} className="relative">
       <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 focus-within:border-indigo-400 dark:focus-within:border-indigo-500 transition-colors">
         <textarea
           ref={textareaRef}
@@ -145,28 +155,61 @@ export const CommentInput: React.FC<Props> = ({
               </button>
             )}
           </div>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={!text.trim() || submitting}
-            className="p-1 rounded text-indigo-500 hover:text-indigo-600 dark:text-indigo-400 dark:hover:text-indigo-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-          >
-            <Send size={16} />
-          </button>
+          {onCancel ? (
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={onCancel}
+                className="px-2 py-0.5 text-xs bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 rounded hover:bg-neutral-300 dark:hover:bg-neutral-600"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={!text.trim() || submitting}
+                className="px-2 py-0.5 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                Save
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={!text.trim() || submitting}
+              className="p-1 rounded text-indigo-500 hover:text-indigo-600 dark:text-indigo-400 dark:hover:text-indigo-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              <Send size={16} />
+            </button>
+          )}
         </div>
       </div>
 
-      {showEmoji && (
-        <div className="absolute bottom-full left-0 mb-2 z-50">
+      {showEmoji && containerRef.current && createPortal(
+        <div
+          className="fixed z-[300]"
+          style={(() => {
+            const rect = containerRef.current!.getBoundingClientRect();
+            return { left: rect.left, bottom: window.innerHeight - rect.top + 8 };
+          })()}
+        >
           <EmojiPicker
             onSelect={insertEmoji}
             onClose={() => setShowEmoji(false)}
           />
-        </div>
+        </div>,
+        document.body
       )}
 
-      {showMentions && filteredUsers && filteredUsers.length > 0 && (
-        <div className="absolute bottom-full left-0 mb-2 z-50 w-56 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+      {showMentions && filteredUsers && filteredUsers.length > 0 && containerRef.current && createPortal(
+        <div
+          className="fixed z-[300] w-56 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-lg max-h-40 overflow-y-auto"
+          style={(() => {
+            const rect = containerRef.current!.getBoundingClientRect();
+            return { left: rect.left, bottom: window.innerHeight - rect.top + 8 };
+          })()}
+        >
           {filteredUsers.map((user) => (
             <button
               key={user.id}
@@ -176,7 +219,8 @@ export const CommentInput: React.FC<Props> = ({
               @{user.name}
             </button>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

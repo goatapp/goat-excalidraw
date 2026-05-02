@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { renderBody } from "./comment-utils";
+import { renderBody, displayBody, encodeMentions } from "./comment-utils";
 import { createPortal } from "react-dom";
 import {
   X,
@@ -68,13 +68,14 @@ export const CommentPopover: React.FC<Props> = ({
   const [loadingReplies, setLoadingReplies] = useState(false);
   const [showMenu, setShowMenu] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editText, setEditText] = useState("");
+
   const [showReactionPicker, setShowReactionPicker] = useState<string | null>(
     null
   );
   const [linkCopied, setLinkCopied] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const menuBtnRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+  const reactionBtnRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
 
   const openMenu = (commentId: string) => {
     if (showMenu === commentId) {
@@ -160,13 +161,13 @@ export const CommentPopover: React.FC<Props> = ({
     setShowMenu(null);
   };
 
-  const handleEdit = async (commentId: string) => {
-    if (!editText.trim()) return;
+  const handleEdit = async (commentId: string, body: string) => {
+    if (!body.trim()) return;
     try {
       const { comment: updated } = await api.updateComment(
         drawingId,
         commentId,
-        { body: editText.trim() }
+        { body: encodeMentions(body.trim(), users?.map((u) => u.name) ?? []) }
       );
       if (commentId === comment.id) {
         onCommentUpdated({ ...comment, body: updated.body });
@@ -299,7 +300,6 @@ export const CommentPopover: React.FC<Props> = ({
                     <button
                       onClick={() => {
                         setEditingId(c.id);
-                        setEditText(c.body);
                         closeMenu();
                       }}
                       className="w-full text-left px-3 py-1.5 text-sm flex items-center gap-2 hover:bg-neutral-100 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
@@ -324,29 +324,13 @@ export const CommentPopover: React.FC<Props> = ({
 
         <div className="mt-1.5 text-sm text-neutral-700 dark:text-neutral-300">
           {editingId === c.id ? (
-            <div>
-              <textarea
-                value={editText}
-                onChange={(e) => setEditText(e.target.value)}
-                className="w-full px-2 py-1 text-sm bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded resize-none outline-none text-neutral-900 dark:text-neutral-100"
-                rows={2}
-                autoFocus
-              />
-              <div className="flex gap-1 mt-1">
-                <button
-                  onClick={() => handleEdit(c.id)}
-                  className="px-2 py-0.5 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700"
-                >
-                  Save
-                </button>
-                <button
-                  onClick={() => setEditingId(null)}
-                  className="px-2 py-0.5 text-xs bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 rounded hover:bg-neutral-300 dark:hover:bg-neutral-600"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
+            <CommentInput
+              onSubmit={async (body) => { await handleEdit(c.id, body); }}
+              onCancel={() => setEditingId(null)}
+              initialValue={displayBody(c.body)}
+              autoFocus
+              users={users}
+            />
           ) : (
             <p className="whitespace-pre-wrap break-words">
               {renderBody(c.body)}
@@ -372,8 +356,9 @@ export const CommentPopover: React.FC<Props> = ({
               </button>
             ))}
             {currentUserId && (
-              <div className="relative">
+              <>
                 <button
+                  ref={(el) => { if (el) reactionBtnRefs.current.set(c.id, el); }}
                   onClick={() =>
                     setShowReactionPicker(
                       showReactionPicker === c.id ? null : c.id
@@ -383,15 +368,24 @@ export const CommentPopover: React.FC<Props> = ({
                 >
                   <Smile size={14} />
                 </button>
-                {showReactionPicker === c.id && (
-                  <div className="absolute bottom-full left-0 mb-1 z-50">
+                {showReactionPicker === c.id && createPortal(
+                  <div
+                    className="fixed z-[300]"
+                    style={(() => {
+                      const btn = reactionBtnRefs.current.get(c.id);
+                      if (!btn) return {};
+                      const rect = btn.getBoundingClientRect();
+                      return { left: rect.left, bottom: window.innerHeight - rect.top + 4 };
+                    })()}
+                  >
                     <EmojiPicker
                       onSelect={(emoji) => handleReaction(c.id, emoji)}
                       onClose={() => setShowReactionPicker(null)}
                     />
-                  </div>
+                  </div>,
+                  document.body
                 )}
-              </div>
+              </>
             )}
           </div>
         )}
