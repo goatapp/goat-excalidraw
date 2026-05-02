@@ -218,33 +218,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
             />
           </div>
 
-          <div className="space-y-1">
-            <div className="flex items-center justify-between px-6 pb-2 group/header">
-              <span className="text-[11px] font-bold text-slate-400 dark:text-neutral-500 uppercase tracking-wider">Collections</span>
-              <button
-                onClick={(e) => { e.stopPropagation(); setIsCreating(true); }}
-                className="p-1 text-slate-400 dark:text-neutral-500 hover:text-indigo-600 dark:hover:text-neutral-200 hover:bg-indigo-50 dark:hover:bg-neutral-800 rounded-md transition-all opacity-0 group-hover/header:opacity-100"
-                title="New Collection"
-              >
-                <Plus size={14} strokeWidth={2.5} />
-              </button>
-            </div>
+          {(() => {
+            const visible = collections.filter(c => c.name !== 'Trash');
+            const selfCollections = visible.filter(c => c.isOwner !== false).sort((a, b) => a.name.localeCompare(b.name));
+            const sharedCollections = visible.filter(c => c.isOwner === false && !c.id.startsWith('team_')).sort((a, b) => a.name.localeCompare(b.name));
+            const teamCollections = visible.filter(c => c.isOwner === false && c.id.startsWith('team_')).sort((a, b) => a.name.localeCompare(b.name));
 
-            {isCreating && (
-              <form onSubmit={handleCreateSubmit} className="mb-2 px-4" onClick={e => e.stopPropagation()}>
-                <input
-                  autoFocus
-                  type="text"
-                  value={newCollectionName}
-                  onChange={(e) => setNewCollectionName(e.target.value)}
-                  placeholder="New Collection..."
-                  className="w-full px-3 py-2 text-sm bg-white dark:bg-neutral-800 border-2 border-black dark:border-neutral-700 rounded-lg shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)] outline-none placeholder:text-slate-400 dark:placeholder:text-neutral-500 font-bold text-slate-900 dark:text-white"
-                  onBlur={() => !newCollectionName && setIsCreating(false)}
-                />
-              </form>
-            )}
-
-            {collections.filter(c => c.name !== 'Trash').map((collection) => {
+            const renderCollection = (collection: Collection) => {
               const isOwned = collection.isOwner !== false;
               const canEdit = isOwned || collection.sharedRole === 'edit';
               return (
@@ -284,8 +264,59 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   ) : undefined}
                 />
               );
-            })}
-          </div>
+            };
+
+            return (
+              <>
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between px-6 pb-2 group/header">
+                    <span className="text-[11px] font-bold text-slate-400 dark:text-neutral-500 uppercase tracking-wider">Collections</span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setIsCreating(true); }}
+                      className="p-1 text-slate-400 dark:text-neutral-500 hover:text-indigo-600 dark:hover:text-neutral-200 hover:bg-indigo-50 dark:hover:bg-neutral-800 rounded-md transition-all opacity-0 group-hover/header:opacity-100"
+                      title="New Collection"
+                    >
+                      <Plus size={14} strokeWidth={2.5} />
+                    </button>
+                  </div>
+
+                  {isCreating && (
+                    <form onSubmit={handleCreateSubmit} className="mb-2 px-4" onClick={e => e.stopPropagation()}>
+                      <input
+                        autoFocus
+                        type="text"
+                        value={newCollectionName}
+                        onChange={(e) => setNewCollectionName(e.target.value)}
+                        placeholder="New Collection..."
+                        className="w-full px-3 py-2 text-sm bg-white dark:bg-neutral-800 border-2 border-black dark:border-neutral-700 rounded-lg shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)] outline-none placeholder:text-slate-400 dark:placeholder:text-neutral-500 font-bold text-slate-900 dark:text-white"
+                        onBlur={() => !newCollectionName && setIsCreating(false)}
+                      />
+                    </form>
+                  )}
+
+                  {selfCollections.map(renderCollection)}
+                </div>
+
+                {sharedCollections.length > 0 && (
+                  <div className="space-y-1 border-t border-slate-200/50 dark:border-slate-700/50 pt-4 sm:pt-8">
+                    <div className="px-6 pb-2 text-[11px] font-bold text-slate-400 dark:text-neutral-500 uppercase tracking-wider">
+                      Shared
+                    </div>
+                    {sharedCollections.map(renderCollection)}
+                  </div>
+                )}
+
+                {teamCollections.length > 0 && (
+                  <div className="space-y-1 border-t border-slate-200/50 dark:border-slate-700/50 pt-4 sm:pt-8">
+                    <div className="px-6 pb-2 text-[11px] font-bold text-slate-400 dark:text-neutral-500 uppercase tracking-wider">
+                      Team
+                    </div>
+                    {teamCollections.map(renderCollection)}
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </nav>
 
         <div className="px-3 pt-3 sm:pt-4 pb-3 sm:pb-4 border-t border-slate-200/50 dark:border-slate-700/50 space-y-2">
