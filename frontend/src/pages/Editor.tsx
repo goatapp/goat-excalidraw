@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, Download, Loader2, ChevronUp, ChevronDown, Share2, History, Video, MessageCircle } from 'lucide-react';
+import { ArrowLeft, Download, Loader2, ChevronUp, ChevronDown, Share2, History, Video, MessageCircle, Terminal } from 'lucide-react';
 import clsx from 'clsx';
 import {
   Excalidraw,
@@ -1998,6 +1998,19 @@ export const Editor: React.FC = () => {
             title="Export drawing"
           >
             <Download size={20} />
+          </button>
+          <button
+            onClick={() => {
+              const name = drawingName.replace(/'/g, "\\'");
+              const cmd = `claude "I'm working on the '${name}' board (id: ${id}). Read the board to see what's on it using MCP, then ask me what I'd like to do."`;
+              navigator.clipboard.writeText(cmd).then(() => {
+                toast.success('Claude Code command copied — paste in your terminal');
+              });
+            }}
+            className="p-2 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-lg text-gray-600 dark:text-gray-300 transition-colors"
+            title="Launch Claude Code"
+          >
+            <Terminal size={20} />
           </button>
 
           <div className="h-6 w-px bg-gray-300 dark:bg-gray-700" />
