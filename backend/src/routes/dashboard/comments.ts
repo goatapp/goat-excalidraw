@@ -435,6 +435,59 @@ export const registerCommentRoutes = (
     })
   );
 
+  // PATCH /drawings/:id/comments/:commentId/move
+  const commentMoveSchema = z.object({
+    anchorX: z.number(),
+    anchorY: z.number(),
+  });
+
+  app.patch(
+    "/drawings/:id/comments/:commentId/move",
+    optionalAuth,
+    asyncHandler(async (req, res) => {
+      const principal = await getRequestPrincipal(req);
+      const drawingId = req.params.id as string;
+      const commentId = req.params.commentId as string;
+      const access = await getDrawingAccess({
+        prisma,
+        principal,
+        drawingId,
+      });
+      if (!canEditDrawing(access)) {
+        if (respondWithAuthErrorIfPresent(req, res)) return;
+        return res.status(404).json({ error: "Drawing not found" });
+      }
+
+      const parsed = commentMoveSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid position" });
+      }
+
+      const comment = await prisma.comment.findFirst({
+        where: { id: commentId, drawingId, parentId: null },
+      });
+      if (!comment) {
+        return res.status(404).json({ error: "Comment not found" });
+      }
+
+      const updated = await prisma.comment.update({
+        where: { id: commentId },
+        data: { anchorX: parsed.data.anchorX, anchorY: parsed.data.anchorY },
+        include: {
+          user: { select: { id: true, name: true, email: true } },
+        },
+      });
+
+      io?.to(`drawing_${drawingId}`).emit("comment-moved", {
+        commentId,
+        anchorX: updated.anchorX,
+        anchorY: updated.anchorY,
+      });
+
+      return res.json({ comment: updated });
+    })
+  );
+
   // POST /drawings/:id/comments/:commentId/reactions — add reaction
   app.post(
     "/drawings/:id/comments/:commentId/reactions",

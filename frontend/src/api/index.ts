@@ -805,6 +805,18 @@ export const resolveComment = async (
   return response.data;
 };
 
+export const moveComment = async (
+  drawingId: string,
+  commentId: string,
+  params: { anchorX: number; anchorY: number }
+): Promise<{ comment: Comment }> => {
+  const response = await api.patch(
+    `/drawings/${drawingId}/comments/${commentId}/move`,
+    params
+  );
+  return response.data;
+};
+
 export const addReaction = async (
   drawingId: string,
   commentId: string,

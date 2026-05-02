@@ -29,6 +29,8 @@ type Props = {
   onCommentDeleted: (commentId: string) => void;
   onReplyAdded: (parentId: string) => void;
   onNavigate?: (direction: "prev" | "next") => void;
+  onCommentMoved?: (commentId: string, anchorX: number, anchorY: number) => void;
+  appState?: { scrollX: number; scrollY: number; zoom: { value: number } };
   navIndex?: number;
   navTotal?: number;
   users?: { id: string; name: string }[];
@@ -60,6 +62,8 @@ export const CommentPopover: React.FC<Props> = ({
   onCommentDeleted,
   onReplyAdded,
   onNavigate,
+  onCommentMoved,
+  appState,
   navIndex,
   navTotal,
   users,
@@ -74,8 +78,58 @@ export const CommentPopover: React.FC<Props> = ({
   );
   const [linkCopied, setLinkCopied] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ startX: number; startY: number } | null>(null);
   const menuBtnRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
   const reactionBtnRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+
+  const rafRef = useRef<number>(0);
+
+  const handleDragStart = useCallback((e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest("button")) return;
+    e.preventDefault();
+    dragRef.current = { startX: e.clientX, startY: e.clientY };
+    const el = popoverRef.current;
+    if (!el) return;
+    el.style.willChange = "transform";
+    el.style.transition = "none";
+
+    const handleMouseMove = (ev: MouseEvent) => {
+      if (!dragRef.current) return;
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(() => {
+        if (!dragRef.current) return;
+        const dx = ev.clientX - dragRef.current.startX;
+        const dy = ev.clientY - dragRef.current.startY;
+        el.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
+      });
+    };
+
+    const handleMouseUp = (ev: MouseEvent) => {
+      cancelAnimationFrame(rafRef.current);
+      if (dragRef.current && onCommentMoved && appState && comment.anchorX != null && comment.anchorY != null) {
+        const dx = ev.clientX - dragRef.current.startX;
+        const dy = ev.clientY - dragRef.current.startY;
+        if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+          const zoom = appState.zoom.value;
+          onCommentMoved(
+            comment.id,
+            comment.anchorX + dx / zoom,
+            comment.anchorY + dy / zoom
+          );
+        }
+      }
+      el.style.transform = "";
+      el.style.willChange = "";
+      el.style.transition = "";
+      dragRef.current = null;
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  }, [onCommentMoved, appState, comment.id, comment.anchorX, comment.anchorY]);
 
   const openMenu = (commentId: string) => {
     if (showMenu === commentId) {
@@ -395,6 +449,7 @@ export const CommentPopover: React.FC<Props> = ({
 
   return (
     <div
+      ref={popoverRef}
       className="absolute z-[80] animate-in fade-in zoom-in-95 duration-150"
       style={{
         left: position.x + 20,
@@ -404,7 +459,10 @@ export const CommentPopover: React.FC<Props> = ({
     >
       <div className="w-80 bg-white dark:bg-neutral-900 border-2 border-neutral-200 dark:border-neutral-700 rounded-xl shadow-xl">
         {/* Header */}
-        <div className="flex items-center gap-1 px-3 pt-2">
+        <div
+          className="flex items-center gap-1 px-3 pt-2 cursor-grab active:cursor-grabbing"
+          onMouseDown={handleDragStart}
+        >
           {onNavigate && navTotal != null && navTotal > 1 && (
             <div className="flex items-center gap-0.5 mr-auto">
               <button

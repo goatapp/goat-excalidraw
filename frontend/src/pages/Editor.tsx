@@ -749,6 +749,12 @@ export const Editor: React.FC = () => {
       );
     });
 
+    socket.on('comment-moved', (data: { commentId: string; anchorX: number; anchorY: number }) => {
+      setComments(prev =>
+        prev.map(c => c.id === data.commentId ? { ...c, anchorX: data.anchorX, anchorY: data.anchorY } : c)
+      );
+    });
+
     const renderLoop = () => {
       const api = getAPI();
       if (cursorBuffer.current.size > 0 && api) {
@@ -800,6 +806,7 @@ export const Editor: React.FC = () => {
       socket.off('comment-deleted');
       socket.off('comment-resolved');
       socket.off('comment-reacted');
+      socket.off('comment-moved');
       socket.disconnect();
       socketRef.current = null;
       if (remoteFlushRafIdRef.current !== null) {
@@ -861,6 +868,18 @@ export const Editor: React.FC = () => {
       captureUpdate: CaptureUpdateAction.NEVER,
     });
   }, [getAPI]);
+
+  const handleCommentMoved = useCallback(async (commentId: string, anchorX: number, anchorY: number) => {
+    if (!id) return;
+    setComments(prev => prev.map(c =>
+      c.id === commentId ? { ...c, anchorX, anchorY } : c
+    ));
+    try {
+      await api.moveComment(id, commentId, { anchorX, anchorY });
+    } catch {
+      api.getComments(id).then(({ comments: c }) => setComments(c)).catch(() => {});
+    }
+  }, [id]);
 
   const setExcalidrawAPI = useCallback((api: any) => {
     // eslint-disable-next-line react-hooks/immutability -- ref set from Excalidraw callback, not during render
@@ -2151,6 +2170,8 @@ export const Editor: React.FC = () => {
                   x.id === parentId ? { ...x, replyCount: x.replyCount + 1 } : x
                 ));
               }}
+              onCommentMoved={handleCommentMoved}
+              appState={commentAppState ?? undefined}
               navIndex={navIndex}
               navTotal={navOrder.length}
               onNavigate={(dir) => {
