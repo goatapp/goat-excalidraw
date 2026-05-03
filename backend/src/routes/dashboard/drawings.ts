@@ -1,6 +1,8 @@
+import crypto from "crypto";
 import express from "express";
 import { Prisma } from "../../generated/client/client.js";
 import { logger } from "../../utils/logger.js";
+import { cleanupRemovedS3Files } from "../../fileProcessing.js";
 import { DashboardRouteDeps, SortDirection, SortField } from "./types.js";
 import {
   getUserTrashCollectionId,
@@ -42,6 +44,7 @@ export const registerDrawingRoutes = (
     MAX_PAGE_SIZE,
     config,
     logAuditEvent,
+    processFilesForS3,
   } = deps;
 
   const getRequestPrincipal = async (
@@ -447,15 +450,23 @@ export const registerDrawingRoutes = (
       await ensureTrashCollection(prisma, req.user.id);
     }
 
+    const drawingId = crypto.randomUUID();
+    const processedFiles = await processFilesForS3(
+      (payload.files ?? {}) as Record<string, any>,
+      req.user.id,
+      drawingId
+    );
+
     const newDrawing = await prisma.drawing.create({
       data: {
+        id: drawingId,
         name: drawingName,
         elements: JSON.stringify(payload.elements),
         appState: JSON.stringify(payload.appState),
         userId: req.user.id,
         collectionId: targetCollectionId,
         preview: payload.preview ?? null,
-        files: JSON.stringify(payload.files ?? {}),
+        files: JSON.stringify(processedFiles),
       },
     });
     invalidateDrawingsCache();
@@ -510,7 +521,16 @@ export const registerDrawingRoutes = (
     if (payload.name !== undefined) data.name = payload.name;
     if (payload.elements !== undefined) data.elements = JSON.stringify(payload.elements);
     if (payload.appState !== undefined) data.appState = JSON.stringify(payload.appState);
-    if (payload.files !== undefined) data.files = JSON.stringify(payload.files);
+    let previousFiles: Record<string, any> | null = null;
+    if (payload.files !== undefined) {
+      previousFiles = parseJsonField(existingDrawing.files, {});
+      const processedFiles = await processFilesForS3(
+        payload.files as Record<string, any>,
+        existingDrawing.userId,
+        id
+      );
+      data.files = JSON.stringify(processedFiles);
+    }
     if (payload.preview !== undefined) data.preview = payload.preview;
 
     if (payload.collectionId !== undefined) {
@@ -616,6 +636,13 @@ export const registerDrawingRoutes = (
     }
     invalidateDrawingsCache();
 
+    if (previousFiles) {
+      const currentFiles = parseJsonField(updatedDrawing.files, {});
+      cleanupRemovedS3Files(previousFiles, currentFiles, prisma).catch((err) => {
+        logger.error({ err, drawingId: id }, "S3 file cleanup failed");
+      });
+    }
+
     return res.json({
       ...updatedDrawing,
       collectionId: toPublicTrashCollectionId(updatedDrawing.collectionId, ownerUserId),
@@ -633,6 +660,8 @@ export const registerDrawingRoutes = (
     const drawing = await prisma.drawing.findFirst({ where: { id, userId: req.user.id } });
     if (!drawing) return res.status(404).json({ error: "Drawing not found" });
 
+    const drawingFiles = parseJsonField(drawing.files, {});
+
     const deleteResult = await prisma.drawing.deleteMany({
       where: { id, userId: req.user.id },
     });
@@ -640,6 +669,10 @@ export const registerDrawingRoutes = (
       return res.status(404).json({ error: "Drawing not found" });
     }
     invalidateDrawingsCache();
+
+    cleanupRemovedS3Files(drawingFiles, {}, prisma).catch((err) => {
+      logger.error({ err, drawingId: id }, "S3 file cleanup on delete failed");
+    });
 
     if (config.enableAuditLogging) {
       await logAuditEvent({

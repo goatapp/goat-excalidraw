@@ -58,6 +58,32 @@ type DroppedImageData = {
   height: number;
 };
 
+const resolveS3Files = async (
+  files: Record<string, any>,
+): Promise<Record<string, any>> => {
+  const entries = Object.entries(files);
+  const needsFetch = entries.filter(
+    ([, f]) => typeof f?.dataURL === "string" && f.dataURL.startsWith("/api/files/"),
+  );
+  if (needsFetch.length === 0) return files;
+
+  const resolved = { ...files };
+  await Promise.all(
+    needsFetch.map(async ([key, file]) => {
+      try {
+        const path = file.dataURL.replace(/^\/api\//, "/");
+        const resp = await api.api.get(path, { responseType: "blob" });
+        const blob = resp.data as Blob;
+        const blobUrl = URL.createObjectURL(blob);
+        resolved[key] = { ...file, dataURL: blobUrl };
+      } catch {
+        // leave as-is — image will fail to render but drawing still loads
+      }
+    }),
+  );
+  return resolved;
+};
+
 const toFiniteNumber = (value: any): number => {
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
   const n = Number(value);
@@ -279,6 +305,7 @@ export const Editor: React.FC = () => {
   const pendingRemoteElementOrderRef = useRef<string[] | null>(null);
   const remoteFlushScheduledRef = useRef(false);
   const remoteFlushRafIdRef = useRef<number | null>(null);
+  const initialFileIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     setAutoHideEnabled(getStoredAutoHideEnabled());
@@ -563,7 +590,9 @@ export const Editor: React.FC = () => {
         });
 
         if (shouldUpdateFiles && typeof api.addFiles === "function") {
-          api.addFiles(Object.values(incomingFiles));
+          resolveS3Files(incomingFiles).then((resolved) => {
+            api.addFiles(Object.values(resolved));
+          });
         }
 
         if (mergedElements) {
@@ -1098,7 +1127,8 @@ export const Editor: React.FC = () => {
             }
             lastPersistedElementsRef.current = normalizedElementsForSave;
             if (filesChangedSincePersist) {
-              lastPersistedFilesRef.current = persistableFiles;
+              const serverFiles = updated.files || persistableFiles;
+              lastPersistedFilesRef.current = serverFiles;
             }
             console.log("[Editor] Save complete", { drawingId });
           } catch (err) {
@@ -1332,7 +1362,10 @@ export const Editor: React.FC = () => {
         latestFilesRef.current = nextFiles;
       }
       if (shouldSyncFiles) {
-        lastSyncedFilesRef.current = nextFiles;
+        lastSyncedFilesRef.current = {
+          ...lastSyncedFilesRef.current,
+          ...filesDelta,
+        };
       }
 
       if (changes.length > 0 || shouldSyncFiles || shouldSyncOrder) {
@@ -1421,7 +1454,7 @@ export const Editor: React.FC = () => {
         );
 
         const elements = data.elements || [];
-        const files = data.files || {};
+        const files = await resolveS3Files(data.files || {});
         const hasPreview = typeof data.preview === "string" && data.preview.trim().length > 0;
         const loadedRenderable = hasRenderableElements(elements);
         suspiciousBlankLoadRef.current = !loadedRenderable && hasPreview;
@@ -1441,6 +1474,7 @@ export const Editor: React.FC = () => {
         latestFilesRef.current = files;
         lastSyncedFilesRef.current = files;
         lastPersistedFilesRef.current = files;
+        initialFileIdsRef.current = new Set(Object.keys(files));
         currentDrawingVersionRef.current = typeof data.version === "number" ? data.version : null;
         lastPersistedElementsRef.current = elements;
         lastSyncedElementOrderSigRef.current = computeElementOrderSig(elements);
@@ -2292,9 +2326,11 @@ export const Editor: React.FC = () => {
                 }
                 // Show snapshot on canvas (read-only preview)
                 const elements = Array.isArray(snapshot.elements) ? snapshot.elements : [];
-                const files = snapshot.files || {};
-                if (Object.keys(files).length > 0) {
-                  excalidraw.addFiles(Object.values(files));
+                const rawFiles = snapshot.files || {};
+                if (Object.keys(rawFiles).length > 0) {
+                  resolveS3Files(rawFiles).then((resolved) => {
+                    excalidraw.addFiles(Object.values(resolved));
+                  });
                 }
                 excalidraw.updateScene({
                   elements,

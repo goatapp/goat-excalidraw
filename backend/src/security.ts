@@ -526,6 +526,17 @@ export const sanitizeDrawingData = (data: {
                   } else {
                     file[key] = value;
                   }
+                } else if (/^https:\/\//i.test(value)) {
+                  const hasSuspiciousContent = suspiciousPatterns.some(
+                    (pattern) => pattern.test(value)
+                  );
+                  if (hasSuspiciousContent || value.length > 2048) {
+                    file[key] = "";
+                  } else {
+                    file[key] = value;
+                  }
+                } else if (/^\/api\/files\/[\w-]{1,200}$/.test(value)) {
+                  file[key] = value;
                 } else {
                   file[key] = sanitizeText(value, 1000);
                 }

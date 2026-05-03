@@ -34,6 +34,17 @@ interface Config {
   snapshotMaxAgeDays: number;
   snapshotMaxPerDrawing: number;
   snapshotCleanupIntervalHours: number;
+  s3: S3Config;
+}
+
+interface S3Config {
+  bucket: string | null;
+  region: string;
+  endpoint: string | null;
+  publicUrl: string | null;
+  forcePathStyle: boolean;
+  accessKeyId: string | null;
+  secretAccessKey: string | null;
 }
 
 export type AuthMode = "local" | "hybrid" | "oidc_enforced" | "proxy";
@@ -308,6 +319,16 @@ const resolveOidcConfig = (authMode: AuthMode): OidcConfig => {
 
 const resolvedAuthMode = parseAuthMode(process.env.AUTH_MODE);
 
+const resolveS3Config = (): S3Config => ({
+  bucket: getOptionalTrimmedEnv("S3_BUCKET_NAME"),
+  region: getOptionalEnv("AWS_REGION", "us-east-1"),
+  endpoint: getOptionalTrimmedEnv("AWS_ENDPOINT_URL"),
+  publicUrl: getOptionalTrimmedEnv("S3_PUBLIC_URL"),
+  forcePathStyle: getOptionalEnv("S3_FORCE_PATH_STYLE", "false").toLowerCase() === "true",
+  accessKeyId: getOptionalTrimmedEnv("AWS_ACCESS_KEY_ID"),
+  secretAccessKey: getOptionalTrimmedEnv("AWS_SECRET_ACCESS_KEY"),
+});
+
 export const config: Config = {
   port: getRequiredEnvNumber("PORT", 8000),
   nodeEnv: getOptionalEnv("NODE_ENV", "development"),
@@ -346,6 +367,7 @@ export const config: Config = {
   snapshotMaxAgeDays: getRequiredEnvNumber("SNAPSHOT_MAX_AGE_DAYS", 30),
   snapshotMaxPerDrawing: getRequiredEnvNumber("SNAPSHOT_MAX_PER_DRAWING", 50),
   snapshotCleanupIntervalHours: getRequiredEnvNumber("SNAPSHOT_CLEANUP_INTERVAL_HOURS", 1),
+  s3: resolveS3Config(),
 };
 
 if (config.nodeEnv === "production") {

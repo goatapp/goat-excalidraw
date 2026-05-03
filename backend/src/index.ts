@@ -39,6 +39,10 @@ import {
 import { issueBootstrapSetupCodeIfRequired } from "./auth/bootstrapSetupCode.js";
 import { fileURLToPath } from "node:url";
 import { logger } from "./utils/logger.js";
+import { registerFileRoutes } from "./routes/files.js";
+import { registerStorageRoutes } from "./routes/storage.js";
+import { initS3, isS3Enabled, deleteS3Object } from "./s3.js";
+import { processFilesForS3 } from "./fileProcessing.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const backendRoot = path.resolve(__dirname, "../");
@@ -277,7 +281,7 @@ app.use(
         frameAncestors: ["'none'"],
         frameSrc: ["https://drive.google.com", "https://www.youtube.com", "https://youtu.be", "https://www.figma.com"],
         objectSrc: ["'none'"],
-        imgSrc: ["'self'", "data:", "blob:"],
+        imgSrc: ["'self'", "data:", "blob:", ...(config.s3.publicUrl ? [new URL(config.s3.publicUrl).origin] : [])],
         connectSrc: [
           "'self'",
           ...allowedOrigins.map((o) => o.replace(/^http/, "ws")),
@@ -336,7 +340,7 @@ if (hasFrontend) {
   const API_PATH_PREFIXES = [
     "/api", "/auth", "/health", "/csrf-token", "/socket.io/",
     "/drawings", "/collections", "/library", "/import", "/export",
-    "/system", "/share", "/admin", "/users",
+    "/system", "/share", "/admin", "/users", "/files",
   ];
 
   app.use((req, res, next) => {
@@ -640,6 +644,27 @@ if (enableOnboardingGate) {
   });
 }
 
+if (config.s3.bucket) {
+  initS3({
+    bucket: config.s3.bucket,
+    region: config.s3.region,
+    endpoint: config.s3.endpoint ?? undefined,
+    publicUrl: config.s3.publicUrl ?? undefined,
+    forcePathStyle: config.s3.forcePathStyle,
+    accessKeyId: config.s3.accessKeyId ?? undefined,
+    secretAccessKey: config.s3.secretAccessKey ?? undefined,
+  });
+  logger.info(
+    { bucket: config.s3.bucket, region: config.s3.region, endpoint: config.s3.endpoint, publicUrl: config.s3.publicUrl },
+    "S3 storage enabled"
+  );
+} else {
+  logger.info("S3 disabled — S3_BUCKET_NAME not configured. Images stored as base64 in SQLite.");
+}
+
+registerFileRoutes(app, { prisma, requireAuth, asyncHandler });
+registerStorageRoutes(app, { prisma, requireAuth, asyncHandler, parseJsonField });
+
 registerDashboardRoutes(app, {
   prisma,
   requireAuth,
@@ -661,6 +686,8 @@ registerDashboardRoutes(app, {
   config,
   logAuditEvent,
   io,
+  processFilesForS3: (files, userId, drawingId) =>
+    processFilesForS3(files, userId, drawingId, prisma),
 });
 
 registerImportExportRoutes({
@@ -694,10 +721,65 @@ export { app, httpServer };
 const isMain = process.argv[1] &&
   import.meta.url === new URL(`file://${path.resolve(process.argv[1])}`).href;
 
+const collectFileIdsFromSnapshots = (
+  snapshots: { files: string | null }[],
+): Set<string> => {
+  const ids = new Set<string>();
+  for (const snap of snapshots) {
+    if (!snap.files) continue;
+    try {
+      const files = JSON.parse(snap.files);
+      if (files && typeof files === "object") {
+        for (const key of Object.keys(files)) ids.add(key);
+      }
+    } catch { /* ignore malformed JSON */ }
+  }
+  return ids;
+};
+
+const cleanupOrphanedS3FilesAfterSnapshotPrune = async (
+  candidateFileIds: Set<string>,
+): Promise<number> => {
+  if (!isS3Enabled() || candidateFileIds.size === 0) return 0;
+
+  let cleaned = 0;
+  for (const fileId of candidateFileIds) {
+    try {
+      const stillReferenced = await prisma.$queryRawUnsafe<{ cnt: bigint }[]>(
+        `SELECT (
+          (SELECT COUNT(*) FROM Drawing WHERE files LIKE '%' || ? || '%') +
+          (SELECT COUNT(*) FROM DrawingSnapshot WHERE files LIKE '%' || ? || '%')
+        ) as cnt`,
+        fileId, fileId,
+      );
+      const count = Number(stillReferenced[0]?.cnt ?? 0);
+      if (count > 0) continue;
+
+      const record = await prisma.s3File.findUnique({ where: { id: fileId } });
+      if (!record) continue;
+
+      await deleteS3Object(record.s3Key);
+      await prisma.s3File.delete({ where: { id: fileId } });
+      cleaned++;
+    } catch (err) {
+      logger.error({ err, fileId }, "Failed to clean up orphaned S3 file after snapshot prune");
+    }
+  }
+  return cleaned;
+};
+
 const cleanupSnapshots = async () => {
   let totalDeleted = 0;
+  const candidateFileIds = new Set<string>();
+
   try {
     const cutoff = new Date(Date.now() - config.snapshotMaxAgeDays * 24 * 60 * 60 * 1000);
+    const expiredSnapshots = await prisma.drawingSnapshot.findMany({
+      where: { createdAt: { lt: cutoff } },
+      select: { files: true },
+    });
+    for (const id of collectFileIdsFromSnapshots(expiredSnapshots)) candidateFileIds.add(id);
+
     const ageResult = await prisma.drawingSnapshot.deleteMany({
       where: { createdAt: { lt: cutoff } },
     });
@@ -722,6 +804,12 @@ const cleanupSnapshots = async () => {
         select: { createdAt: true },
       });
       if (keepBoundary.length > 0) {
+        const excessSnapshots = await prisma.drawingSnapshot.findMany({
+          where: { drawingId, createdAt: { lte: keepBoundary[0].createdAt } },
+          select: { files: true },
+        });
+        for (const id of collectFileIdsFromSnapshots(excessSnapshots)) candidateFileIds.add(id);
+
         const result = await prisma.drawingSnapshot.deleteMany({
           where: { drawingId, createdAt: { lte: keepBoundary[0].createdAt } },
         });
@@ -734,6 +822,11 @@ const cleanupSnapshots = async () => {
 
   if (totalDeleted > 0) {
     logger.info({ deletedCount: totalDeleted }, "Snapshot cleanup completed");
+  }
+
+  const s3Cleaned = await cleanupOrphanedS3FilesAfterSnapshotPrune(candidateFileIds);
+  if (s3Cleaned > 0) {
+    logger.info({ s3Cleaned }, "Orphaned S3 files cleaned up after snapshot prune");
   }
 };
 

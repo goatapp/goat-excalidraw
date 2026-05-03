@@ -87,6 +87,7 @@ function buildApp() {
     MAX_PAGE_SIZE: 100,
     config: { nodeEnv: "test", enableAuditLogging: false },
     logAuditEvent: vi.fn(),
+    processFilesForS3: vi.fn().mockImplementation((files: any) => Promise.resolve(files)),
   });
 
   return { app, prisma };

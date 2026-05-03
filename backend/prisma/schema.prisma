@@ -238,3 +238,13 @@ model CollectionShare {
   @@index([granteeUserId])
   @@index([collectionId])
 }
+
+model S3File {
+  id        String   @id
+  userId    String
+  s3Key     String
+  mimeType  String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}

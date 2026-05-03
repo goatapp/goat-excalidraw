@@ -55,4 +55,9 @@ export type DashboardRouteDeps = {
   };
   logAuditEvent: LogAuditEvent;
   io?: SocketIOServer;
+  processFilesForS3: (
+    files: Record<string, any>,
+    userId: string,
+    drawingId: string,
+  ) => Promise<Record<string, any>>;
 };
