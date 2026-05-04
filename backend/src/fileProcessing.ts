@@ -5,7 +5,7 @@ import { logger } from "./utils/logger.js";
 const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024;
 
 const FILE_KEY_PREFIX =
-  process.env.S3_KEY_PREFIX?.replace(/\/+$/, "") || "excalidash";
+  process.env.S3_KEY_PREFIX?.replace(/\/+$/, "") || "images";
 
 const MIME_TO_EXT: Record<string, string> = {
   "image/png": "png",
