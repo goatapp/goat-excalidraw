@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { createPortal } from "react-dom";
-import { X, MessageCircle, Plus, Search } from "lucide-react";
+import { X, MessageCircle, Search } from "lucide-react";
 import * as api from "../api";
 import { renderBody } from "./comment-utils";
 
@@ -10,7 +10,6 @@ type Props = {
   onClose: () => void;
   comments: api.Comment[];
   onSelectComment: (commentId: string) => void;
-  onStartPlacing: () => void;
   currentUserId: string | null;
 };
 
@@ -32,7 +31,6 @@ export const CommentPanel: React.FC<Props> = ({
   onClose,
   comments,
   onSelectComment,
-  onStartPlacing,
   currentUserId,
 }) => {
   const [sortBy, setSortBy] = useState<"date" | "unresolved">("date");
@@ -77,18 +75,6 @@ export const CommentPanel: React.FC<Props> = ({
             )}
           </div>
           <div className="flex items-center gap-1">
-            {currentUserId && (
-              <button
-                onClick={() => {
-                  onClose();
-                  onStartPlacing();
-                }}
-                className="p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg transition-colors text-indigo-600 dark:text-indigo-400"
-                title="Add comment"
-              >
-                <Plus size={18} />
-              </button>
-            )}
             <button
               onClick={onClose}
               className="p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
@@ -145,7 +131,7 @@ export const CommentPanel: React.FC<Props> = ({
               <MessageCircle size={32} />
               <span className="text-sm font-medium">No comments yet</span>
               <span className="text-xs text-center">
-                Click the + button to add a comment on the canvas.
+                Use comment mode to add a comment on the canvas.
               </span>
             </div>
           ) : sorted.length === 0 ? (

@@ -2480,7 +2480,6 @@ export const Editor: React.FC = () => {
                 scrollToComment(c.anchorX, c.anchorY);
               }
             }}
-            onStartPlacing={() => setIsPlacingComment(true)}
             currentUserId={user?.id ?? null}
           />
         </>
