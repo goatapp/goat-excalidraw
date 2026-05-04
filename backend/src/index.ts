@@ -340,7 +340,7 @@ if (hasFrontend) {
   const API_PATH_PREFIXES = [
     "/api", "/auth", "/health", "/csrf-token", "/socket.io/",
     "/drawings", "/collections", "/library", "/import", "/export",
-    "/system", "/share", "/admin", "/users", "/files",
+    "/system", "/share", "/users", "/files",
   ];
 
   app.use((req, res, next) => {
