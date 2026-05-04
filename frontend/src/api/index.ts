@@ -613,6 +613,7 @@ export type DrawingSnapshotSummary = {
   id: string;
   version: number;
   createdAt: string;
+  userName: string | null;
 };
 
 export type DrawingSnapshotFull = DrawingSnapshotSummary & {

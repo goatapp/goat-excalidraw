@@ -175,6 +175,9 @@ export const HistoryPanel: React.FC<Props> = ({
                       </span>
                     </div>
                     <div className="text-xs text-neutral-400 dark:text-neutral-500 mb-2">
+                      {snap.userName && (
+                        <span className="text-neutral-600 dark:text-neutral-300 font-medium">{snap.userName} &middot; </span>
+                      )}
                       {new Date(snap.createdAt).toLocaleString()}
                     </div>
                     <div className="flex gap-2">
