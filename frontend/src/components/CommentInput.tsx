@@ -103,11 +103,10 @@ export const CommentInput: React.FC<Props> = ({
     const cursorPos = ta?.selectionStart ?? text.length;
     const textBeforeCursor = text.slice(0, cursorPos);
     const lastAt = textBeforeCursor.lastIndexOf("@");
-    if (lastAt >= 0) {
-      const before = text.slice(0, lastAt);
-      const after = text.slice(cursorPos);
-      setText(`${before}@[${user.name}] ${after}`);
-    }
+    const insertAt = lastAt >= 0 ? lastAt : cursorPos;
+    const before = text.slice(0, insertAt);
+    const after = text.slice(cursorPos);
+    setText(`${before}@[${user.name}] ${after}`);
     setShowMentions(false);
     ta?.focus();
   };
@@ -204,6 +203,7 @@ export const CommentInput: React.FC<Props> = ({
 
       {showMentions && filteredUsers && filteredUsers.length > 0 && containerRef.current && createPortal(
         <div
+          onMouseDown={(e) => e.preventDefault()}
           className="fixed z-[300] w-56 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-lg max-h-40 overflow-y-auto"
           style={(() => {
             const rect = containerRef.current!.getBoundingClientRect();
