@@ -31,7 +31,6 @@ export const CommentPanel: React.FC<Props> = ({
   onClose,
   comments,
   onSelectComment,
-  currentUserId,
 }) => {
   const [sortBy, setSortBy] = useState<"date" | "unresolved">("date");
   const [searchQuery, setSearchQuery] = useState("");

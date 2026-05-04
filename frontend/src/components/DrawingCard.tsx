@@ -338,7 +338,9 @@ export const DrawingCard: React.FC<DrawingCardProps> = ({
           <div className="flex items-center justify-between mt-2.5 sm:mt-3 relative">
             <p className="text-[10px] sm:text-[11px] font-medium text-slate-400 dark:text-neutral-500 flex items-center gap-1 sm:gap-1.5">
               <Clock size={10} className="sm:w-[11px] sm:h-[11px]" />
-              {formatDistanceToNow(drawing.updatedAt)} ago
+              {drawing.trashedAt
+                ? `Auto-deletes in ${Math.max(1, 30 - Math.floor((Date.now() - drawing.trashedAt) / (1000 * 60 * 60 * 24)))}d`
+                : `${formatDistanceToNow(drawing.updatedAt)} ago`}
             </p>
 
             <div className="relative" onClick={e => e.stopPropagation()}>

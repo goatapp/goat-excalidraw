@@ -375,13 +375,17 @@ const deserializeDrawingSummary = (drawing: unknown): DrawingSummary => {
     throw new Error('Invalid drawing data');
   }
   const parsed = drawing as HasTimestamps & DrawingSummary;
-  return deserializeTimestamps({
+  const result = deserializeTimestamps({
     ...parsed,
     preview:
       typeof parsed.preview === "string"
         ? normalizePreviewSvg(parsed.preview)
         : parsed.preview,
   });
+  if (result.trashedAt != null) {
+    result.trashedAt = coerceTimestamp(result.trashedAt as unknown as TimestampValue);
+  }
+  return result;
 };
 
 const deserializeDrawing = (drawing: unknown): Drawing => {

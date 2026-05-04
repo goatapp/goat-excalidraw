@@ -200,6 +200,7 @@ export const registerDrawingRoutes = (
       version: true,
       createdAt: true,
       updatedAt: true,
+      trashedAt: true,
       _count: unresolvedCommentCount,
     };
 
@@ -554,6 +555,7 @@ export const registerDrawingRoutes = (
       if (payload.collectionId === "trash") {
         await ensureTrashCollection(prisma, ownerUserId);
         (data as Prisma.DrawingUncheckedUpdateInput).collectionId = trashCollectionId;
+        (data as Prisma.DrawingUncheckedUpdateInput).trashedAt = new Date();
       } else if (payload.collectionId) {
         const collection = await prisma.collection.findFirst({
           where: { id: payload.collectionId },
@@ -574,8 +576,10 @@ export const registerDrawingRoutes = (
           }
         }
         (data as Prisma.DrawingUncheckedUpdateInput).collectionId = payload.collectionId;
+        (data as Prisma.DrawingUncheckedUpdateInput).trashedAt = null;
       } else {
         (data as Prisma.DrawingUncheckedUpdateInput).collectionId = null;
+        (data as Prisma.DrawingUncheckedUpdateInput).trashedAt = null;
       }
     }
 

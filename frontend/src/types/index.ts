@@ -4,6 +4,7 @@ export interface DrawingSummary {
   collectionId: string | null;
   updatedAt: number;
   createdAt: number;
+  trashedAt?: number | null;
   version: number;
   preview?: string | null;
   accessLevel?: "none" | "view" | "edit" | "owner";

@@ -42,7 +42,7 @@ import { logger } from "./utils/logger.js";
 import { registerFileRoutes } from "./routes/files.js";
 import { registerStorageRoutes } from "./routes/storage.js";
 import { initS3, isS3Enabled, deleteS3Object } from "./s3.js";
-import { processFilesForS3 } from "./fileProcessing.js";
+import { processFilesForS3, cleanupRemovedS3Files } from "./fileProcessing.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const backendRoot = path.resolve(__dirname, "../");
@@ -843,8 +843,38 @@ const cleanupSnapshots = async () => {
   }
 };
 
+const purgeExpiredTrash = async () => {
+  try {
+    const cutoff = new Date(Date.now() - config.trashPurgeDays * 24 * 60 * 60 * 1000);
+    const expiredDrawings = await prisma.drawing.findMany({
+      where: { trashedAt: { not: null, lt: cutoff } },
+      select: { id: true, files: true },
+    });
+
+    if (expiredDrawings.length === 0) return;
+
+    for (const drawing of expiredDrawings) {
+      try {
+        const drawingFiles = parseJsonField(drawing.files, {});
+        await prisma.drawing.delete({ where: { id: drawing.id } });
+        cleanupRemovedS3Files(drawingFiles, {}, prisma).catch((err) => {
+          logger.error({ err, drawingId: drawing.id }, "S3 cleanup failed for purged trash drawing");
+        });
+      } catch (err) {
+        logger.error({ err, drawingId: drawing.id }, "Failed to purge trashed drawing");
+      }
+    }
+
+    invalidateDrawingsCache();
+    logger.info({ purgedCount: expiredDrawings.length }, "Trash purge completed");
+  } catch (err) {
+    logger.error({ err }, "Trash purge job failed");
+  }
+};
+
 const cleanupIntervalMs = config.snapshotCleanupIntervalHours * 60 * 60 * 1000;
 setInterval(cleanupSnapshots, cleanupIntervalMs);
+setInterval(purgeExpiredTrash, cleanupIntervalMs);
 
 if (isMain) {
   httpServer.listen(PORT, async () => {
@@ -861,5 +891,6 @@ if (isMain) {
     }
     logger.info({ port: PORT, env: config.nodeEnv, frontendUrl: config.frontendUrl }, "Server running");
     cleanupSnapshots();
+    purgeExpiredTrash();
   });
 }

@@ -956,6 +956,12 @@ export const Dashboard: React.FC = () => {
             <Loader2 size={32} className="animate-spin" />
           </div>
         ) : (
+          <>
+          {isTrashView && sortedDrawings.length > 0 && (
+            <p className="text-sm text-slate-400 dark:text-neutral-500 mb-3">
+              Items in trash are automatically deleted after 30 days.
+            </p>
+          )}
           <div
             className={clsx("grid gap-3 sm:gap-4 pb-16 sm:pb-24 transition-all duration-300", isDraggingFile && "opacity-20 blur-sm")}
             style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}
@@ -1009,6 +1015,7 @@ export const Dashboard: React.FC = () => {
               ))
             )}
           </div>
+          </>
         )}
 
         <div ref={loaderRef} className="py-8 flex justify-center items-center h-20">

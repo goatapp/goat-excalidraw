@@ -79,9 +79,11 @@ model Drawing {
   comments     Comment[]
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
+  trashedAt    DateTime?
 
   @@index([userId, updatedAt])
   @@index([userId, collectionId, updatedAt])
+  @@index([trashedAt])
 }
 
 model DrawingSnapshot {
