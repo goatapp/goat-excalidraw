@@ -903,12 +903,23 @@ export type FileDiffEntry = {
   s3SizeBytes: number | null;
 };
 
+export type DrawingSizeInfo = {
+  elementsBytes: number;
+  appStateBytes: number;
+  filesBytes: number;
+  previewBytes: number;
+  sqliteTotal: number;
+  s3Total: number;
+  total: number;
+};
+
 export type FilesDiffResult = {
   summary: {
     totalCanvasRefs: number;
     totalSqliteFiles: number;
     totalS3Files: number;
   };
+  size: DrawingSizeInfo;
   files: FileDiffEntry[];
 };
 

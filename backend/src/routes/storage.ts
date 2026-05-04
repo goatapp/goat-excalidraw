@@ -232,11 +232,29 @@ export const registerStorageRoutes = (
         };
       });
 
+      const elementsBytes = Buffer.byteLength(drawing.elements ?? "", "utf8");
+      const appStateBytes = Buffer.byteLength(drawing.appState ?? "", "utf8");
+      const filesBytes = Buffer.byteLength(drawing.files ?? "", "utf8");
+      const previewBytes = drawing.preview
+        ? Buffer.byteLength(drawing.preview, "utf8")
+        : 0;
+      const sqliteTotal = elementsBytes + appStateBytes + filesBytes + previewBytes;
+      const s3Total = s3Objects.reduce((sum, o) => sum + o.size, 0);
+
       return res.json({
         summary: {
           totalCanvasRefs: allCanvasRefs.size,
           totalSqliteFiles: sqliteFileIds.size,
           totalS3Files: s3Objects.length,
+        },
+        size: {
+          elementsBytes,
+          appStateBytes,
+          filesBytes,
+          previewBytes,
+          sqliteTotal,
+          s3Total,
+          total: sqliteTotal + s3Total,
         },
         files: filesList,
       });

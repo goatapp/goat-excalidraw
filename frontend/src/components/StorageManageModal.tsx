@@ -234,6 +234,42 @@ export const StorageManageModal: React.FC<StorageManageModalProps> = ({
               </div>
             ) : diffData ? (
               <>
+                {/* Drawing Size */}
+                {diffData.size && (
+                  <div className="mb-4 p-3 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 border-2 border-neutral-200 dark:border-neutral-700">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-bold text-neutral-700 dark:text-neutral-300">Drawing Size</span>
+                      <span className="text-sm font-bold text-neutral-900 dark:text-neutral-100">{formatSize(diffData.size.total)}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-neutral-500 dark:text-neutral-400">
+                      <div className="flex justify-between">
+                        <span>Elements</span>
+                        <span className="font-medium text-neutral-600 dark:text-neutral-300 tabular-nums">{formatSize(diffData.size.elementsBytes)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>App State</span>
+                        <span className="font-medium text-neutral-600 dark:text-neutral-300 tabular-nums">{formatSize(diffData.size.appStateBytes)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Embedded Files</span>
+                        <span className="font-medium text-neutral-600 dark:text-neutral-300 tabular-nums">{formatSize(diffData.size.filesBytes)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Preview</span>
+                        <span className="font-medium text-neutral-600 dark:text-neutral-300 tabular-nums">{formatSize(diffData.size.previewBytes)}</span>
+                      </div>
+                      <div className="flex justify-between border-t border-neutral-200 dark:border-neutral-700 pt-1 mt-1">
+                        <span className="font-semibold">SQLite</span>
+                        <span className="font-semibold text-neutral-600 dark:text-neutral-300 tabular-nums">{formatSize(diffData.size.sqliteTotal)}</span>
+                      </div>
+                      <div className="flex justify-between border-t border-neutral-200 dark:border-neutral-700 pt-1 mt-1">
+                        <span className="font-semibold">S3</span>
+                        <span className="font-semibold text-neutral-600 dark:text-neutral-300 tabular-nums">{formatSize(diffData.size.s3Total)}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Summary */}
                 <p className="text-sm text-neutral-500 dark:text-neutral-400 mb-3">
                   Canvas refs: <span className="font-semibold text-neutral-700 dark:text-neutral-300">{diffData.summary.totalCanvasRefs}</span>
