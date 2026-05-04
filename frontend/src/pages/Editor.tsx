@@ -1,10 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, Download, Loader2, ChevronUp, ChevronDown, Share2, History } from 'lucide-react';
+import { ArrowLeft, Download, Loader2, ChevronUp, ChevronDown, Share2, History, Video, MessageCircle, Terminal } from 'lucide-react';
 import clsx from 'clsx';
 import {
   Excalidraw,
   CaptureUpdateAction,
+  CommandPalette,
+  Footer,
   MainMenu,
   convertToExcalidrawElements,
   exportToSvg,
@@ -37,6 +39,10 @@ import { useEditorChrome } from './editor/useEditorChrome';
 import { useEditorIdentity } from './editor/useEditorIdentity';
 import { ShareModal } from '../components/ShareModal';
 import { HistoryPanel } from '../components/HistoryPanel';
+import { CommentPanel } from '../components/CommentPanel';
+import { CommentPinOverlay } from '../components/CommentPin';
+import { CommentPopover } from '../components/CommentPopover';
+import { CommentInput } from '../components/CommentInput';
 
 interface Peer extends UserIdentity {
   isActive: boolean;
@@ -51,6 +57,32 @@ type DroppedImageData = {
   created: number;
   width: number;
   height: number;
+};
+
+const resolveS3Files = async (
+  files: Record<string, any>,
+): Promise<Record<string, any>> => {
+  const entries = Object.entries(files);
+  const needsFetch = entries.filter(
+    ([, f]) => typeof f?.dataURL === "string" && f.dataURL.startsWith("/api/files/"),
+  );
+  if (needsFetch.length === 0) return files;
+
+  const resolved = { ...files };
+  await Promise.all(
+    needsFetch.map(async ([key, file]) => {
+      try {
+        const path = file.dataURL.replace(/^\/api\//, "/");
+        const resp = await api.api.get(path, { responseType: "blob" });
+        const blob = resp.data as Blob;
+        const blobUrl = URL.createObjectURL(blob);
+        resolved[key] = { ...file, dataURL: blobUrl };
+      } catch {
+        // leave as-is — image will fail to render but drawing still loads
+      }
+    }),
+  );
+  return resolved;
 };
 
 const toFiniteNumber = (value: any): number => {
@@ -186,7 +218,7 @@ export const Editor: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const { theme } = useTheme();
+  const { theme, themePreference, setThemePreference } = useTheme();
   const { user } = useAuth();
   const autoHideStorageKey = id ? `excalidash:editor:${id}:autoHideEnabled` : null;
   const getStoredAutoHideEnabled = useCallback((): boolean => {
@@ -212,6 +244,19 @@ export const Editor: React.FC = () => {
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [langCode, setLangCode] = useState(getInitialLangCode);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isCommentsOpen, setIsCommentsOpen] = useState(false);
+  const [comments, setComments] = useState<api.Comment[]>([]);
+  const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
+  const [isPlacingComment, setIsPlacingComment] = useState(false);
+  const [isSpacePanning, setIsSpacePanning] = useState(false);
+  const [mentionUsers, setMentionUsers] = useState<{ id: string; name: string }[]>([]);
+  const [newCommentAnchor, setNewCommentAnchor] = useState<{ x: number; y: number; vx: number; vy: number } | null>(null);
+  const newCommentRef = useRef<HTMLDivElement>(null);
+  const newCommentDragRef = useRef<{ startX: number; startY: number } | null>(null);
+  const newCommentRafRef = useRef<number>(0);
+  const commentAppStateRef = useRef<{ scrollX: number; scrollY: number; zoom: { value: number } } | null>(null);
+  const [commentAppState, setCommentAppState] = useState<{ scrollX: number; scrollY: number; zoom: { value: number } } | null>(null);
+  const commentRafRef = useRef<number | null>(null);
   const previewBackup = useRef<{ elements: readonly any[]; appState: any; files: any } | null>(null);
   const { isHeaderVisible, setIsHeaderVisible } = useEditorChrome({
     drawingName,
@@ -224,6 +269,33 @@ export const Editor: React.FC = () => {
   const [socketMe, setSocketMe] = useState<UserIdentity>(me);
   const socketMeRef = useRef<UserIdentity>(socketMe);
   const lastPresenceUsersRef = useRef<Peer[] | null>(null);
+
+  useEffect(() => {
+    if (!isPlacingComment) {
+      setIsSpacePanning(false);
+      return;
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space') setIsSpacePanning(true);
+      if (e.code === 'Escape') { setIsPlacingComment(false); setIsCommentsOpen(false); }
+    };
+    const onKeyUp = (e: KeyboardEvent) => { if (e.code === 'Space') setIsSpacePanning(false); };
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+  }, [isPlacingComment]);
+
+  useEffect(() => {
+    if (!newCommentAnchor) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Escape') setNewCommentAnchor(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [newCommentAnchor]);
 
   useEffect(() => {
     setSocketMe(me);
@@ -265,6 +337,7 @@ export const Editor: React.FC = () => {
   const pendingRemoteElementOrderRef = useRef<string[] | null>(null);
   const remoteFlushScheduledRef = useRef(false);
   const remoteFlushRafIdRef = useRef<number | null>(null);
+  const initialFileIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     setAutoHideEnabled(getStoredAutoHideEnabled());
@@ -513,7 +586,8 @@ export const Editor: React.FC = () => {
     const flushRemoteUpdates = () => {
       remoteFlushScheduledRef.current = false;
       remoteFlushRafIdRef.current = null;
-      if (!excalidrawAPI.current) return;
+      const api = getAPI();
+      if (!api) return;
 
       const hasPendingElements = pendingRemoteElementsRef.current.size > 0;
       const hasPendingFiles = Object.keys(pendingRemoteFilesRef.current || {}).length > 0;
@@ -540,15 +614,17 @@ export const Editor: React.FC = () => {
           nextFiles,
           shouldUpdateFiles,
         } = buildRemoteSceneUpdate({
-          localElements: excalidrawAPI.current.getSceneElementsIncludingDeleted(),
+          localElements: api.getSceneElementsIncludingDeleted(),
           pendingElements,
           elementOrder,
           lastSyncedFiles: lastSyncedFilesRef.current,
           incomingFiles,
         });
 
-        if (shouldUpdateFiles && typeof excalidrawAPI.current.addFiles === "function") {
-          excalidrawAPI.current.addFiles(Object.values(incomingFiles));
+        if (shouldUpdateFiles && typeof api.addFiles === "function") {
+          resolveS3Files(incomingFiles).then((resolved) => {
+            api.addFiles(Object.values(resolved));
+          });
         }
 
         if (mergedElements) {
@@ -560,11 +636,11 @@ export const Editor: React.FC = () => {
           });
 
           if (sceneUpdate) {
-            excalidrawAPI.current.updateScene(sceneUpdate);
+            api.updateScene(sceneUpdate);
           }
           latestElementsRef.current = mergedElements;
         } else if (sceneUpdate) {
-          excalidrawAPI.current.updateScene(sceneUpdate);
+          api.updateScene(sceneUpdate);
         }
 
         if (shouldUpdateFiles) {
@@ -610,9 +686,10 @@ export const Editor: React.FC = () => {
       const selfId = socketMeRef.current.id;
       setPeers(users.filter(u => u.id !== selfId));
 
-      if (excalidrawAPI.current) {
+      const api = getAPI();
+      if (api) {
         const collaborators = new Map<string, any>(
-          excalidrawAPI.current.getAppState().collaborators || []
+          api.getAppState().collaborators || []
         );
         users.forEach(user => {
           if (!user.isActive && user.id !== selfId) {
@@ -621,7 +698,7 @@ export const Editor: React.FC = () => {
         });
         const { sceneUpdate } = buildRemoteSceneUpdate({ collaborators });
         if (sceneUpdate) {
-          excalidrawAPI.current.updateScene(sceneUpdate);
+          api.updateScene(sceneUpdate);
         }
       }
     });
@@ -677,10 +754,73 @@ export const Editor: React.FC = () => {
       if (message) toast.error(message);
     });
 
+    // Comment real-time events
+    socket.on('comment-added', (data: { comment: api.Comment }) => {
+      if (data.comment.user.id === user?.id) return;
+      setComments(prev => {
+        if (prev.some(c => c.id === data.comment.id)) return prev;
+        if (data.comment.parentId) {
+          return prev.map(c =>
+            c.id === data.comment.parentId
+              ? { ...c, replyCount: c.replyCount + 1 }
+              : c
+          );
+        }
+        return [data.comment, ...prev];
+      });
+    });
+    socket.on('comment-updated', (data: { comment: any }) => {
+      if (data.comment.user?.id === user?.id) return;
+      setComments(prev =>
+        prev.map(c => c.id === data.comment.id ? { ...c, body: data.comment.body, updatedAt: data.comment.updatedAt } : c)
+      );
+    });
+    socket.on('comment-deleted', (data: { commentId: string; parentId?: string }) => {
+      setComments(prev => prev.filter(c => c.id !== data.commentId));
+      setActiveCommentId(prev => prev === data.commentId ? null : prev);
+    });
+    socket.on('comment-resolved', (data: { commentId: string; resolved: boolean }) => {
+      if (data.commentId) {
+        setComments(prev =>
+          prev.map(c => c.id === data.commentId ? { ...c, resolved: data.resolved } : c)
+        );
+      }
+    });
+    socket.on('comment-reacted', (data: { commentId: string; emoji: string; userId: string; action: 'add' | 'remove' }) => {
+      if (data.userId === user?.id) return;
+      setComments(prev =>
+        prev.map(c => {
+          if (c.id !== data.commentId) return c;
+          const reactions = [...c.reactions];
+          const idx = reactions.findIndex(r => r.emoji === data.emoji);
+          if (data.action === 'add') {
+            if (idx >= 0) {
+              reactions[idx] = { ...reactions[idx], count: reactions[idx].count + 1 };
+            } else {
+              reactions.push({ emoji: data.emoji, count: 1, userReacted: false });
+            }
+          } else {
+            if (idx >= 0) {
+              reactions[idx] = { ...reactions[idx], count: reactions[idx].count - 1 };
+              if (reactions[idx].count <= 0) reactions.splice(idx, 1);
+            }
+          }
+          return { ...c, reactions };
+        })
+      );
+    });
+
+    socket.on('comment-moved', (data: { commentId: string; anchorX: number; anchorY: number }) => {
+      setComments(prev =>
+        prev.map(c => c.id === data.commentId ? { ...c, anchorX: data.anchorX, anchorY: data.anchorY } : c)
+      );
+    });
+
     const renderLoop = () => {
-      if (cursorBuffer.current.size > 0 && excalidrawAPI.current) {
+      const api = getAPI();
+      if (cursorBuffer.current.size > 0 && api) {
         const collaborators = new Map<string, any>(
-          excalidrawAPI.current.getAppState().collaborators || []
+          api.getAppState().collaborators || []
         );
 
         cursorBuffer.current.forEach((data, userId) => {
@@ -690,7 +830,7 @@ export const Editor: React.FC = () => {
         cursorBuffer.current.clear();
         const { sceneUpdate } = buildRemoteSceneUpdate({ collaborators });
         if (sceneUpdate) {
-          excalidrawAPI.current.updateScene(sceneUpdate);
+          api.updateScene(sceneUpdate);
         }
       }
       animationFrameId.current = requestAnimationFrame(renderLoop);
@@ -722,6 +862,12 @@ export const Editor: React.FC = () => {
       socket.off('cursor-move');
       socket.off('element-update');
       socket.off('error');
+      socket.off('comment-added');
+      socket.off('comment-updated');
+      socket.off('comment-deleted');
+      socket.off('comment-resolved');
+      socket.off('comment-reacted');
+      socket.off('comment-moved');
       socket.disconnect();
       socketRef.current = null;
       if (remoteFlushRafIdRef.current !== null) {
@@ -763,6 +909,79 @@ export const Editor: React.FC = () => {
   }, [id]);
 
   const excalidrawAPI = useRef<any>(null);
+  const getAPI = useCallback(() => {
+    const api = excalidrawAPI.current;
+    if (!api || api.isDestroyed) return null;
+    return api;
+  }, []);
+
+  const handleNewCommentDragStart = useCallback((e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest("button, textarea")) return;
+    e.preventDefault();
+    newCommentDragRef.current = { startX: e.clientX, startY: e.clientY };
+    const el = newCommentRef.current;
+    if (!el) return;
+    el.style.willChange = "transform";
+    el.style.transition = "none";
+
+    const onMove = (ev: MouseEvent) => {
+      if (!newCommentDragRef.current) return;
+      cancelAnimationFrame(newCommentRafRef.current);
+      newCommentRafRef.current = requestAnimationFrame(() => {
+        if (!newCommentDragRef.current) return;
+        const dx = ev.clientX - newCommentDragRef.current.startX;
+        const dy = ev.clientY - newCommentDragRef.current.startY;
+        el.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
+      });
+    };
+
+    const onUp = (ev: MouseEvent) => {
+      cancelAnimationFrame(newCommentRafRef.current);
+      if (newCommentDragRef.current) {
+        const dx = ev.clientX - newCommentDragRef.current.startX;
+        const dy = ev.clientY - newCommentDragRef.current.startY;
+        if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+          setNewCommentAnchor(prev => prev ? { ...prev, vx: prev.vx + dx, vy: prev.vy + dy } : prev);
+        }
+      }
+      el.style.transform = "";
+      el.style.willChange = "";
+      el.style.transition = "";
+      newCommentDragRef.current = null;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }, []);
+
+  const scrollToComment = useCallback((anchorX: number, anchorY: number) => {
+    const excalidraw = getAPI();
+    if (!excalidraw) return;
+    const appState = excalidraw.getAppState();
+    const zoom = appState.zoom.value;
+    const { width, height } = appState;
+    excalidraw.updateScene({
+      appState: {
+        scrollX: width / (2 * zoom) - anchorX,
+        scrollY: height / (2 * zoom) - anchorY,
+      },
+      captureUpdate: CaptureUpdateAction.NEVER,
+    });
+  }, [getAPI]);
+
+  const handleCommentMoved = useCallback(async (commentId: string, anchorX: number, anchorY: number) => {
+    if (!id) return;
+    setComments(prev => prev.map(c =>
+      c.id === commentId ? { ...c, anchorX, anchorY } : c
+    ));
+    try {
+      await api.moveComment(id, commentId, { anchorX, anchorY });
+    } catch {
+      api.getComments(id).then(({ comments: c }) => setComments(c)).catch(() => {});
+    }
+  }, [id]);
 
   const setExcalidrawAPI = useCallback((api: any) => {
     // eslint-disable-next-line react-hooks/immutability -- ref set from Excalidraw callback, not during render
@@ -771,7 +990,9 @@ export const Editor: React.FC = () => {
       (window as any).__EXCALIDASH_EXCALIDRAW_API__ = api;
     }
 
-    if (api && typeof api.addFiles === "function" && !patchedAddFilesApisRef.current.has(api as object)) {
+    if (!api) return;
+
+    if (typeof api.addFiles === "function" && !patchedAddFilesApisRef.current.has(api as object)) {
       patchedAddFilesApisRef.current.add(api as object);
       const originalAddFiles = api.addFiles.bind(api);
       api.addFiles = (filesInput: Record<string, any> | any[]) => {
@@ -795,7 +1016,7 @@ export const Editor: React.FC = () => {
   }, [emitFilesDeltaIfNeeded, id]);
 
   useEffect(() => {
-    if (!isReady || !excalidrawAPI.current) return;
+    if (!isReady || !getAPI()) return;
 
     const hash = window.location.hash;
     if (!hash.includes('addLibrary=')) return;
@@ -852,14 +1073,17 @@ export const Editor: React.FC = () => {
           throw new Error('Library file is too large');
         }
 
-        await excalidrawAPI.current.updateLibrary({
+        const excalidraw = getAPI();
+        if (!excalidraw) return;
+
+        await excalidraw.updateLibrary({
           libraryItems: blob,
           merge: true,
           defaultStatus: "published",
           openLibraryMenu: true,
         });
 
-        const updatedItems = excalidrawAPI.current.getAppState().libraryItems || [];
+        const updatedItems = excalidraw.getAppState().libraryItems || [];
         if (user) {
           await api.updateLibrary([...updatedItems]);
         }
@@ -929,10 +1153,11 @@ export const Editor: React.FC = () => {
         const compressedFilesResult = await compressExcalidrawFiles(persistableFiles);
         if (compressedFilesResult.changed) {
           persistableFiles = compressedFilesResult.files;
-          if (excalidrawAPI.current && typeof excalidrawAPI.current.addFiles === "function") {
+          const excalidraw = getAPI();
+          if (excalidraw && typeof excalidraw.addFiles === "function") {
             isSyncing.current = true;
             try {
-              excalidrawAPI.current.addFiles(Object.values(persistableFiles));
+              excalidraw.addFiles(Object.values(persistableFiles));
             } finally {
               isSyncing.current = false;
             }
@@ -975,7 +1200,8 @@ export const Editor: React.FC = () => {
             }
             lastPersistedElementsRef.current = normalizedElementsForSave;
             if (filesChangedSincePersist) {
-              lastPersistedFilesRef.current = persistableFiles;
+              const serverFiles = updated.files || persistableFiles;
+              lastPersistedFilesRef.current = serverFiles;
             }
             console.log("[Editor] Save complete", { drawingId });
           } catch (err) {
@@ -1186,7 +1412,7 @@ export const Editor: React.FC = () => {
 
       const changes: any[] = [];
 
-      const nextFiles = currentFiles || excalidrawAPI.current?.getFiles() || {};
+      const nextFiles = currentFiles || getAPI()?.getFiles() || {};
       const normalizedElements = normalizeImageElementStatus(elements, nextFiles);
 
       const nextOrderSig = computeElementOrderSig(normalizedElements);
@@ -1209,7 +1435,10 @@ export const Editor: React.FC = () => {
         latestFilesRef.current = nextFiles;
       }
       if (shouldSyncFiles) {
-        lastSyncedFilesRef.current = nextFiles;
+        lastSyncedFilesRef.current = {
+          ...lastSyncedFilesRef.current,
+          ...filesDelta,
+        };
       }
 
       if (changes.length > 0 || shouldSyncFiles || shouldSyncOrder) {
@@ -1298,7 +1527,7 @@ export const Editor: React.FC = () => {
         );
 
         const elements = data.elements || [];
-        const files = data.files || {};
+        const files = await resolveS3Files(data.files || {});
         const hasPreview = typeof data.preview === "string" && data.preview.trim().length > 0;
         const loadedRenderable = hasRenderableElements(elements);
         suspiciousBlankLoadRef.current = !loadedRenderable && hasPreview;
@@ -1318,6 +1547,7 @@ export const Editor: React.FC = () => {
         latestFilesRef.current = files;
         lastSyncedFilesRef.current = files;
         lastPersistedFilesRef.current = files;
+        initialFileIdsRef.current = new Set(Object.keys(files));
         currentDrawingVersionRef.current = typeof data.version === "number" ? data.version : null;
         lastPersistedElementsRef.current = elements;
         lastSyncedElementOrderSigRef.current = computeElementOrderSig(elements);
@@ -1340,6 +1570,21 @@ export const Editor: React.FC = () => {
           scrollToContent: true,
           libraryItems,
         });
+
+        // Load comments and collaborators for @mentions
+        api.getComments(id).then(({ comments: c }) => {
+          setComments(c);
+          const params = new URLSearchParams(window.location.search);
+          const linkedCommentId = params.get('comment');
+          if (linkedCommentId && c.some(x => x.id === linkedCommentId)) {
+            setActiveCommentId(linkedCommentId);
+            const target = c.find(x => x.id === linkedCommentId);
+            if (target?.anchorX != null && target?.anchorY != null) {
+              setTimeout(() => scrollToComment(target.anchorX!, target.anchorY!), 500);
+            }
+          }
+        }).catch(() => {});
+        api.getDrawingCollaborators(id).then(setMentionUsers).catch(() => {});
       } catch (err) {
         console.error('Failed to load drawing', err);
         let message = "Failed to load drawing";
@@ -1398,16 +1643,17 @@ export const Editor: React.FC = () => {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault();
         if (!canEdit) return;
-        if (excalidrawAPI.current && saveDataRef.current && savePreviewRef.current) {
-          const elements = excalidrawAPI.current.getSceneElementsIncludingDeleted();
+        const excalidraw = getAPI();
+        if (excalidraw && saveDataRef.current && savePreviewRef.current) {
+          const elements = excalidraw.getSceneElementsIncludingDeleted();
           const {
             snapshot: safeElements,
             prevented,
             staleEmptySnapshot,
             staleNonRenderableSnapshot,
           } = resolveSafeSnapshot(elements);
-          const appState = excalidrawAPI.current.getAppState();
-          const files = excalidrawAPI.current.getFiles() || {};
+          const appState = excalidraw.getAppState();
+          const files = excalidraw.getFiles() || {};
           latestFilesRef.current = files;
           if (prevented) {
             console.warn("[Editor] Prevented stale Ctrl+S snapshot overwrite", {
@@ -1442,13 +1688,14 @@ export const Editor: React.FC = () => {
 
     latestAppStateRef.current = appState;
 
-    const currentFiles = files || excalidrawAPI.current?.getFiles() || {};
+    const excalidraw = getAPI();
+    const currentFiles = files || excalidraw?.getFiles() || {};
     if (Object.keys(currentFiles).length > 0) {
       latestFilesRef.current = currentFiles;
     }
 
-    const allElements = excalidrawAPI.current
-      ? excalidrawAPI.current.getSceneElementsIncludingDeleted()
+    const allElements = excalidraw
+      ? excalidraw.getSceneElementsIncludingDeleted()
       : elements;
 
     if (!hasHydratedInitialScene.current) {
@@ -1540,7 +1787,8 @@ export const Editor: React.FC = () => {
 
   const handleCanvasDropCapture = useCallback(
     async (event: React.DragEvent<HTMLDivElement>) => {
-      if (!canEdit || !excalidrawAPI.current) return;
+      const excalidraw = getAPI();
+      if (!canEdit || !excalidraw) return;
 
       const allDroppedFiles = Array.from(event.dataTransfer?.files || []);
       const droppedImages = getDroppedImageFiles(event.dataTransfer);
@@ -1551,7 +1799,7 @@ export const Editor: React.FC = () => {
       event.preventDefault();
       event.stopPropagation();
 
-      const appState = excalidrawAPI.current.getAppState?.();
+      const appState = excalidraw.getAppState?.();
       if (!appState) return;
 
       try {
@@ -1589,10 +1837,10 @@ export const Editor: React.FC = () => {
           })
         );
 
-        excalidrawAPI.current.addFiles(fileRecords);
-        excalidrawAPI.current.updateScene({
+        excalidraw.addFiles(fileRecords);
+        excalidraw.updateScene({
           elements: [
-            ...excalidrawAPI.current.getSceneElementsIncludingDeleted(),
+            ...excalidraw.getSceneElementsIncludingDeleted(),
             ...imageElements,
           ],
           appState: {
@@ -1617,9 +1865,10 @@ export const Editor: React.FC = () => {
       if (isUnmounting.current) return;
       if (isSyncing.current) return;
       if (!socketRef.current) return;
-      if (!excalidrawAPI.current) return;
+      const excalidraw = getAPI();
+      if (!excalidraw) return;
 
-      const nextFiles = excalidrawAPI.current.getFiles?.() || {};
+      const nextFiles = excalidraw.getFiles?.() || {};
       const didEmit = emitFilesDeltaIfNeeded(nextFiles);
 
       if (didEmit && latestAppStateRef.current && debouncedSaveRef.current) {
@@ -1668,7 +1917,8 @@ export const Editor: React.FC = () => {
     let shouldNavigate = false;
 
     try {
-      if (!(excalidrawAPI.current && saveDataRef.current && savePreviewRef.current)) {
+      const excalidraw = getAPI();
+      if (!(excalidraw && saveDataRef.current && savePreviewRef.current)) {
         shouldNavigate = true;
       } else if (!canEdit) {
         shouldNavigate = true;
@@ -1680,15 +1930,15 @@ export const Editor: React.FC = () => {
       } else if (!id) {
         shouldNavigate = true;
       } else {
-        const elements = excalidrawAPI.current.getSceneElementsIncludingDeleted();
+        const elements = excalidraw.getSceneElementsIncludingDeleted();
         const {
           snapshot: safeElements,
           prevented,
           staleEmptySnapshot,
           staleNonRenderableSnapshot,
         } = resolveSafeSnapshot(elements);
-        const appState = excalidrawAPI.current.getAppState();
-        const files = excalidrawAPI.current.getFiles() || {};
+        const appState = excalidraw.getAppState();
+        const files = excalidraw.getFiles() || {};
         latestFilesRef.current = files;
         if (prevented) {
           console.warn("[Editor] Prevented stale back-navigation snapshot overwrite", {
@@ -1787,7 +2037,7 @@ export const Editor: React.FC = () => {
               <History size={20} />
             </button>
           ) : null}
-          {accessLevel === "owner" && id ? (
+          {(accessLevel === "owner" || accessLevel === "edit") && id ? (
             <button
               onClick={() => setIsShareOpen(true)}
               className="p-2 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-lg text-gray-600 dark:text-gray-300 transition-colors"
@@ -1796,6 +2046,13 @@ export const Editor: React.FC = () => {
               <Share2 size={20} />
             </button>
           ) : null}
+          <button
+            onClick={() => window.open('https://meet.google.com/new', '_blank', 'noopener,noreferrer')}
+            className="p-2 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-lg text-gray-600 dark:text-gray-300 transition-colors"
+            title="Start Google Meet"
+          >
+            <Video size={20} />
+          </button>
           <button
             onClick={() => {
               const next = !autoHideEnabled;
@@ -1817,10 +2074,11 @@ export const Editor: React.FC = () => {
 
           <button
             onClick={() => {
-              if (excalidrawAPI.current) {
-                const elements = excalidrawAPI.current.getSceneElementsIncludingDeleted();
-                const appState = excalidrawAPI.current.getAppState();
-                const files = excalidrawAPI.current.getFiles() || {};
+              const excalidraw = getAPI();
+              if (excalidraw) {
+                const elements = excalidraw.getSceneElementsIncludingDeleted();
+                const appState = excalidraw.getAppState();
+                const files = excalidraw.getFiles() || {};
                 exportFromEditor(drawingName, elements, appState, files);
                 toast.success('Drawing exported');
               }
@@ -1829,6 +2087,19 @@ export const Editor: React.FC = () => {
             title="Export drawing"
           >
             <Download size={20} />
+          </button>
+          <button
+            onClick={() => {
+              const name = drawingName.replace(/'/g, "\\'");
+              const cmd = `claude "I'm working on the '${name}' board (id: ${id}). Read the board to see what's on it using MCP, then ask me what I'd like to do."`;
+              navigator.clipboard.writeText(cmd).then(() => {
+                toast.success('Claude Code command copied — paste in your terminal');
+              });
+            }}
+            className="p-2 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-lg text-gray-600 dark:text-gray-300 transition-colors"
+            title="Launch Claude Code"
+          >
+            <Terminal size={20} />
           </button>
 
           <div className="h-6 w-px bg-gray-300 dark:bg-gray-700" />
@@ -1901,24 +2172,94 @@ export const Editor: React.FC = () => {
             theme={theme === 'dark' ? 'dark' : 'light'}
             langCode={langCode}
             initialData={initialData}
-            onChange={handleCanvasChange}
+            onChange={(elements: readonly any[], appState: any, files?: Record<string, any>) => {
+              commentAppStateRef.current = {
+                scrollX: appState.scrollX ?? 0,
+                scrollY: appState.scrollY ?? 0,
+                zoom: appState.zoom ?? { value: 1 },
+              };
+              if (comments.length > 0 && commentRafRef.current === null) {
+                commentRafRef.current = requestAnimationFrame(() => {
+                  commentRafRef.current = null;
+                  setCommentAppState(commentAppStateRef.current);
+                });
+              }
+              handleCanvasChange(elements, appState, files);
+            }}
             onPointerUpdate={onPointerUpdate}
             onLibraryChange={handleLibraryChange}
-            excalidrawAPI={setExcalidrawAPI}
+            onExcalidrawAPI={setExcalidrawAPI}
             UIOptions={UIOptions}
-            viewModeEnabled={!canEdit}
+            viewModeEnabled={!canEdit || undefined}
           >
             <MainMenu>
-              <MainMenu.DefaultItems.ToggleTheme />
+              <MainMenu.DefaultItems.LoadScene />
+              <MainMenu.DefaultItems.Export />
               <MainMenu.DefaultItems.SaveAsImage />
-              <MainMenu.DefaultItems.ClearCanvas />
-              <MainMenu.DefaultItems.ChangeCanvasBackground />
+              <MainMenu.DefaultItems.CommandPalette />
+              <MainMenu.DefaultItems.SearchMenu />
               <MainMenu.DefaultItems.Help />
+              <MainMenu.DefaultItems.ClearCanvas />
               <MainMenu.Separator />
+              <MainMenu.DefaultItems.Preferences />
+              <MainMenu.DefaultItems.ToggleTheme
+                allowSystemTheme
+                theme={themePreference}
+                onSelect={setThemePreference}
+              />
               <MainMenu.ItemCustom>
                 <LanguageSelector langCode={langCode} onChange={setLangCode} />
               </MainMenu.ItemCustom>
+              <MainMenu.DefaultItems.ChangeCanvasBackground />
             </MainMenu>
+            <CommandPalette />
+            {id && (
+              <Footer>
+                <button
+                  onClick={() => {
+                    setIsPlacingComment((v) => {
+                      if (v) {
+                        setIsCommentsOpen(false);
+                      } else {
+                        setIsCommentsOpen(true);
+                      }
+                      return !v;
+                    });
+                  }}
+                  className="relative"
+                  title="Comments"
+                  style={{
+                    width: 'var(--lg-button-size)',
+                    height: 'var(--lg-button-size)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: 'var(--border-radius-lg)',
+                    border: 'none',
+                    cursor: 'pointer',
+                    marginInlineStart: '.6em',
+                    boxShadow: '0 0 0 1px var(--color-surface-lowest)',
+                    background: isPlacingComment ? 'var(--color-surface-primary-container)' : 'var(--color-surface-low)',
+                    color: isPlacingComment ? 'var(--color-on-primary-container)' : 'var(--icon-fill-color)',
+                  }}
+                >
+                  <MessageCircle style={{ width: 'var(--lg-icon-size)', height: 'var(--lg-icon-size)' }} />
+                  {comments.filter(c => !c.resolved).length > 0 && (
+                    <span
+                      className="absolute"
+                      style={{
+                        top: 2,
+                        right: 2,
+                        width: 8,
+                        height: 8,
+                        backgroundColor: 'var(--color-danger)',
+                        borderRadius: '50%',
+                      }}
+                    />
+                  )}
+                </button>
+              </Footer>
+            )}
           </Excalidraw>
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-gray-500 dark:text-gray-400">
@@ -1928,6 +2269,138 @@ export const Editor: React.FC = () => {
           </div>
         )}
         <Toaster position="bottom-center" />
+
+        {/* Comment pin markers */}
+        {id && comments.length > 0 && (
+          <CommentPinOverlay
+            comments={comments}
+            appState={commentAppState}
+            activeCommentId={activeCommentId}
+            onPinClick={(commentId) => {
+              setActiveCommentId(activeCommentId === commentId ? null : commentId);
+            }}
+          />
+        )}
+
+        {/* Comment popover */}
+        {id && activeCommentId && commentAppState && (() => {
+          const c = comments.find(x => x.id === activeCommentId);
+          if (!c || c.anchorX == null || c.anchorY == null) return null;
+          const zoom = commentAppState.zoom.value;
+          const vx = (c.anchorX + commentAppState.scrollX) * zoom;
+          const vy = (c.anchorY + commentAppState.scrollY) * zoom;
+
+          const navOrder = [...comments]
+            .filter(x => x.anchorX != null && x.anchorY != null)
+            .sort((a, b) => {
+              if (a.resolved !== b.resolved) return a.resolved ? 1 : -1;
+              return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+            });
+          const navIndex = navOrder.findIndex(x => x.id === activeCommentId);
+
+          return (
+            <CommentPopover
+              comment={c}
+              drawingId={id}
+              currentUserId={user?.id ?? null}
+              canEdit={canEdit}
+              isOwner={accessLevel === "owner"}
+              position={{ x: vx, y: vy }}
+              onClose={() => setActiveCommentId(null)}
+              onCommentUpdated={(updated) => {
+                setComments(prev => prev.map(x => x.id === updated.id ? updated : x));
+              }}
+              onCommentDeleted={(commentId) => {
+                setComments(prev => prev.filter(x => x.id !== commentId));
+                setActiveCommentId(null);
+              }}
+              onReplyAdded={(parentId) => {
+                setComments(prev => prev.map(x =>
+                  x.id === parentId ? { ...x, replyCount: x.replyCount + 1 } : x
+                ));
+              }}
+              onCommentMoved={handleCommentMoved}
+              appState={commentAppState ?? undefined}
+              navIndex={navIndex}
+              navTotal={navOrder.length}
+              onNavigate={(dir) => {
+                if (navOrder.length === 0) return;
+                const next = dir === "next"
+                  ? (navIndex + 1) % navOrder.length
+                  : (navIndex - 1 + navOrder.length) % navOrder.length;
+                const target = navOrder[next];
+                setActiveCommentId(target.id);
+                if (target.anchorX != null && target.anchorY != null) {
+                  scrollToComment(target.anchorX, target.anchorY);
+                }
+              }}
+              users={mentionUsers}
+            />
+          );
+        })()}
+
+        {/* Comment placement mode */}
+        {isPlacingComment && (
+          <div
+            className="absolute inset-0 cursor-crosshair z-[60]"
+            style={{ pointerEvents: isSpacePanning ? 'none' : 'auto' }}
+            onClick={(e) => {
+              const excalidraw = getAPI();
+              if (!excalidraw || !id) return;
+              const rect = e.currentTarget.getBoundingClientRect();
+              const clientX = e.clientX - rect.left;
+              const clientY = e.clientY - rect.top;
+              const appState = excalidraw.getAppState();
+              const scene = viewportCoordsToSceneCoords(
+                { clientX: e.clientX, clientY: e.clientY },
+                appState
+              );
+              setIsPlacingComment(false);
+              setIsCommentsOpen(false);
+              setNewCommentAnchor({ x: scene.x, y: scene.y, vx: clientX, vy: clientY });
+            }}
+          />
+        )}
+
+        {/* New comment input popover (placement mode result) */}
+        {newCommentAnchor && id && (
+          <div
+            ref={newCommentRef}
+            className="absolute z-[80] animate-in fade-in zoom-in-95 duration-150 cursor-grab active:cursor-grabbing"
+            style={{ left: newCommentAnchor.vx + 20, top: newCommentAnchor.vy - 10 }}
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={handleNewCommentDragStart}
+          >
+            <div className="w-72 bg-white dark:bg-neutral-900 border-2 border-neutral-200 dark:border-neutral-700 rounded-xl shadow-xl p-3">
+              <div className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 mb-2">New comment</div>
+              <CommentInput
+                onSubmit={async (body) => {
+                  try {
+                    const { comment: newComment } = await api.createComment(id, {
+                      body,
+                      anchorX: newCommentAnchor.x,
+                      anchorY: newCommentAnchor.y,
+                    });
+                    setComments(prev => [newComment, ...prev]);
+                    setNewCommentAnchor(null);
+                    setActiveCommentId(newComment.id);
+                  } catch {
+                    // ignore
+                  }
+                }}
+                placeholder="Add a comment..."
+                autoFocus
+                users={mentionUsers}
+              />
+              <button
+                onClick={() => setNewCommentAnchor(null)}
+                className="mt-1 text-xs text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {id ? (
@@ -1937,6 +2410,7 @@ export const Editor: React.FC = () => {
             drawingName={drawingName}
             isOpen={isShareOpen}
             onClose={() => setIsShareOpen(false)}
+            accessLevel={accessLevel === "none" ? undefined : accessLevel}
           />
           <HistoryPanel
             drawingId={id}
@@ -1945,23 +2419,26 @@ export const Editor: React.FC = () => {
               setIsHistoryOpen(false);
             }}
             onPreview={(snapshot) => {
-              if (!excalidrawAPI.current) return;
+              const excalidraw = getAPI();
+              if (!excalidraw) return;
               if (snapshot) {
                 // Save current state before first preview
                 if (!previewBackup.current) {
                   previewBackup.current = {
-                    elements: excalidrawAPI.current.getSceneElementsIncludingDeleted(),
-                    appState: excalidrawAPI.current.getAppState(),
-                    files: excalidrawAPI.current.getFiles(),
+                    elements: excalidraw.getSceneElementsIncludingDeleted(),
+                    appState: excalidraw.getAppState(),
+                    files: excalidraw.getFiles(),
                   };
                 }
                 // Show snapshot on canvas (read-only preview)
                 const elements = Array.isArray(snapshot.elements) ? snapshot.elements : [];
-                const files = snapshot.files || {};
-                if (Object.keys(files).length > 0) {
-                  excalidrawAPI.current.addFiles(Object.values(files));
+                const rawFiles = snapshot.files || {};
+                if (Object.keys(rawFiles).length > 0) {
+                  resolveS3Files(rawFiles).then((resolved) => {
+                    excalidraw.addFiles(Object.values(resolved));
+                  });
                 }
-                excalidrawAPI.current.updateScene({
+                excalidraw.updateScene({
                   elements,
                   appState: {
                     ...snapshot.appState,
@@ -1972,13 +2449,13 @@ export const Editor: React.FC = () => {
               } else {
                 // Restore original state
                 if (previewBackup.current) {
-                  excalidrawAPI.current.updateScene({
+                  excalidraw.updateScene({
                     elements: previewBackup.current.elements as any[],
                     appState: previewBackup.current.appState,
                     captureUpdate: CaptureUpdateAction.NEVER,
                   });
                   if (previewBackup.current.files) {
-                    excalidrawAPI.current.addFiles(Object.values(previewBackup.current.files));
+                    excalidraw.addFiles(Object.values(previewBackup.current.files));
                   }
                   previewBackup.current = null;
                 }
@@ -1989,6 +2466,21 @@ export const Editor: React.FC = () => {
               previewBackup.current = null;
               window.location.reload();
             }}
+          />
+          <CommentPanel
+            drawingId={id}
+            isOpen={isCommentsOpen}
+            onClose={() => setIsCommentsOpen(false)}
+            comments={comments}
+            onSelectComment={(commentId) => {
+              setActiveCommentId(commentId);
+              // Scroll canvas to the comment's anchor
+              const c = comments.find(x => x.id === commentId);
+              if (c?.anchorX != null && c?.anchorY != null) {
+                scrollToComment(c.anchorX, c.anchorY);
+              }
+            }}
+            currentUserId={user?.id ?? null}
           />
         </>
       ) : null}

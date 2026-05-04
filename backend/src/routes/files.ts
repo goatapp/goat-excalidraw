@@ -1,0 +1,64 @@
+import express from "express";
+import { PrismaClient } from "../generated/client/client.js";
+import {
+  isS3Enabled,
+  downloadObject,
+} from "../s3.js";
+
+const isValidFileId = (fileId: unknown): fileId is string =>
+  typeof fileId === "string" && /^[\w-]{1,200}$/.test(fileId);
+
+export type FileRouteDeps = {
+  prisma: PrismaClient;
+  requireAuth: express.RequestHandler;
+  asyncHandler: <T = void>(
+    fn: (req: express.Request, res: express.Response, next: express.NextFunction) => Promise<T>
+  ) => express.RequestHandler;
+};
+
+export const registerFileRoutes = (
+  app: express.Express,
+  deps: FileRouteDeps
+): void => {
+  const { prisma, requireAuth, asyncHandler } = deps;
+
+  app.get(
+    "/files/config",
+    requireAuth,
+    asyncHandler(async (_req, res) => {
+      return res.json({ s3Enabled: isS3Enabled() });
+    })
+  );
+
+  app.get(
+    "/files/:fileId",
+    requireAuth,
+    asyncHandler(async (req, res) => {
+      if (!isS3Enabled()) {
+        return res.status(501).json({ error: "S3 storage is not configured" });
+      }
+
+      const { fileId } = req.params;
+      if (!isValidFileId(fileId)) {
+        return res.status(400).json({ error: "Invalid fileId" });
+      }
+
+      const fileRecord = await prisma.s3File.findUnique({
+        where: { id: fileId },
+      });
+
+      if (!fileRecord) {
+        return res.status(404).json({ error: "File not found" });
+      }
+
+      const { body, contentType } = await downloadObject(fileRecord.s3Key);
+
+      if (contentType) {
+        res.setHeader("Content-Type", contentType);
+      }
+      res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+
+      return body.pipe(res);
+    })
+  );
+};

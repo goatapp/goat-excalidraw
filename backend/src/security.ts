@@ -5,6 +5,7 @@ import { z } from "zod";
 import DOMPurify from "dompurify";
 import { JSDOM } from "jsdom";
 import crypto from "crypto";
+import { logger } from "./utils/logger.js";
 
 const window = new JSDOM("").window;
 const purify = DOMPurify(window);
@@ -525,6 +526,54 @@ export const sanitizeDrawingData = (data: {
                   } else {
                     file[key] = value;
                   }
+                } else if (normalizedValue.startsWith("data:image/svg+xml")) {
+                  if (value.length > MAX_DATAURL_SIZE) {
+                    file[key] = "";
+                  } else {
+                    try {
+                      let svgContent: string;
+                      const base64Match = value.match(
+                        /^data:image\/svg\+xml;base64,(.+)$/i
+                      );
+                      if (base64Match) {
+                        svgContent = Buffer.from(
+                          base64Match[1],
+                          "base64"
+                        ).toString("utf-8");
+                      } else {
+                        const commaIndex = value.indexOf(",");
+                        if (commaIndex === -1) {
+                          file[key] = "";
+                          continue;
+                        }
+                        svgContent = decodeURIComponent(
+                          value.slice(commaIndex + 1)
+                        );
+                      }
+
+                      const sanitized = sanitizeSvg(svgContent);
+                      if (!sanitized.trim()) {
+                        file[key] = "";
+                      } else {
+                        file[key] =
+                          "data:image/svg+xml;utf8," +
+                          encodeURIComponent(sanitized);
+                      }
+                    } catch {
+                      file[key] = "";
+                    }
+                  }
+                } else if (/^https:\/\//i.test(value)) {
+                  const hasSuspiciousContent = suspiciousPatterns.some(
+                    (pattern) => pattern.test(value)
+                  );
+                  if (hasSuspiciousContent || value.length > 2048) {
+                    file[key] = "";
+                  } else {
+                    file[key] = value;
+                  }
+                } else if (/^\/api\/files\/[\w-]{1,200}$/.test(value)) {
+                  file[key] = value;
                 } else {
                   file[key] = sanitizeText(value, 1000);
                 }
@@ -544,7 +593,7 @@ export const sanitizeDrawingData = (data: {
       preview: sanitizedPreview,
     };
   } catch (error) {
-    console.error("Data sanitization failed:", error);
+    logger.error({ err: error }, "Data sanitization failed");
     throw new Error("Invalid or malicious drawing data detected");
   }
 };
@@ -568,7 +617,7 @@ export const validateImportedDrawing = (data: any): boolean => {
 
     return true;
   } catch (error) {
-    console.error("Imported drawing validation failed:", error);
+    logger.error({ err: error }, "Imported drawing validation failed");
     return false;
   }
 };
@@ -592,13 +641,9 @@ const getCsrfSecret = (): Buffer => {
 
   cachedCsrfSecret = crypto.randomBytes(32);
   const envLabel = process.env.NODE_ENV ? ` (${process.env.NODE_ENV})` : "";
-  console.warn(
-    `[SECURITY WARNING] CSRF_SECRET is not set${envLabel}.\n` +
-      `Using an ephemeral per-process secret.\n` +
-      `  - Tokens will expire on container restart\n` +
-      `  - Horizontal scaling (k8s) will NOT work\n` +
-      `  - Generate a secret: openssl rand -base64 32\n` +
-      `  - Set environment variable: CSRF_SECRET=<generated-secret>`
+  logger.warn(
+    { env: process.env.NODE_ENV },
+    "CSRF_SECRET is not set. Using an ephemeral per-process secret. Tokens will expire on restart and horizontal scaling will NOT work. Generate with: openssl rand -base64 32"
   );
   return cachedCsrfSecret;
 };

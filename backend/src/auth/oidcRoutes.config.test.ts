@@ -68,6 +68,7 @@ describe("OIDC client configuration", () => {
         authLoginRateLimitEnabled: true,
         authLoginRateLimitWindowMs: 900000,
         authLoginRateLimitMax: 20,
+        adminFullAccess: false,
       })),
       sanitizeText: (input: unknown) => String(input ?? ""),
       generateTokens: vi.fn(() => ({
@@ -134,6 +135,7 @@ describe("OIDC client configuration", () => {
         authLoginRateLimitEnabled: true,
         authLoginRateLimitWindowMs: 900000,
         authLoginRateLimitMax: 20,
+        adminFullAccess: false,
       })),
       sanitizeText: (input: unknown) => String(input ?? ""),
       generateTokens: vi.fn(() => ({
@@ -199,6 +201,7 @@ describe("OIDC client configuration", () => {
         authLoginRateLimitEnabled: true,
         authLoginRateLimitWindowMs: 900000,
         authLoginRateLimitMax: 20,
+        adminFullAccess: false,
       })),
       sanitizeText: (input: unknown) => String(input ?? ""),
       generateTokens: vi.fn(() => ({
@@ -264,6 +267,7 @@ describe("OIDC client configuration", () => {
         authLoginRateLimitEnabled: true,
         authLoginRateLimitWindowMs: 900000,
         authLoginRateLimitMax: 20,
+        adminFullAccess: false,
       })),
       sanitizeText: (input: unknown) => String(input ?? ""),
       generateTokens: vi.fn(() => ({

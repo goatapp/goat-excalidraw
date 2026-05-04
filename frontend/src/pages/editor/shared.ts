@@ -212,6 +212,13 @@ export const getFilesDelta = (
       continue;
     }
 
+    const prevDataURL = typeof prevFile?.dataURL === "string" ? prevFile.dataURL : "";
+    const prevIsRemote =
+      prevDataURL.startsWith("http://") ||
+      prevDataURL.startsWith("https://") ||
+      prevDataURL.startsWith("/api/files/");
+    if (prevIsRemote) continue;
+
     if (buildFileSignature(prevFile) !== buildFileSignature(nextFile)) {
       delta[fileId] = nextFile;
     }
@@ -223,8 +230,8 @@ export const getFilesDelta = (
 export const UIOptions = {
   canvasActions: {
     saveToActiveFile: false,
-    loadScene: false,
-    export: false,
+    loadScene: true,
+    export: { saveFileToDisk: true },
     toggleTheme: true,
   },
 } as const;

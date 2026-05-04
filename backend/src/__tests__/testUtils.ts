@@ -31,6 +31,7 @@ export const resetTestDb = async (prisma: PrismaClient) => {
   await prisma.drawingLinkShare.deleteMany({});
   await prisma.drawingPermission.deleteMany({});
   await prisma.drawing.deleteMany({});
+  await prisma.collectionShare.deleteMany({});
   await prisma.collection.deleteMany({});
   await prisma.auditLog.deleteMany({});
   await prisma.passwordResetToken.deleteMany({});
@@ -48,6 +49,7 @@ export const resetTestDb = async (prisma: PrismaClient) => {
  */
 export const cleanupTestDb = async (prisma: PrismaClient) => {
   await prisma.drawing.deleteMany({});
+  await prisma.collectionShare.deleteMany({});
   await prisma.collection.deleteMany({});
 };
 

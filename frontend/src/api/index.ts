@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { Drawing, Collection, DrawingSummary } from "../types";
+import type { Drawing, Collection, DrawingSummary, CollectionShareRow, CollectionShareRole } from "../types";
 import { normalizePreviewSvg } from "../utils/previewSvg";
 
 export const API_URL = import.meta.env.VITE_API_URL || "/api";
@@ -13,24 +13,6 @@ export { default as axios } from 'axios';
 export const isAxiosError = axios.isAxiosError;
 
 export { api as default };
-
-export type UpdateChannel = "stable" | "prerelease";
-
-export type UpdateInfo = {
-  currentVersion: string | null;
-  channel: UpdateChannel;
-  outboundEnabled: boolean;
-  latestVersion: string | null;
-  latestUrl: string | null;
-  publishedAt: string | null;
-  isUpdateAvailable: boolean | null;
-  error?: string;
-};
-
-export const getUpdateInfo = async (channel: UpdateChannel): Promise<UpdateInfo> => {
-  const response = await api.get<UpdateInfo>("/system/update", { params: { channel } });
-  return response.data;
-};
 
 const USER_KEY = 'excalidash-user';
 const AUTH_ENABLED_CACHE_KEY = "excalidash-auth-enabled";
@@ -393,13 +375,17 @@ const deserializeDrawingSummary = (drawing: unknown): DrawingSummary => {
     throw new Error('Invalid drawing data');
   }
   const parsed = drawing as HasTimestamps & DrawingSummary;
-  return deserializeTimestamps({
+  const result = deserializeTimestamps({
     ...parsed,
     preview:
       typeof parsed.preview === "string"
         ? normalizePreviewSvg(parsed.preview)
         : parsed.preview,
   });
+  if (result.trashedAt != null) {
+    result.trashedAt = coerceTimestamp(result.trashedAt as unknown as TimestampValue);
+  }
+  return result;
 };
 
 const deserializeDrawing = (drawing: unknown): Drawing => {
@@ -539,14 +525,30 @@ export type DrawingLinkShareRow = {
   lastUsedAt: string | null;
 };
 
+export type CollectionCollaboratorRow = {
+  granteeUserId: string;
+  role: "view" | "edit";
+  collectionId: string;
+  collectionName: string;
+  granteeUser: ShareResolvedUser;
+};
+
 export const getDrawingSharing = async (drawingId: string): Promise<{
   permissions: DrawingPermissionRow[];
   linkShares: DrawingLinkShareRow[];
+  collectionCollaborators: CollectionCollaboratorRow[];
 }> => {
-  const response = await api.get<{ permissions: DrawingPermissionRow[]; linkShares: DrawingLinkShareRow[] }>(
+  const response = await api.get<{
+    permissions: DrawingPermissionRow[];
+    linkShares: DrawingLinkShareRow[];
+    collectionCollaborators?: CollectionCollaboratorRow[];
+  }>(
     `/drawings/${drawingId}/sharing`
   );
-  return response.data;
+  return {
+    ...response.data,
+    collectionCollaborators: response.data.collectionCollaborators ?? [],
+  };
 };
 
 export const upsertDrawingPermission = async (
@@ -669,6 +671,187 @@ export const deleteCollection = async (id: string) => {
   return response.data;
 };
 
+// --- Collection Sharing ---
+
+export const getCollectionShares = async (collectionId: string): Promise<{ shares: CollectionShareRow[] }> => {
+  const response = await api.get<{ shares: CollectionShareRow[] }>(`/collections/${collectionId}/shares`);
+  return response.data;
+};
+
+export const resolveCollectionShareUsers = async (collectionId: string, q: string): Promise<ShareResolvedUser[]> => {
+  const response = await api.get<{ users: ShareResolvedUser[] }>(`/collections/${collectionId}/share-resolve`, {
+    params: { q },
+  });
+  return response.data.users;
+};
+
+export const addCollectionShare = async (
+  collectionId: string,
+  params: { granteeUserId: string; role: CollectionShareRole }
+): Promise<{ share: CollectionShareRow }> => {
+  const response = await api.post<{ share: CollectionShareRow }>(`/collections/${collectionId}/shares`, params);
+  return response.data;
+};
+
+export const updateCollectionShare = async (
+  collectionId: string,
+  userId: string,
+  params: { role: CollectionShareRole }
+): Promise<{ success: true }> => {
+  const response = await api.patch<{ success: true }>(`/collections/${collectionId}/shares/${userId}`, params);
+  return response.data;
+};
+
+export const removeCollectionShare = async (
+  collectionId: string,
+  userId: string
+): Promise<{ success: true }> => {
+  const response = await api.delete<{ success: true }>(`/collections/${collectionId}/shares/${userId}`);
+  return response.data;
+};
+
+// --- Comments ---
+
+export type CommentUser = {
+  id: string;
+  name: string;
+  email: string;
+};
+
+export type CommentReaction = {
+  emoji: string;
+  count: number;
+  userReacted: boolean;
+};
+
+export type Comment = {
+  id: string;
+  body: string;
+  anchorX: number | null;
+  anchorY: number | null;
+  resolved: boolean;
+  createdAt: string;
+  updatedAt: string;
+  user: CommentUser;
+  replyCount: number;
+  parentId: string | null;
+  reactions: CommentReaction[];
+};
+
+export const getComments = async (
+  drawingId: string,
+  options?: { limit?: number; offset?: number }
+): Promise<{ comments: Comment[]; totalCount: number }> => {
+  const params: Record<string, number> = {};
+  if (options?.limit) params.limit = options.limit;
+  if (options?.offset) params.offset = options.offset;
+  const response = await api.get(`/drawings/${drawingId}/comments`, {
+    params,
+  });
+  return response.data;
+};
+
+export const getCommentReplies = async (
+  drawingId: string,
+  commentId: string
+): Promise<{ replies: Comment[] }> => {
+  const response = await api.get(
+    `/drawings/${drawingId}/comments/${commentId}/replies`
+  );
+  return response.data;
+};
+
+export const createComment = async (
+  drawingId: string,
+  params: {
+    body: string;
+    parentId?: string;
+    anchorX?: number;
+    anchorY?: number;
+  }
+): Promise<{ comment: Comment }> => {
+  const response = await api.post(
+    `/drawings/${drawingId}/comments`,
+    params
+  );
+  return response.data;
+};
+
+export const updateComment = async (
+  drawingId: string,
+  commentId: string,
+  params: { body: string }
+): Promise<{ comment: Comment }> => {
+  const response = await api.put(
+    `/drawings/${drawingId}/comments/${commentId}`,
+    params
+  );
+  return response.data;
+};
+
+export const deleteComment = async (
+  drawingId: string,
+  commentId: string
+): Promise<{ success: true }> => {
+  const response = await api.delete(
+    `/drawings/${drawingId}/comments/${commentId}`
+  );
+  return response.data;
+};
+
+export const resolveComment = async (
+  drawingId: string,
+  commentId: string
+): Promise<{ comment: Comment }> => {
+  const response = await api.patch(
+    `/drawings/${drawingId}/comments/${commentId}/resolve`
+  );
+  return response.data;
+};
+
+export const moveComment = async (
+  drawingId: string,
+  commentId: string,
+  params: { anchorX: number; anchorY: number }
+): Promise<{ comment: Comment }> => {
+  const response = await api.patch(
+    `/drawings/${drawingId}/comments/${commentId}/move`,
+    params
+  );
+  return response.data;
+};
+
+export const addReaction = async (
+  drawingId: string,
+  commentId: string,
+  emoji: string
+): Promise<void> => {
+  await api.post(
+    `/drawings/${drawingId}/comments/${commentId}/reactions`,
+    { emoji }
+  );
+};
+
+export const removeReaction = async (
+  drawingId: string,
+  commentId: string,
+  emoji: string
+): Promise<void> => {
+  await api.delete(
+    `/drawings/${drawingId}/comments/${commentId}/reactions/${encodeURIComponent(emoji)}`
+  );
+};
+
+export const getDrawingCollaborators = async (
+  drawingId: string
+): Promise<{ id: string; name: string }[]> => {
+  const response = await api.get<{ users: { id: string; name: string }[] }>(
+    `/drawings/${drawingId}/collaborators`
+  );
+  return response.data.users;
+};
+
+// --- Library ---
 
 type LibraryItem = Record<string, unknown>;
 
@@ -680,4 +863,100 @@ export const getLibrary = async (): Promise<LibraryItem[]> => {
 export const updateLibrary = async (items: LibraryItem[]): Promise<LibraryItem[]> => {
   const response = await api.put<{ items: LibraryItem[] }>("/library", { items });
   return response.data.items;
+};
+
+// ---------------------------------------------------------------------------
+// S3 file helpers
+// ---------------------------------------------------------------------------
+
+let s3EnabledCache: boolean | null = null;
+
+export const isS3Enabled = async (): Promise<boolean> => {
+  if (s3EnabledCache !== null) return s3EnabledCache;
+  try {
+    const response = await api.get<{ s3Enabled: boolean }>("/files/config");
+    s3EnabledCache = response.data.s3Enabled === true;
+  } catch {
+    s3EnabledCache = false;
+  }
+  return s3EnabledCache;
+};
+
+// ---------------------------------------------------------------------------
+// Storage management
+// ---------------------------------------------------------------------------
+
+export type TrimResult = {
+  trimmed: {
+    elementsRemoved: number;
+    filesRemoved: number;
+    s3ObjectsDeleted: number;
+    s3DeleteErrors: number;
+  };
+};
+
+export type FileDiffEntry = {
+  fileId: string;
+  inCanvas: boolean;
+  inCanvasActive: boolean;
+  inSqlite: boolean;
+  inS3: boolean;
+  inS3Record: boolean;
+  s3Key: string | null;
+  mimeType: string | null;
+  s3SizeBytes: number | null;
+};
+
+export type DrawingSizeInfo = {
+  elementsBytes: number;
+  appStateBytes: number;
+  filesBytes: number;
+  previewBytes: number;
+  sqliteTotal: number;
+  s3Total: number;
+  total: number;
+};
+
+export type FilesDiffResult = {
+  ownerName: string;
+  summary: {
+    totalCanvasRefs: number;
+    totalSqliteFiles: number;
+    totalS3Files: number;
+  };
+  size: DrawingSizeInfo;
+  snapshots: {
+    count: number;
+    totalBytes: number;
+  };
+  files: FileDiffEntry[];
+};
+
+export type DeleteOrphansResult = {
+  deleted: number;
+  errors: number;
+};
+
+export type DeleteSnapshotsResult = {
+  deletedCount: number;
+};
+
+export const trimDrawing = async (id: string, confirmName: string): Promise<TrimResult> => {
+  const response = await api.post<TrimResult>(`/drawings/${id}/trim`, { confirmName });
+  return response.data;
+};
+
+export const getFilesDiff = async (id: string): Promise<FilesDiffResult> => {
+  const response = await api.get<FilesDiffResult>(`/drawings/${id}/files/diff`);
+  return response.data;
+};
+
+export const deleteOrphanFiles = async (id: string, confirmName: string, fileIds: string[]): Promise<DeleteOrphansResult> => {
+  const response = await api.delete<DeleteOrphansResult>(`/drawings/${id}/files/orphans`, { data: { confirmName, fileIds } });
+  return response.data;
+};
+
+export const deleteAllSnapshots = async (id: string, confirmName: string): Promise<DeleteSnapshotsResult> => {
+  const response = await api.delete<DeleteSnapshotsResult>(`/drawings/${id}/snapshots`, { data: { confirmName } });
+  return response.data;
 };

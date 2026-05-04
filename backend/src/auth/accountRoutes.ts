@@ -13,6 +13,7 @@ import {
 } from "./schemas.js";
 import { canUseLocalPasswordFlows } from "./localPassword.js";
 import { hashTokenForStorage } from "./tokenSecurity.js";
+import { logger } from "../utils/logger.js";
 
 type RegisterAccountRoutesDeps = {
   router: express.Router;
@@ -108,7 +109,7 @@ export const registerAccountRoutes = (deps: RegisterAccountRoutesDeps) => {
         }
 
         if (config.nodeEnv === "development") {
-          console.log(`[DEV] Password reset token for ${email}: ${resetToken}`);
+          logger.debug({ email, resetToken }, "Password reset token generated");
           const baseUrlRaw = config.frontendUrl?.split(",")[0]?.trim();
           const baseUrlWithProtocol = baseUrlRaw
             ? /^https?:\/\//i.test(baseUrlRaw)
@@ -116,7 +117,7 @@ export const registerAccountRoutes = (deps: RegisterAccountRoutesDeps) => {
               : `http://${baseUrlRaw}`
             : "http://localhost:6767";
           const baseUrl = baseUrlWithProtocol.replace(/\/$/, "");
-          console.log(`[DEV] Reset URL: ${baseUrl}/reset-password-confirm?token=${resetToken}`);
+          logger.debug({ resetUrl: `${baseUrl}/reset-password-confirm?token=${resetToken}` }, "Password reset URL");
         }
       }
 
@@ -124,7 +125,7 @@ export const registerAccountRoutes = (deps: RegisterAccountRoutesDeps) => {
         message: "If an account with that email exists, a password reset link has been sent.",
       });
     } catch (error) {
-      console.error("Password reset request error:", error);
+      logger.error({ err: error }, "Password reset request error");
       return res.status(500).json({
         error: "Internal server error",
         message: "Failed to process password reset request",
@@ -206,7 +207,7 @@ export const registerAccountRoutes = (deps: RegisterAccountRoutesDeps) => {
           });
         } catch {
           if (process.env.NODE_ENV === "development") {
-            console.debug("Refresh token revocation skipped (feature disabled or table missing)");
+            logger.debug("Refresh token revocation skipped");
           }
         }
       }
@@ -222,7 +223,7 @@ export const registerAccountRoutes = (deps: RegisterAccountRoutesDeps) => {
 
       return res.json({ message: "Password has been reset successfully" });
     } catch (error) {
-      console.error("Password reset confirm error:", error);
+      logger.error({ err: error }, "Password reset confirm error");
       return res.status(500).json({
         error: "Internal server error",
         message: "Failed to reset password",
@@ -274,7 +275,7 @@ export const registerAccountRoutes = (deps: RegisterAccountRoutesDeps) => {
 
       return res.json({ user: updatedUser });
     } catch (error) {
-      console.error("Update profile error:", error);
+      logger.error({ err: error }, "Update profile error");
       return res.status(500).json({
         error: "Internal server error",
         message: "Failed to update profile",
@@ -366,7 +367,7 @@ export const registerAccountRoutes = (deps: RegisterAccountRoutesDeps) => {
           });
         } catch {
           if (process.env.NODE_ENV === "development") {
-            console.debug("Refresh token revocation skipped (feature disabled or table missing)");
+            logger.debug("Refresh token revocation skipped");
           }
         }
       }
@@ -385,7 +386,7 @@ export const registerAccountRoutes = (deps: RegisterAccountRoutesDeps) => {
           });
         } catch {
           if (process.env.NODE_ENV === "development") {
-            console.debug("Refresh token storage skipped (feature disabled or table missing)");
+            logger.debug("Refresh token storage skipped");
           }
         }
       }
@@ -402,7 +403,7 @@ export const registerAccountRoutes = (deps: RegisterAccountRoutesDeps) => {
 
       return res.json({ user: updatedUser });
     } catch (error) {
-      console.error("Update email error:", error);
+      logger.error({ err: error }, "Update email error");
       return res.status(500).json({
         error: "Internal server error",
         message: "Failed to update email",
@@ -470,7 +471,7 @@ export const registerAccountRoutes = (deps: RegisterAccountRoutesDeps) => {
           });
         } catch {
           if (process.env.NODE_ENV === "development") {
-            console.debug("Refresh token revocation skipped (feature disabled or table missing)");
+            logger.debug("Refresh token revocation skipped");
           }
         }
       }
@@ -487,7 +488,7 @@ export const registerAccountRoutes = (deps: RegisterAccountRoutesDeps) => {
 
       return res.json({ message: "Password changed successfully" });
     } catch (error) {
-      console.error("Change password error:", error);
+      logger.error({ err: error }, "Change password error");
       return res.status(500).json({
         error: "Internal server error",
         message: "Failed to change password",
@@ -558,7 +559,7 @@ export const registerAccountRoutes = (deps: RegisterAccountRoutesDeps) => {
           });
         } catch {
           if (process.env.NODE_ENV === "development") {
-            console.debug("Refresh token revocation skipped (feature disabled or table missing)");
+            logger.debug("Refresh token revocation skipped");
           }
         }
       }
@@ -577,7 +578,7 @@ export const registerAccountRoutes = (deps: RegisterAccountRoutesDeps) => {
           });
         } catch {
           if (process.env.NODE_ENV === "development") {
-            console.debug("Refresh token storage skipped (feature disabled or table missing)");
+            logger.debug("Refresh token storage skipped");
           }
         }
       }
@@ -593,7 +594,7 @@ export const registerAccountRoutes = (deps: RegisterAccountRoutesDeps) => {
 
       return res.json({ user: updatedUser });
     } catch (error) {
-      console.error("Must reset password error:", error);
+      logger.error({ err: error }, "Must reset password error");
       return res.status(500).json({
         error: "Internal server error",
         message: "Failed to reset password",

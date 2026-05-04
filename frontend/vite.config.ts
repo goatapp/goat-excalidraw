@@ -37,12 +37,26 @@ export default defineConfig(({ command }) => {
       chunkSizeWarningLimit: 1500,
       rolldownOptions: {
         output: {
-          manualChunks(id) {
-            if (!id.includes("@excalidraw/excalidraw")) return;
-            if (id.includes("subset-worker")) return;
-            const match = id.match(/\/(chunk-[A-Z0-9]+|subset-shared\.chunk|index)\.js$/);
-            if (match) return `excalidraw-${match[1]}`;
-            return "excalidraw-vendor";
+          codeSplitting: {
+            groups: [
+              {
+                name: "excalidraw-worker",
+                test: (id: string) =>
+                  id.includes("@excalidraw/excalidraw") &&
+                  (id.includes("subset-worker") ||
+                    id.includes("subset-shared") ||
+                    id.includes("chunk-Z5NKEFVG") ||
+                    id.includes("chunk-SRAX5OIU") ||
+                    id.includes("chunk-A66AFZZU")),
+                priority: 10,
+                minSize: 0,
+              },
+              {
+                name: "excalidraw-core",
+                test: /@excalidraw[\\/]excalidraw/,
+                priority: 1,
+              },
+            ],
           },
         },
       },

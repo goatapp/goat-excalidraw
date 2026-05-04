@@ -8,6 +8,7 @@ import type { DrawingSortField, SortDirection } from '../api';
 import { useDebounce } from '../hooks/useDebounce';
 import clsx from 'clsx';
 import { ConfirmModal } from '../components/ConfirmModal';
+import { ShareCollectionModal } from '../components/ShareCollectionModal';
 import { useUpload } from '../context/UploadContext';
 import { DragOverlayPortal, getSelectionBounds, type Point, type SelectionBounds } from './dashboard/shared';
 import { useDashboardData } from './dashboard/useDashboardData';
@@ -50,6 +51,7 @@ export const Dashboard: React.FC = () => {
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
 
   const [showImportError, setShowImportError] = useState<{ isOpen: boolean; message: string }>({ isOpen: false, message: '' });
+  const [shareCollectionId, setShareCollectionId] = useState<string | null>(null);
 
   const [isDragSelecting, setIsDragSelecting] = useState(false);
   const [dragStart, setDragStart] = useState<Point | null>(null);
@@ -259,8 +261,18 @@ export const Dashboard: React.FC = () => {
 
   const isTrashView = selectedCollectionId === 'trash';
   const isSharedView = selectedCollectionId === 'shared';
+
+  const selectedCollection = React.useMemo(() => {
+    if (!selectedCollectionId || selectedCollectionId === 'trash' || selectedCollectionId === 'shared') return null;
+    return collections.find(c => c.id === selectedCollectionId) ?? null;
+  }, [selectedCollectionId, collections]);
+
+  const isSharedCollectionView = selectedCollection?.isOwner === false;
+  const isViewOnlySharedCollection = isSharedCollectionView && selectedCollection?.sharedRole === 'view';
+  const isUnknownCollection = !!selectedCollectionId && selectedCollectionId !== 'trash' && selectedCollectionId !== 'shared' && !selectedCollection;
+  const canCreateInView = !isTrashView && !isSharedView && !isViewOnlySharedCollection && !isUnknownCollection;
   const handleCreateDrawing = async () => {
-    if (isTrashView || isSharedView) return;
+    if (!canCreateInView) return;
     try {
       const targetCollectionId = selectedCollectionId === undefined ? null : selectedCollectionId;
       const { id } = await api.createDrawing('Untitled Drawing', targetCollectionId);
@@ -271,7 +283,7 @@ export const Dashboard: React.FC = () => {
   };
 
   const handleImportDrawings = async (files: FileList | null) => {
-    if (!files || isTrashView || isSharedView) return;
+    if (!files || !canCreateInView) return;
 
     const fileArray = Array.from(files);
     const targetCollectionId = selectedCollectionId === undefined ? null : selectedCollectionId;
@@ -631,6 +643,7 @@ export const Dashboard: React.FC = () => {
       onEditCollection={handleEditCollection}
       onDeleteCollection={handleDeleteCollection}
       onDrop={isSharedView ? undefined : handleDrop}
+      onShareCollection={setShareCollectionId}
     >
       <div
         id="drag-preview"
@@ -845,7 +858,7 @@ export const Dashboard: React.FC = () => {
                     >
                       <Inbox size={14} /> Unorganized
                     </button>
-                    {collections.filter(c => c.id !== 'trash').map(c => (
+                    {collections.filter(c => c.id !== 'trash' && (c.isOwner || c.sharedRole === 'edit')).map(c => (
                       <button
                         key={c.id}
                         onClick={() => handleBulkMove(c.id)}
@@ -874,10 +887,10 @@ export const Dashboard: React.FC = () => {
 
           <button
             onClick={() => document.getElementById('dashboard-import')?.click()}
-            disabled={isTrashView || isSharedView}
+            disabled={!canCreateInView}
             className={clsx(
               "h-[42px] w-full sm:w-auto flex items-center justify-center gap-2 px-6 rounded-xl border-2 border-black dark:border-neutral-700 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)] transition-all font-bold text-sm whitespace-nowrap",
-              isTrashView || isSharedView
+              !canCreateInView
                 ? "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border-slate-300 dark:border-slate-700 shadow-none cursor-not-allowed"
                 : "bg-emerald-600 dark:bg-neutral-800 text-white hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:hover:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.2)] hover:-translate-y-1 active:translate-y-0 active:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:active:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)]"
             )}
@@ -888,10 +901,10 @@ export const Dashboard: React.FC = () => {
 
           <button
             onClick={handleCreateDrawing}
-            disabled={isTrashView || isSharedView}
+            disabled={!canCreateInView}
             className={clsx(
               "h-[42px] w-full sm:w-auto flex items-center justify-center gap-2 px-6 rounded-xl border-2 border-black dark:border-neutral-700 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)] transition-all font-bold text-sm whitespace-nowrap",
-              isTrashView || isSharedView
+              !canCreateInView
                 ? "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border-slate-300 dark:border-slate-700 shadow-none cursor-not-allowed"
                 : "bg-indigo-600 dark:bg-neutral-800 text-white hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:hover:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.2)] hover:-translate-y-1 active:translate-y-0 active:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:active:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)]"
             )}
@@ -943,6 +956,12 @@ export const Dashboard: React.FC = () => {
             <Loader2 size={32} className="animate-spin" />
           </div>
         ) : (
+          <>
+          {isTrashView && sortedDrawings.length > 0 && (
+            <p className="text-sm text-slate-400 dark:text-neutral-500 mb-3">
+              Items in trash are automatically deleted after 30 days.
+            </p>
+          )}
           <div
             className={clsx("grid gap-3 sm:gap-4 pb-16 sm:pb-24 transition-all duration-300", isDraggingFile && "opacity-20 blur-sm")}
             style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}
@@ -976,7 +995,7 @@ export const Dashboard: React.FC = () => {
                   drawing={drawing}
                   collections={collections}
                   isSelected={selectedIds.has(drawing.id)}
-                  isShared={isSharedView}
+                  isShared={isSharedView || isViewOnlySharedCollection}
                   onToggleSelection={(e) => handleToggleSelection(drawing.id, e)}
                   onRename={handleRenameDrawing}
                   onDelete={handleDeleteDrawing}
@@ -996,6 +1015,7 @@ export const Dashboard: React.FC = () => {
               ))
             )}
           </div>
+          </>
         )}
 
         <div ref={loaderRef} className="py-8 flex justify-center items-center h-20">
@@ -1035,6 +1055,13 @@ export const Dashboard: React.FC = () => {
         isDangerous={false}
         onConfirm={() => setShowImportError({ isOpen: false, message: '' })}
         onCancel={() => setShowImportError({ isOpen: false, message: '' })}
+      />
+
+      <ShareCollectionModal
+        collectionId={shareCollectionId || ""}
+        collectionName={collections.find(c => c.id === shareCollectionId)?.name || ""}
+        isOpen={!!shareCollectionId}
+        onClose={() => setShareCollectionId(null)}
       />
 
     </Layout>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LayoutGrid, Folder, Plus, Trash2, Edit2, Archive, FolderOpen, Settings as SettingsIcon, User, LogOut, Shield } from 'lucide-react';
+import { LayoutGrid, Folder, Plus, Trash2, Edit2, Archive, FolderOpen, Settings as SettingsIcon, User, LogOut, Shield, Users } from 'lucide-react';
 import type { Collection } from '../types';
 import clsx from 'clsx';
 import { ConfirmModal } from './ConfirmModal';
@@ -16,6 +16,7 @@ interface SidebarProps {
   onEditCollection: (id: string, name: string) => void;
   onDeleteCollection: (id: string) => void;
   onDrop?: (e: React.DragEvent, collectionId: string | null) => void;
+  onShareCollection?: (id: string) => void;
 }
 
 interface SidebarItemProps {
@@ -118,7 +119,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCreateCollection,
   onEditCollection,
   onDeleteCollection,
-  onDrop
+  onDrop,
+  onShareCollection,
 }) => {
   const navigate = useNavigate();
   const { logout, user, authEnabled, isProxyAuth } = useAuth();
@@ -171,8 +173,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="p-4 sm:p-5 pb-2">
           <h1 className="text-2xl text-slate-900 dark:text-white flex items-center gap-3 tracking-tight" style={{ fontFamily: 'Excalifont' }}>
             <Logo className="w-10 h-10" />
-            <span className="mt-1">ExcaliDash</span>
-            <span className="text-xs font-bold text-red-500 mt-2" style={{ fontFamily: 'sans-serif' }}>BETA</span>
+            <span className="mt-1">ExcaliGOAT</span>
           </h1>
         </div>
 
@@ -217,54 +218,105 @@ export const Sidebar: React.FC<SidebarProps> = ({
             />
           </div>
 
-          <div className="space-y-1">
-            <div className="flex items-center justify-between px-6 pb-2 group/header">
-              <span className="text-[11px] font-bold text-slate-400 dark:text-neutral-500 uppercase tracking-wider">Collections</span>
-              <button
-                onClick={(e) => { e.stopPropagation(); setIsCreating(true); }}
-                className="p-1 text-slate-400 dark:text-neutral-500 hover:text-indigo-600 dark:hover:text-neutral-200 hover:bg-indigo-50 dark:hover:bg-neutral-800 rounded-md transition-all opacity-0 group-hover/header:opacity-100"
-                title="New Collection"
-              >
-                <Plus size={14} strokeWidth={2.5} />
-              </button>
-            </div>
+          {(() => {
+            const visible = collections.filter(c => c.name !== 'Trash');
+            const selfCollections = visible.filter(c => c.isOwner !== false).sort((a, b) => a.name.localeCompare(b.name));
+            const sharedCollections = visible.filter(c => c.isOwner === false && !c.id.startsWith('team_')).sort((a, b) => a.name.localeCompare(b.name));
+            const teamCollections = visible.filter(c => c.isOwner === false && c.id.startsWith('team_')).sort((a, b) => a.name.localeCompare(b.name));
 
-            {isCreating && (
-              <form onSubmit={handleCreateSubmit} className="mb-2 px-4" onClick={e => e.stopPropagation()}>
-                <input
-                  autoFocus
-                  type="text"
-                  value={newCollectionName}
-                  onChange={(e) => setNewCollectionName(e.target.value)}
-                  placeholder="New Collection..."
-                  className="w-full px-3 py-2 text-sm bg-white dark:bg-neutral-800 border-2 border-black dark:border-neutral-700 rounded-lg shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)] outline-none placeholder:text-slate-400 dark:placeholder:text-neutral-500 font-bold text-slate-900 dark:text-white"
-                  onBlur={() => !newCollectionName && setIsCreating(false)}
+            const renderCollection = (collection: Collection) => {
+              const isOwned = collection.isOwner !== false;
+              const canEdit = isOwned || collection.sharedRole === 'edit';
+              return (
+                <SidebarItem
+                  key={collection.id}
+                  id={collection.id}
+                  icon={
+                    !isOwned
+                      ? <Users size={18} />
+                      : selectedCollectionId === collection.id ? <FolderOpen size={18} /> : <Folder size={18} />
+                  }
+                  label={collection.name}
+                  isActive={selectedCollectionId === collection.id}
+                  onClick={() => onSelectCollection(collection.id)}
+                  onDoubleClick={isOwned ? () => {
+                    setEditingId(collection.id);
+                    setEditName(collection.name);
+                  } : undefined}
+                  onContextMenu={isOwned ? (e) => handleItemContextMenu(e, collection.id) : undefined}
+                  isEditing={editingId === collection.id}
+                  editValue={editName}
+                  onEditChange={setEditName}
+                  onEditSubmit={handleEditSubmit}
+                  onEditBlur={() => setEditingId(null)}
+                  onDrop={canEdit ? onDrop : undefined}
+                  extraAction={isOwned ? (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onShareCollection?.(collection.id);
+                      }}
+                      className="p-1 text-slate-400 dark:text-neutral-500 hover:text-indigo-600 dark:hover:text-neutral-200 hover:bg-indigo-50 dark:hover:bg-neutral-800 rounded-md transition-all"
+                      title="Share Collection"
+                    >
+                      <Users size={14} strokeWidth={2.5} />
+                    </button>
+                  ) : undefined}
                 />
-              </form>
-            )}
+              );
+            };
 
-            {collections.filter(c => c.name !== 'Trash').map((collection) => (
-              <SidebarItem
-                key={collection.id}
-                id={collection.id}
-                icon={selectedCollectionId === collection.id ? <FolderOpen size={18} /> : <Folder size={18} />}
-                label={collection.name}
-                isActive={selectedCollectionId === collection.id}
-                onClick={() => onSelectCollection(collection.id)}
-                onDoubleClick={() => {
-                  setEditingId(collection.id);
-                  setEditName(collection.name);
-                }}
-                onContextMenu={(e) => handleItemContextMenu(e, collection.id)}
-                isEditing={editingId === collection.id}
-                editValue={editName}
-                onEditChange={setEditName}
-                onEditSubmit={handleEditSubmit}
-                onEditBlur={() => setEditingId(null)}
-                onDrop={onDrop}
-              />
-            ))}
-          </div>
+            return (
+              <>
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between px-6 pb-2 group/header">
+                    <span className="text-[11px] font-bold text-slate-400 dark:text-neutral-500 uppercase tracking-wider">Collections</span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setIsCreating(true); }}
+                      className="p-1 text-slate-400 dark:text-neutral-500 hover:text-indigo-600 dark:hover:text-neutral-200 hover:bg-indigo-50 dark:hover:bg-neutral-800 rounded-md transition-all opacity-0 group-hover/header:opacity-100"
+                      title="New Collection"
+                    >
+                      <Plus size={14} strokeWidth={2.5} />
+                    </button>
+                  </div>
+
+                  {isCreating && (
+                    <form onSubmit={handleCreateSubmit} className="mb-2 px-4" onClick={e => e.stopPropagation()}>
+                      <input
+                        autoFocus
+                        type="text"
+                        value={newCollectionName}
+                        onChange={(e) => setNewCollectionName(e.target.value)}
+                        placeholder="New Collection..."
+                        className="w-full px-3 py-2 text-sm bg-white dark:bg-neutral-800 border-2 border-black dark:border-neutral-700 rounded-lg shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)] outline-none placeholder:text-slate-400 dark:placeholder:text-neutral-500 font-bold text-slate-900 dark:text-white"
+                        onBlur={() => !newCollectionName && setIsCreating(false)}
+                      />
+                    </form>
+                  )}
+
+                  {selfCollections.map(renderCollection)}
+                </div>
+
+                {sharedCollections.length > 0 && (
+                  <div className="space-y-1 border-t border-slate-200/50 dark:border-slate-700/50 pt-4 sm:pt-8">
+                    <div className="px-6 pb-2 text-[11px] font-bold text-slate-400 dark:text-neutral-500 uppercase tracking-wider">
+                      Shared
+                    </div>
+                    {sharedCollections.map(renderCollection)}
+                  </div>
+                )}
+
+                {teamCollections.length > 0 && (
+                  <div className="space-y-1 border-t border-slate-200/50 dark:border-slate-700/50 pt-4 sm:pt-8">
+                    <div className="px-6 pb-2 text-[11px] font-bold text-slate-400 dark:text-neutral-500 uppercase tracking-wider">
+                      Team
+                    </div>
+                    {teamCollections.map(renderCollection)}
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </nav>
 
         <div className="px-3 pt-3 sm:pt-4 pb-3 sm:pb-4 border-t border-slate-200/50 dark:border-slate-700/50 space-y-2">
@@ -379,6 +431,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
           >
             {contextMenu.type === 'item' && contextMenu.id ? (
               <>
+                <button
+                  onClick={() => {
+                    onShareCollection?.(contextMenu.id!);
+                    setContextMenu(null);
+                  }}
+                  className="w-full px-3 py-2 text-sm text-left text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-2"
+                >
+                  <Users size={14} /> Share Collection
+                </button>
+
                 <button
                   onClick={() => {
                     const collection = collections.find(c => c.id === contextMenu.id);

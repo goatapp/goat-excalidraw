@@ -4,6 +4,7 @@ import { Prisma, PrismaClient } from "../generated/client/client.js";
 import { logAuditEvent } from "../utils/audit.js";
 import {
   adminCreateUserSchema,
+  adminFullAccessToggleSchema,
   adminRoleUpdateSchema,
   adminUpdateUserSchema,
   impersonateSchema,
@@ -14,6 +15,7 @@ import {
 } from "./schemas.js";
 import { getEffectiveOidcJitProvisioning } from "./accessPolicy.js";
 import { hashTokenForStorage } from "./tokenSecurity.js";
+import { logger } from "../utils/logger.js";
 
 type RegisterAdminRoutesDeps = {
   router: express.Router;
@@ -27,6 +29,7 @@ type RegisterAdminRoutesDeps = {
     authLoginRateLimitEnabled: boolean;
     authLoginRateLimitWindowMs: number;
     authLoginRateLimitMax: number;
+    adminFullAccess: boolean;
   }>;
   parseLoginRateLimitConfig: (systemConfig: {
     authLoginRateLimitEnabled: boolean;
@@ -177,7 +180,7 @@ export const registerAdminRoutes = (deps: RegisterAdminRoutesDeps) => {
 
       res.json({ registrationEnabled: updated.registrationEnabled });
     } catch (error) {
-      console.error("Registration toggle error:", error);
+      logger.error({ err: error }, "Registration toggle error");
       res.status(500).json({
         error: "Internal server error",
         message: "Failed to update registration setting",
@@ -224,10 +227,48 @@ export const registerAdminRoutes = (deps: RegisterAdminRoutesDeps) => {
         ),
       });
     } catch (error) {
-      console.error("OIDC JIT provisioning toggle error:", error);
+      logger.error({ err: error }, "OIDC JIT provisioning toggle error");
       res.status(500).json({
         error: "Internal server error",
         message: "Failed to update OIDC provisioning setting",
+      });
+    }
+  });
+
+  router.post("/admin-full-access", requireAuth, async (req: Request, res: Response) => {
+    try {
+      if (!(await ensureAuthEnabled(res))) return;
+      if (!requireCsrf(req, res)) return;
+      if (!requireAdmin(req, res)) return;
+
+      const parsed = adminFullAccessToggleSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Bad request", message: "Invalid toggle payload" });
+      }
+
+      const updated = await prisma.systemConfig.upsert({
+        where: { id: defaultSystemConfigId },
+        update: { adminFullAccess: parsed.data.enabled },
+        create: { id: defaultSystemConfigId, adminFullAccess: parsed.data.enabled },
+      });
+
+      if (config.enableAuditLogging) {
+        await logAuditEvent({
+          userId: req.user.id,
+          action: "admin_full_access_toggled",
+          resource: "system_config",
+          ipAddress: req.ip || req.connection.remoteAddress || undefined,
+          userAgent: req.headers["user-agent"] || undefined,
+          details: { adminFullAccess: updated.adminFullAccess },
+        });
+      }
+
+      res.json({ adminFullAccess: updated.adminFullAccess });
+    } catch (error) {
+      logger.error({ err: error }, "Admin full access toggle error");
+      res.status(500).json({
+        error: "Internal server error",
+        message: "Failed to update admin full access setting",
       });
     }
   });
@@ -281,7 +322,7 @@ export const registerAdminRoutes = (deps: RegisterAdminRoutesDeps) => {
 
       res.json({ user: updated });
     } catch (error) {
-      console.error("Admin role update error:", error);
+      logger.error({ err: error }, "Admin role update error");
       res.status(500).json({
         error: "Internal server error",
         message: "Failed to update user role",
@@ -311,7 +352,7 @@ export const registerAdminRoutes = (deps: RegisterAdminRoutesDeps) => {
 
       res.json({ users });
     } catch (error) {
-      console.error("List users error:", error);
+      logger.error({ err: error }, "List users error");
       res.status(500).json({
         error: "Internal server error",
         message: "Failed to list users",
@@ -347,7 +388,7 @@ export const registerAdminRoutes = (deps: RegisterAdminRoutesDeps) => {
         },
       });
     } catch (error) {
-      console.error("List impersonation targets error:", error);
+      logger.error({ err: error }, "List impersonation targets error");
       res.status(500).json({
         error: "Internal server error",
         message: "Failed to list impersonation targets",
@@ -364,7 +405,7 @@ export const registerAdminRoutes = (deps: RegisterAdminRoutesDeps) => {
       const cfg = parseLoginRateLimitConfig(systemConfig);
       res.json({ config: cfg });
     } catch (error) {
-      console.error("Get login rate limit config error:", error);
+      logger.error({ err: error }, "Get login rate limit config error");
       res.status(500).json({
         error: "Internal server error",
         message: "Failed to fetch login rate limit config",
@@ -410,7 +451,7 @@ export const registerAdminRoutes = (deps: RegisterAdminRoutesDeps) => {
 
       res.json({ config: nextConfig });
     } catch (error) {
-      console.error("Update login rate limit config error:", error);
+      logger.error({ err: error }, "Update login rate limit config error");
       res.status(500).json({
         error: "Internal server error",
         message: "Failed to update login rate limit config",
@@ -448,7 +489,7 @@ export const registerAdminRoutes = (deps: RegisterAdminRoutesDeps) => {
 
       res.json({ ok: true });
     } catch (error) {
-      console.error("Reset login rate limit error:", error);
+      logger.error({ err: error }, "Reset login rate limit error");
       res.status(500).json({
         error: "Internal server error",
         message: "Failed to reset login rate limit",
@@ -541,7 +582,7 @@ export const registerAdminRoutes = (deps: RegisterAdminRoutesDeps) => {
 
       res.status(201).json({ user });
     } catch (error) {
-      console.error("Create user error:", error);
+      logger.error({ err: error }, "Create user error");
       res.status(500).json({
         error: "Internal server error",
         message: "Failed to create user",
@@ -650,7 +691,7 @@ export const registerAdminRoutes = (deps: RegisterAdminRoutesDeps) => {
           message: "User with this username already exists",
         });
       }
-      console.error("Update user error:", error);
+      logger.error({ err: error }, "Update user error");
       res.status(500).json({
         error: "Internal server error",
         message: "Failed to update user",
@@ -718,7 +759,7 @@ export const registerAdminRoutes = (deps: RegisterAdminRoutesDeps) => {
         });
       } catch {
         if (process.env.NODE_ENV === "development") {
-          console.debug("Refresh token revocation skipped (feature disabled or table missing)");
+          logger.debug("Refresh token revocation skipped (feature disabled or table missing)");
         }
       }
 
@@ -740,7 +781,7 @@ export const registerAdminRoutes = (deps: RegisterAdminRoutesDeps) => {
         tempPassword,
       });
     } catch (error) {
-      console.error("Reset password error:", error);
+      logger.error({ err: error }, "Reset password error");
       res.status(500).json({
         error: "Internal server error",
         message: "Failed to reset password",
@@ -793,7 +834,7 @@ export const registerAdminRoutes = (deps: RegisterAdminRoutesDeps) => {
           });
         } catch {
           if (process.env.NODE_ENV === "development") {
-            console.debug("Refresh token storage skipped (feature disabled or table missing)");
+            logger.debug("Refresh token storage skipped (feature disabled or table missing)");
           }
         }
       }
@@ -820,10 +861,124 @@ export const registerAdminRoutes = (deps: RegisterAdminRoutesDeps) => {
         },
       });
     } catch (error) {
-      console.error("Impersonation error:", error);
+      logger.error({ err: error }, "Impersonation error");
       res.status(500).json({
         error: "Internal server error",
         message: "Failed to impersonate user",
+      });
+    }
+  });
+
+  router.get("/stats", requireAuth, async (req: Request, res: Response) => {
+    try {
+      if (!(await ensureAuthEnabled(res))) return;
+      if (!requireAdmin(req, res)) return;
+
+      const now = new Date();
+      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+      const [
+        totalDrawings,
+        totalUsers,
+        activeUsers7d,
+        activeUsers30d,
+        totalCollections,
+        totalSnapshots,
+        drawingsPerCollection,
+        drawingStorageRows,
+        snapshotStorageRows,
+      ] = await Promise.all([
+        prisma.drawing.count(),
+        prisma.user.count(),
+        prisma.user.count({ where: { isActive: true, updatedAt: { gte: sevenDaysAgo } } }),
+        prisma.user.count({ where: { isActive: true, updatedAt: { gte: thirtyDaysAgo } } }),
+        prisma.collection.count(),
+        prisma.drawingSnapshot.count(),
+        prisma.$queryRawUnsafe<{ collectionId: string | null; cnt: number }[]>(
+          `SELECT collectionId, COUNT(*) as cnt FROM Drawing GROUP BY collectionId ORDER BY cnt DESC LIMIT 10`,
+        ),
+        prisma.$queryRawUnsafe<{ bytes: number }[]>(
+          `SELECT COALESCE(SUM(LENGTH(elements) + LENGTH(appState) + LENGTH(files) + LENGTH(COALESCE(preview, ''))), 0) as bytes FROM Drawing`,
+        ),
+        prisma.$queryRawUnsafe<{ bytes: number }[]>(
+          `SELECT COALESCE(SUM(LENGTH(elements) + LENGTH(appState) + LENGTH(files)), 0) as bytes FROM DrawingSnapshot`,
+        ),
+      ]);
+
+      const drawingStorageBytes = Number(drawingStorageRows[0]?.bytes ?? 0);
+      const snapshotStorageBytes = Number(snapshotStorageRows[0]?.bytes ?? 0);
+
+      const collectionIds = drawingsPerCollection
+        .map((r) => r.collectionId)
+        .filter((id): id is string => id !== null);
+      const collections = collectionIds.length > 0
+        ? await prisma.collection.findMany({
+            where: { id: { in: collectionIds } },
+            select: { id: true, name: true },
+          })
+        : [];
+      const nameMap = new Map(collections.map((c) => [c.id, c.name]));
+
+      const topCollections = drawingsPerCollection.map((r) => ({
+        collectionId: r.collectionId,
+        collectionName: r.collectionId ? (nameMap.get(r.collectionId) ?? "(deleted)") : "(uncategorized)",
+        drawingCount: Number(r.cnt),
+      }));
+
+      res.json({
+        totalDrawings,
+        totalUsers,
+        activeUsers7d,
+        activeUsers30d,
+        totalCollections,
+        totalSnapshots,
+        drawingStorageBytes,
+        snapshotStorageBytes,
+        topCollections,
+      });
+    } catch (error) {
+      logger.error({ err: error }, "Admin stats error");
+      res.status(500).json({
+        error: "Internal server error",
+        message: "Failed to fetch stats",
+      });
+    }
+  });
+
+  router.get("/snapshot-stats", requireAuth, async (req: Request, res: Response) => {
+    try {
+      if (!(await ensureAuthEnabled(res))) return;
+      if (!requireAdmin(req, res)) return;
+
+      const [totalCount, topDrawings] = await Promise.all([
+        prisma.drawingSnapshot.count(),
+        prisma.$queryRawUnsafe<{ drawingId: string; cnt: number }[]>(
+          `SELECT s.drawingId, COUNT(*) as cnt FROM DrawingSnapshot s GROUP BY s.drawingId ORDER BY cnt DESC LIMIT 10`,
+        ),
+      ]);
+
+      const drawingIds = topDrawings.map((d) => d.drawingId);
+      const drawings = drawingIds.length > 0
+        ? await prisma.drawing.findMany({
+            where: { id: { in: drawingIds } },
+            select: { id: true, name: true },
+          })
+        : [];
+      const nameMap = new Map(drawings.map((d) => [d.id, d.name]));
+
+      const topByCount = topDrawings.map((d) => ({
+        drawingId: d.drawingId,
+        drawingName: nameMap.get(d.drawingId) ?? "(deleted)",
+        snapshotCount: Number(d.cnt),
+      }));
+
+      res.json({ totalCount, topByCount });
+    } catch (error) {
+      logger.error({ err: error }, "Snapshot stats error");
+      res.status(500).json({
+        error: "Internal server error",
+        message: "Failed to fetch snapshot stats",
       });
     }
   });

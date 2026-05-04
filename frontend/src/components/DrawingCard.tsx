@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { PenTool, Trash2, FolderInput, ArrowRight, Check, Clock, Copy, Download, Loader2 } from 'lucide-react';
+import { PenTool, Trash2, FolderInput, ArrowRight, Check, Clock, Copy, Download, Loader2, MessageCircle, HardDrive } from 'lucide-react';
 import type { DrawingSummary, Collection, Drawing } from '../types';
 import { formatDistanceToNow } from 'date-fns';
 import clsx from 'clsx';
@@ -9,6 +9,7 @@ import { exportDrawingToFile } from '../utils/exportUtils';
 import { previewHasEmbeddedImages } from '../utils/previewSvg';
 
 import * as api from '../api';
+import { StorageManageModal } from './StorageManageModal';
 
 type HydratedDrawingData = {
   elements: any[];
@@ -86,12 +87,18 @@ export const DrawingCard: React.FC<DrawingCardProps> = ({
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [showStorageModal, setShowStorageModal] = useState(false);
+  const [s3Enabled, setS3Enabled] = useState(false);
   const [fullData, setFullData] = useState<HydratedDrawingData | null>(null);
   const hasEmbeddedImages = previewHasEmbeddedImages(previewSvg);
 
   const fullDataRef = React.useRef(fullData);
   useEffect(() => { fullDataRef.current = fullData; }, [fullData]);
   const fullDataPromiseRef = React.useRef<Promise<HydratedDrawingData> | null>(null);
+
+  useEffect(() => {
+    api.isS3Enabled().then(setS3Enabled).catch(() => {});
+  }, []);
 
   useEffect(() => {
     setFullData(null);
@@ -270,6 +277,13 @@ export const DrawingCard: React.FC<DrawingCardProps> = ({
         >
           <div className="absolute inset-0 opacity-[0.3] bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] [background-size:24px_24px]"></div>
 
+          {(drawing.unresolvedCommentCount ?? 0) > 0 && (
+            <div className="absolute bottom-2 left-2 z-10 flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300 text-[10px] font-bold shadow-sm">
+              <MessageCircle size={10} />
+              {drawing.unresolvedCommentCount}
+            </div>
+          )}
+
           {previewSvg ? (
             <div
               className={clsx(
@@ -324,7 +338,9 @@ export const DrawingCard: React.FC<DrawingCardProps> = ({
           <div className="flex items-center justify-between mt-2.5 sm:mt-3 relative">
             <p className="text-[10px] sm:text-[11px] font-medium text-slate-400 dark:text-neutral-500 flex items-center gap-1 sm:gap-1.5">
               <Clock size={10} className="sm:w-[11px] sm:h-[11px]" />
-              {formatDistanceToNow(drawing.updatedAt)} ago
+              {drawing.trashedAt
+                ? `Auto-deletes in ${Math.max(1, 30 - Math.floor((Date.now() - drawing.trashedAt) / (1000 * 60 * 60 * 24)))}d`
+                : `${formatDistanceToNow(drawing.updatedAt)} ago`}
             </p>
 
             <div className="relative" onClick={e => e.stopPropagation()}>
@@ -440,7 +456,9 @@ export const DrawingCard: React.FC<DrawingCardProps> = ({
                         Unorganized
                         {drawing.collectionId === null && <Check size={10} />}
                       </button>
-                      {collections.map(c => (
+                      {collections
+                        .filter(c => c.isOwner || c.sharedRole === 'edit')
+                        .map(c => (
                         <button
                           key={c.id}
                           onClick={() => { onMoveToCollection(drawing.id, c.id); setContextMenu(null); }}
@@ -491,6 +509,18 @@ export const DrawingCard: React.FC<DrawingCardProps> = ({
                 </div>
               )}
 
+              {!isShared && s3Enabled && (
+                <button
+                  onClick={() => {
+                    setShowStorageModal(true);
+                    setContextMenu(null);
+                  }}
+                  className="w-full px-3 py-2 text-sm text-left text-slate-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-white flex items-center gap-2"
+                >
+                  <HardDrive size={14} /> Storage Management
+                </button>
+              )}
+
               {!isShared ? (
                 <>
                   <div className="border-t border-slate-50 dark:border-slate-700 my-1"></div>
@@ -509,6 +539,13 @@ export const DrawingCard: React.FC<DrawingCardProps> = ({
           </div>
         </ContextMenuPortal>
       )}
+
+      <StorageManageModal
+        isOpen={showStorageModal}
+        drawingId={drawing.id}
+        drawingName={drawing.name}
+        onClose={() => setShowStorageModal(false)}
+      />
     </>
   );
 };

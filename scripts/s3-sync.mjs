@@ -11,6 +11,31 @@ import path from "path";
 import crypto from "crypto";
 import { pipeline } from "stream/promises";
 import Database from "better-sqlite3";
+import pino from "pino";
+
+const isProduction = (process.env.NODE_ENV || "development") === "production";
+const logger = pino({
+  level: isProduction ? "info" : "debug",
+  ...(isProduction
+    ? {
+        formatters: {
+          level(label) {
+            return { level: label };
+          },
+        },
+        timestamp: pino.stdTimeFunctions.isoTime,
+      }
+    : {
+        transport: {
+          target: "pino-pretty",
+          options: {
+            colorize: true,
+            translateTime: "SYS:HH:MM:ss.l",
+            ignore: "pid,hostname",
+          },
+        },
+      }),
+}).child({ component: "s3-sync" });
 
 const BUCKET = process.env.S3_BUCKET_NAME;
 const PREFIX = process.env.S3_PREFIX || "excalidraw/";
@@ -22,7 +47,7 @@ const UPLOADS_PREFIX = `${PREFIX}uploads/`;
 const MANIFEST_PATH = "/app/prisma/.s3-sync-manifest.json";
 
 if (!BUCKET) {
-  console.error("[s3-sync] S3_BUCKET_NAME not set, exiting");
+  logger.fatal("S3_BUCKET_NAME not set, exiting");
   process.exit(1);
 }
 
@@ -53,7 +78,7 @@ function saveManifest() {
       JSON.stringify({ lastDbHash, uploads: uploadManifest }, null, 2)
     );
   } catch (err) {
-    console.error("[s3-sync] Failed to save manifest:", err.message);
+    logger.error({ err }, "Failed to save manifest");
   }
 }
 
@@ -78,23 +103,23 @@ async function uploadFile(filePath, key) {
 
 async function restore() {
   if (fs.existsSync(DB_PATH)) {
-    console.log("[s3-sync] Local database exists, skipping restore");
+    logger.info("Local database exists, skipping restore");
     return;
   }
 
-  console.log("[s3-sync] Restoring database from S3...");
+  logger.info("Restoring database from S3...");
   try {
     await downloadFile(DB_KEY, DB_PATH);
-    console.log("[s3-sync] Database restored");
+    logger.info("Database restored");
   } catch (err) {
     if (err.name === "NoSuchKey" || err.$metadata?.httpStatusCode === 404) {
-      console.log("[s3-sync] No database backup found in S3, starting fresh");
+      logger.info("No database backup found in S3, starting fresh");
     } else {
       throw err;
     }
   }
 
-  console.log("[s3-sync] Restoring uploads from S3...");
+  logger.info("Restoring uploads from S3...");
   try {
     let continuationToken;
     do {
@@ -113,9 +138,9 @@ async function restore() {
       }
       continuationToken = resp.NextContinuationToken;
     } while (continuationToken);
-    console.log("[s3-sync] Uploads restored");
+    logger.info("Uploads restored");
   } catch (err) {
-    console.error("[s3-sync] Error restoring uploads:", err.message);
+    logger.error({ err }, "Error restoring uploads");
   }
 }
 
@@ -124,9 +149,15 @@ async function syncDatabase() {
 
   const snapshotPath = `${DB_PATH}.s3backup`;
   try {
-    const db = new Database(DB_PATH, { readonly: true });
+    const db = new Database(DB_PATH, { readonly: true, timeout: 5000 });
+    db.pragma("journal_mode=WAL");
     await db.backup(snapshotPath);
     db.close();
+
+    if (!fs.existsSync(snapshotPath)) {
+      logger.error("Backup file was not created");
+      return;
+    }
 
     const hash = fileHash(snapshotPath);
     if (hash === lastDbHash) {
@@ -138,9 +169,9 @@ async function syncDatabase() {
     fs.unlinkSync(snapshotPath);
     lastDbHash = hash;
     saveManifest();
-    console.log("[s3-sync] Database synced to S3");
+    logger.debug("Database synced to S3");
   } catch (err) {
-    console.error("[s3-sync] Database sync error:", err.message);
+    logger.error({ err }, "Database sync error");
     try { fs.unlinkSync(snapshotPath); } catch {}
   }
 }
@@ -178,13 +209,13 @@ async function syncUploads() {
       uploadManifest[relativePath] = { mtimeMs, size };
       uploaded++;
     } catch (err) {
-      console.error(`[s3-sync] Upload sync error for ${relativePath}:`, err.message);
+      logger.error({ err, file: relativePath }, "Upload sync error");
     }
   }
 
   if (uploaded > 0) {
     saveManifest();
-    console.log(`[s3-sync] Synced ${uploaded} changed upload(s) to S3`);
+    logger.info({ count: uploaded }, "Synced changed uploads to S3");
   }
 }
 
@@ -198,12 +229,12 @@ let shuttingDown = false;
 async function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
-  console.log("[s3-sync] Shutdown signal received, running final sync...");
+  logger.info("Shutdown signal received, running final sync...");
   try {
     await fullSync();
-    console.log("[s3-sync] Final sync complete");
+    logger.info("Final sync complete");
   } catch (err) {
-    console.error("[s3-sync] Final sync error:", err.message);
+    logger.error({ err }, "Final sync error");
   }
   process.exit(0);
 }
@@ -220,13 +251,13 @@ async function main() {
   }
 
   loadManifest();
-  console.log(`[s3-sync] Starting periodic sync every ${SYNC_INTERVAL / 1000}s`);
+  logger.info({ intervalSeconds: SYNC_INTERVAL / 1000 }, "Starting periodic sync");
   const tick = async () => {
     if (shuttingDown) return;
     try {
       await fullSync();
     } catch (err) {
-      console.error("[s3-sync] Sync error:", err.message);
+      logger.error({ err }, "Sync error");
     }
   };
 
@@ -234,6 +265,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error("[s3-sync] Fatal error:", err);
+  logger.fatal({ err }, "Fatal error");
   process.exit(1);
 });

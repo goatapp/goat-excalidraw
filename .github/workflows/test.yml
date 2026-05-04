@@ -7,25 +7,64 @@ on:
     branches: [main]
 
 jobs:
+  build-excalidraw:
+    name: Build @excalidraw from source
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read excalidraw commit SHA
+        id: read-commit
+        run: echo "sha=$(tr -d '[:space:]' < frontend/.excalidraw-commit)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache vendor tarballs
+        id: vendor-cache
+        uses: actions/cache@v4
+        with:
+          path: frontend/vendor
+          key: excalidraw-vendor-${{ steps.read-commit.outputs.sha }}
+
+      - name: Setup Node.js
+        if: steps.vendor-cache.outputs.cache-hit != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '25'
+
+      - name: Build @excalidraw packages from source
+        if: steps.vendor-cache.outputs.cache-hit != 'true'
+        run: |
+          corepack enable
+          corepack prepare yarn@1.22.22 --activate
+          cd frontend
+          npm run excalidraw:build-from-source -- --pack-only
+
+      - name: Upload vendor tarballs
+        uses: actions/upload-artifact@v4
+        with:
+          name: excalidraw-vendor
+          path: frontend/vendor/*.tgz
+          retention-days: 1
+
   backend-tests:
     name: Backend Tests
     runs-on: ubuntu-latest
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '25'
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
-      
+
       - name: Install backend dependencies
         run: |
           cd backend
           npm ci
-      
+
       - name: Generate Prisma client
         run: |
           cd backend
@@ -40,23 +79,35 @@ jobs:
 
   frontend-unit-tests:
     name: Frontend Unit Tests
+    needs: build-excalidraw
     runs-on: ubuntu-latest
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '25'
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
-      
+
+      - name: Download vendor tarballs
+        uses: actions/download-artifact@v4
+        with:
+          name: excalidraw-vendor
+          path: frontend/vendor
+
+      - name: Strip vendor tarball integrity hashes
+        run: |
+          cd frontend
+          sed -i '/"resolved": "file:vendor\/excalidraw-/{n;s/"integrity": "sha512-[^"]*"/"integrity": ""/;}' package-lock.json
+
       - name: Install frontend dependencies
         run: |
           cd frontend
-          npm ci
-      
+          npm install
+
       - name: Run frontend tests
         run: |
           cd frontend
@@ -64,21 +115,22 @@ jobs:
 
   e2e-tests:
     name: E2E Browser Tests
+    needs: build-excalidraw
     runs-on: ubuntu-latest
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '25'
-      
+
       - name: Install backend dependencies
         run: |
           cd backend
           npm ci
-      
+
       - name: Generate Prisma client
         run: |
           cd backend
@@ -92,22 +144,33 @@ jobs:
           npx prisma migrate deploy
         env:
           DATABASE_URL: file:${{ github.workspace }}/backend/prisma/e2e-test.db
-      
+
+      - name: Download vendor tarballs
+        uses: actions/download-artifact@v4
+        with:
+          name: excalidraw-vendor
+          path: frontend/vendor
+
+      - name: Strip vendor tarball integrity hashes
+        run: |
+          cd frontend
+          sed -i '/"resolved": "file:vendor\/excalidraw-/{n;s/"integrity": "sha512-[^"]*"/"integrity": ""/;}' package-lock.json
+
       - name: Install frontend dependencies
         run: |
           cd frontend
-          npm ci
-      
+          npm install
+
       - name: Install E2E test dependencies
         run: |
           cd e2e
           npm ci
-      
+
       - name: Install Playwright browsers
         run: |
           cd e2e
           npx playwright install chromium --with-deps
-      
+
       - name: Start servers and run E2E tests
         run: |
           # Start backend server in background
@@ -115,7 +178,7 @@ jobs:
           DATABASE_URL="file:${{ github.workspace }}/backend/prisma/e2e-test.db" FRONTEND_URL="http://localhost:6767" npm run dev &
           BACKEND_PID=$!
           cd ..
-          
+
           # Wait for backend to be ready
           echo "Waiting for backend server..."
           for i in {1..30}; do
@@ -126,13 +189,13 @@ jobs:
             echo "Attempt $i: Backend not ready yet..."
             sleep 2
           done
-          
+
           # Start frontend server in background
           cd frontend
           npm run dev -- --host &
           FRONTEND_PID=$!
           cd ..
-          
+
           # Wait for frontend to be ready
           echo "Waiting for frontend server..."
           for i in {1..30}; do
@@ -143,19 +206,19 @@ jobs:
             echo "Attempt $i: Frontend not ready yet..."
             sleep 2
           done
-          
+
           # Run E2E tests
           cd e2e
           NO_SERVER=true CI=true npx playwright test
           TEST_EXIT_CODE=$?
-          
+
           # Cleanup
           kill $BACKEND_PID $FRONTEND_PID 2>/dev/null || true
-          
+
           exit $TEST_EXIT_CODE
         env:
           DATABASE_URL: file:${{ github.workspace }}/backend/prisma/e2e-test.db
-      
+
       - name: Upload Playwright report
         uses: actions/upload-artifact@v4
         if: always()
@@ -163,7 +226,7 @@ jobs:
           name: playwright-report
           path: e2e/playwright-report/
           retention-days: 7
-      
+
       - name: Upload test results
         uses: actions/upload-artifact@v4
         if: failure()
@@ -176,22 +239,22 @@ jobs:
   security-tests:
     name: Security Sanitization Tests
     runs-on: ubuntu-latest
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '25'
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
-      
+
       - name: Install backend dependencies
         run: |
           cd backend
           npm ci
-      
+
       - name: Generate Prisma client
         run: |
           cd backend

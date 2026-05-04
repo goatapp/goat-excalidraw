@@ -5,7 +5,6 @@ import { Sidebar } from './Sidebar';
 import { Logo } from './Logo';
 import { UploadStatus } from './UploadStatus';
 import { ImpersonationBanner } from './ImpersonationBanner';
-import { UpdateBanner } from './UpdateBanner';
 import type { Collection } from '../types';
 import clsx from 'clsx';
 
@@ -18,6 +17,7 @@ interface LayoutProps {
   onEditCollection: (id: string, name: string) => void;
   onDeleteCollection: (id: string) => void;
   onDrop?: (e: React.DragEvent, collectionId: string | null) => void;
+  onShareCollection?: (id: string) => void;
 }
 
 export const Layout: React.FC<LayoutProps> = ({
@@ -28,7 +28,8 @@ export const Layout: React.FC<LayoutProps> = ({
   onCreateCollection,
   onEditCollection,
   onDeleteCollection,
-  onDrop
+  onDrop,
+  onShareCollection,
 }) => {
   const location = useLocation();
   const [sidebarWidth, setSidebarWidth] = useState(260);
@@ -122,14 +123,12 @@ export const Layout: React.FC<LayoutProps> = ({
 
               <div className="ml-auto flex items-center gap-2">
                 <Logo className="w-8 h-8" />
-                <span className="text-xl text-slate-900 dark:text-white mt-1" style={{ fontFamily: 'Excalifont' }}>ExcaliDash</span>
-                <span className="text-[10px] font-bold text-red-500 mt-2" style={{ fontFamily: 'sans-serif' }}>BETA</span>
+                <span className="text-xl text-slate-900 dark:text-white mt-1" style={{ fontFamily: 'Excalifont' }}>ExcaliGOAT</span>
               </div>
             </div>
 
             <div className="flex-1 min-w-0 overflow-y-auto no-scrollbar">
               <div className="w-full mx-auto p-4 sm:p-6 lg:p-8 min-h-full">
-                <UpdateBanner />
                 <ImpersonationBanner />
                 {children}
               </div>
@@ -160,6 +159,7 @@ export const Layout: React.FC<LayoutProps> = ({
               onEditCollection={onEditCollection}
               onDeleteCollection={onDeleteCollection}
               onDrop={onDrop}
+              onShareCollection={onShareCollection}
             />
 
             <div
@@ -186,6 +186,7 @@ export const Layout: React.FC<LayoutProps> = ({
               onEditCollection={onEditCollection}
               onDeleteCollection={onDeleteCollection}
               onDrop={onDrop}
+              onShareCollection={onShareCollection}
             />
             
             <div
@@ -198,7 +199,6 @@ export const Layout: React.FC<LayoutProps> = ({
           </aside>
           <main className="flex-1 min-w-0 bg-white/40 dark:bg-neutral-900/40 backdrop-blur-sm rounded-2xl border border-white/50 dark:border-neutral-800/50 shadow-sm h-full transition-colors duration-200 overflow-y-auto no-scrollbar">
             <div className="w-full mx-auto p-4 sm:p-6 lg:p-8 min-h-full">
-              <UpdateBanner />
               <ImpersonationBanner />
               {children}
             </div>

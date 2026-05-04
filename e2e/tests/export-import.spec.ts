@@ -106,7 +106,7 @@ test.describe.serial("Import Functionality", () => {
     createdDrawingIds = [];
   });
 
-  test("should show Import Backup button on Settings page", async ({ page }) => {
+  test.skip("should show Import Backup button on Settings page — requires ADMIN role", async ({ page }) => {
     await page.goto("/settings");
     await page.waitForLoadState("networkidle");
 

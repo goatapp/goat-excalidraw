@@ -41,6 +41,7 @@ const buildApp = (options?: {
       authLoginRateLimitEnabled: true,
       authLoginRateLimitWindowMs: 900000,
       authLoginRateLimitMax: 20,
+      adminFullAccess: false,
     }),
     parseLoginRateLimitConfig: vi.fn().mockReturnValue({ enabled: true, windowMs: 900000, max: 20 }),
     applyLoginRateLimitConfig: vi.fn().mockReturnValue({ enabled: true, windowMs: 900000, max: 20 }),

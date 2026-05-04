@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { PrismaClient } from "../generated/client/client.js";
 import { BOOTSTRAP_USER_ID, DEFAULT_SYSTEM_CONFIG_ID } from "./authMode.js";
+import { logger } from "../utils/logger.js";
 
 const BOOTSTRAP_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
@@ -119,9 +120,7 @@ export const issueBootstrapSetupCodeIfRequired = async (
     },
   });
 
-  console.log(
-    `[BOOTSTRAP SETUP] One-time admin setup code (${reason}): ${code} (expires ${expiresAt.toISOString()})`
-  );
+  logger.info({ reason, code, expiresAt: expiresAt.toISOString() }, "Bootstrap one-time admin setup code issued");
 
   return { issued: true, code, expiresAt };
 };

@@ -13,6 +13,7 @@ import {
   Check,
   RefreshCw,
   Search,
+  Users,
 } from "lucide-react";
 import * as api from "../api";
 import { useAuth } from "../context/AuthContext";
@@ -22,6 +23,7 @@ type Props = {
   drawingName: string;
   isOpen: boolean;
   onClose: () => void;
+  accessLevel?: "owner" | "edit" | "view";
 };
 
 const toIsoFromDatetimeLocal = (value: string): string | undefined => {
@@ -140,7 +142,7 @@ const CustomSelect: React.FC<{
   );
 };
 
-export const ShareModal: React.FC<Props> = ({ drawingId, drawingName, isOpen, onClose }) => {
+export const ShareModal: React.FC<Props> = ({ drawingId, drawingName, isOpen, onClose, accessLevel = "owner" }) => {
   const { user } = useAuth();
   const currentUserId = user?.id || null;
 
@@ -149,6 +151,7 @@ export const ShareModal: React.FC<Props> = ({ drawingId, drawingName, isOpen, on
   const [sharing, setSharing] = useState<{
     permissions: api.DrawingPermissionRow[];
     linkShares: api.DrawingLinkShareRow[];
+    collectionCollaborators: api.CollectionCollaboratorRow[];
   } | null>(null);
 
   const [userQuery, setUserQuery] = useState("");
@@ -423,7 +426,9 @@ export const ShareModal: React.FC<Props> = ({ drawingId, drawingName, isOpen, on
                   </div>
                   <div className="text-[10px] font-bold text-slate-500 dark:text-neutral-400 mt-0.5">{user?.email}</div>
                 </div>
-                <div className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-neutral-500 pr-1 shrink-0">Owner</div>
+                <div className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-neutral-500 pr-1 shrink-0">
+                  {accessLevel === "owner" ? "Owner" : accessLevel === "edit" ? "Editor" : "Viewer"}
+                </div>
               </div>
 
               {(sharing?.permissions || []).map((p) => (
@@ -456,6 +461,29 @@ export const ShareModal: React.FC<Props> = ({ drawingId, drawingName, isOpen, on
                   </div>
                 </div>
               ))}
+
+              {(() => {
+                const permUserIds = new Set((sharing?.permissions || []).map(p => p.granteeUserId));
+                const collabsToShow = (sharing?.collectionCollaborators || []).filter(
+                  c => c.granteeUserId !== currentUserId && !permUserIds.has(c.granteeUserId)
+                );
+                if (collabsToShow.length === 0) return null;
+                return collabsToShow.map((c) => (
+                  <div key={`coll-${c.granteeUserId}`} className="flex items-center gap-3 px-1 py-1.5">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 font-black text-sm border-2 border-emerald-600 dark:border-emerald-500 shrink-0">
+                      {c.granteeUser.name?.charAt(0).toUpperCase() || "?"}
+                    </div>
+                    <div className="flex-1 min-w-0 flex flex-col justify-center">
+                      <div className="text-xs font-black text-slate-900 dark:text-neutral-100 leading-tight truncate">{c.granteeUser.name}</div>
+                      <div className="text-[10px] font-bold text-slate-500 dark:text-neutral-400 mt-0.5 truncate">{c.granteeUser.email}</div>
+                    </div>
+                    <div className="shrink-0 flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400 pr-1">
+                      <Users size={10} strokeWidth={3} />
+                      <span>{c.role === "edit" ? "Editor" : "Viewer"}</span>
+                    </div>
+                  </div>
+                ));
+              })()}
             </div>
           </section>
 

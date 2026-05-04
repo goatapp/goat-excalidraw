@@ -1,10 +1,19 @@
 # Stage 1: Build frontend
 FROM node:25-alpine AS frontend-builder
 
+RUN apk add --no-cache git bash
+
 WORKDIR /app/frontend
 
 COPY frontend/package*.json ./
-RUN npm ci && npm cache clean --force
+COPY frontend/.excalidraw-commit ./
+COPY frontend/scripts ./scripts/
+COPY frontend/vendor* ./vendor/
+RUN if ! ls vendor/*.tgz >/dev/null 2>&1; then \
+      bash scripts/build-excalidraw-from-source.sh --pack-only; \
+    fi
+RUN sed -i '/"resolved": "file:vendor\/excalidraw-/{n;s/"integrity": "sha512-[^"]*"/"integrity": ""/;}' package-lock.json && \
+    npm install && npm cache clean --force
 
 COPY frontend/ ./
 COPY VERSION ../VERSION

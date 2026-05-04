@@ -4,6 +4,7 @@ import { Prisma, PrismaClient } from "../generated/client/client.js";
 import { generators, Issuer } from "openid-client";
 import { logAuditEvent } from "../utils/audit.js";
 import { hashTokenForStorage } from "./tokenSecurity.js";
+import { logger } from "../utils/logger.js";
 
 const OIDC_FLOW_COOKIE_NAME = "excalidash-oidc-flow";
 const OIDC_PROVIDER_KEY = "oidc";
@@ -34,6 +35,7 @@ type RegisterOidcRoutesDeps = {
   ensureSystemConfig: () => Promise<{
     id: string;
     oidcJitProvisioningEnabled: boolean | null;
+    adminFullAccess: boolean;
   }>;
   sanitizeText: (input: unknown, maxLength?: number) => string;
   generateTokens: (
@@ -456,9 +458,7 @@ export const registerOidcRoutes = (deps: RegisterOidcRoutesDeps) => {
 
     if (!discoveredIssuer || discoveredIssuer !== expectedIssuer) {
       if (discoveredIssuer && discoveredIssuer !== expectedIssuer) {
-        console.warn(
-          `[OIDC] Issuer mismatch between discovery (${discoveredIssuerRaw}) and configured OIDC_ISSUER_URL (${config.oidc.issuerUrl}); using configured issuer for token validation.`,
-        );
+        logger.warn({ discoveredIssuer: discoveredIssuerRaw, configuredIssuer: config.oidc.issuerUrl }, "OIDC issuer mismatch between discovery and configured URL; using configured issuer for token validation");
       }
 
       if (typeof (clientIssuer as any) === "object" && clientIssuer) {
@@ -626,7 +626,7 @@ export const registerOidcRoutes = (deps: RegisterOidcRoutesDeps) => {
 
       return res.redirect(authorizationUrl);
     } catch (error) {
-      console.error("OIDC start error:", error);
+      logger.error({ err: error }, "OIDC start error");
       return redirectToLoginWithError(req, res, "callback_failed");
     }
   });
@@ -698,9 +698,7 @@ export const registerOidcRoutes = (deps: RegisterOidcRoutesDeps) => {
           throw error;
         }
 
-        console.warn(
-          `OIDC callback id_token alg mismatch (expected ${mismatch.expected}, got ${mismatch.got}); retrying once with ${mismatch.got}.`,
-        );
+        logger.warn({ expected: mismatch.expected, got: mismatch.got }, "OIDC callback id_token alg mismatch; retrying with observed alg");
         const retryClient = await buildOidcClient(mismatch.got);
         tokenSet = await retryClient.callback(
           config.oidc.redirectUri as string,
@@ -965,7 +963,7 @@ export const registerOidcRoutes = (deps: RegisterOidcRoutesDeps) => {
         );
       }
 
-      console.error("OIDC callback error:", error);
+      logger.error({ err: error }, "OIDC callback error");
       return redirectToLoginWithError(
         req,
         res,

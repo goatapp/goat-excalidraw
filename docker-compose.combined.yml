@@ -27,6 +27,7 @@ services:
       /bin/sh -c "
       mc alias set local http://minio:9000 minioadmin minioadmin &&
       mc mb --ignore-existing local/excalidraw &&
+      mc anonymous set download local/excalidraw &&
       exit 0
       "
 
@@ -56,6 +57,7 @@ services:
       - AWS_SECRET_ACCESS_KEY=minioadmin
       - AWS_ENDPOINT_URL=http://minio:9000
       - AWS_REGION=us-east-1
+    #  - S3_PUBLIC_URL=http://localhost:9000/excalidraw
       - S3_FORCE_PATH_STYLE=true
     volumes:
       - app-data:/app/prisma

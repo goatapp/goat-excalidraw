@@ -1,0 +1,99 @@
+# Proxy-auth test stack.
+#
+# Runs the combined image with AUTH_MODE=proxy so the backend trusts
+# identity headers directly. Useful for testing proxy auth and team
+# collections without a full authenticating proxy.
+#
+# Usage:
+#   docker compose -f docker-compose.proxy-auth.yml up --build
+#
+# Then test with curl (or a browser extension like ModHeader):
+#   curl -H "x-forwarded-email: alice@example.com" \
+#        -H "x-goat-teams: platform,sneakers" \
+#        http://localhost:8000/collections
+#
+# To test as a different user / team:
+#   curl -H "x-forwarded-email: bob@example.com" \
+#        -H "x-goat-teams: buy" \
+#        http://localhost:8000/collections
+
+services:
+  minio:
+    image: minio/minio:latest
+    container_name: excalidraw-proxy-minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    volumes:
+      - minio-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin &&
+      mc mb --ignore-existing local/excalidraw &&
+      exit 0
+      "
+
+  excalidraw:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: excalidraw-proxy
+    ports:
+      - "8000:8000"
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      - DATABASE_URL=file:/app/prisma/dev.db
+      - PORT=8000
+      - NODE_ENV=production
+      - FRONTEND_URL=http://localhost:8000
+      - AUTH_MODE=proxy
+      - TRUST_PROXY=true
+      - PROXY_AUTH_HEADER=x-forwarded-email
+      - JWT_SECRET=${JWT_SECRET:-proxy-test-jwt-secret-change-me-please}
+      - CSRF_SECRET=${CSRF_SECRET:-proxy-test-csrf-secret-change-me-please}
+      - S3_BUCKET_NAME=excalidraw
+      - S3_PREFIX=excalidraw/
+      - S3_SYNC_INTERVAL_MS=30000
+      - AWS_ACCESS_KEY_ID=minioadmin
+      - AWS_SECRET_ACCESS_KEY=minioadmin
+      - AWS_ENDPOINT_URL=http://minio:9000
+      - AWS_REGION=us-east-1
+      - S3_FORCE_PATH_STYLE=true
+    volumes:
+      - app-data:/app/prisma
+      - app-uploads:/app/uploads
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://127.0.0.1:8000/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  app-data:
+  app-uploads:
+  minio-data:

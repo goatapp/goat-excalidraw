@@ -111,12 +111,19 @@ export const verifyPassphraseHash = (
   return false;
 };
 
+export const isAdminFullAccessOverride = (
+  user: { role: string } | null | undefined,
+  adminFullAccess: boolean,
+): boolean => adminFullAccess === true && user?.role === "ADMIN";
+
 export const getDrawingAccess = async (params: {
   prisma: PrismaClient;
   principal: DrawingPrincipal | null;
   drawingId: string;
   now?: Date;
+  isAdminOverride?: boolean;
 }): Promise<DrawingAccess> => {
+  if (params.isAdminOverride) return "owner";
   const nowMs = (params.now ?? new Date()).getTime();
 
   let baseAccess: DrawingAccess = "none";
@@ -140,6 +147,27 @@ export const getDrawingAccess = async (params: {
       select: { permission: true },
     });
     baseAccess = normalizeDrawingPermission(perm?.permission) ?? baseAccess;
+
+    if (baseAccess === "none") {
+      const drawingWithCollection = await params.prisma.drawing.findUnique({
+        where: { id: params.drawingId },
+        select: { collectionId: true },
+      });
+      if (drawingWithCollection?.collectionId) {
+        const collectionShare = await params.prisma.collectionShare.findUnique({
+          where: {
+            collectionId_granteeUserId: {
+              collectionId: drawingWithCollection.collectionId,
+              granteeUserId: params.principal.userId,
+            },
+          },
+          select: { role: true },
+        });
+        if (collectionShare) {
+          baseAccess = collectionShare.role === "edit" ? "edit" : "view";
+        }
+      }
+    }
   }
 
   // Google Docs-style link policy: applies regardless of whether the visitor is signed in.

@@ -4,6 +4,7 @@ import jwt, { SignOptions } from "jsonwebtoken";
 import ms, { type StringValue } from "ms";
 import { Prisma, PrismaClient } from "./generated/client/client.js";
 import { config } from "./config.js";
+import { logger } from "./utils/logger.js";
 import {
   requireAuth as defaultRequireAuth,
   optionalAuth as defaultOptionalAuth,
@@ -282,9 +283,7 @@ export const createAuthRouter = (deps: CreateAuthRouterDeps): express.Router => 
       }
       loginIdentifierKeyIndex.delete(normalizedIdentifier);
     } catch (error) {
-      if (process.env.NODE_ENV === "development") {
-        console.debug("Rate limit reset skipped:", error);
-      }
+      logger.debug({ err: error }, "Rate limit reset skipped");
     }
   };
 

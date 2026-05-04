@@ -1,24 +1,42 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useMemo } from 'react';
 
-type Theme = 'light' | 'dark';
+type ThemePreference = 'light' | 'dark' | 'system';
+type ResolvedTheme = 'light' | 'dark';
 
 interface ThemeContextType {
-  theme: Theme;
+  themePreference: ThemePreference;
+  theme: ResolvedTheme;
+  setThemePreference: (preference: ThemePreference) => void;
   toggleTheme: () => void;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
+function getSystemTheme(): ResolvedTheme {
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [theme, setTheme] = useState<Theme>(() => {
-    const savedTheme = localStorage.getItem('theme');
-    return (savedTheme as Theme) || 'light';
+  const [themePreference, setThemePreference] = useState<ThemePreference>(() => {
+    const saved = localStorage.getItem('theme');
+    if (saved === 'light' || saved === 'dark' || saved === 'system') return saved;
+    return 'system';
   });
 
+  const [systemTheme, setSystemTheme] = useState<ResolvedTheme>(getSystemTheme);
+
   useEffect(() => {
-    console.log('Theme changed to:', theme);
-    localStorage.setItem('theme', theme);
-    
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (e: MediaQueryListEvent) => setSystemTheme(e.matches ? 'dark' : 'light');
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
+  const theme: ResolvedTheme = themePreference === 'system' ? systemTheme : themePreference;
+
+  useEffect(() => {
+    localStorage.setItem('theme', themePreference);
+
     const link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
     if (link) {
       link.href = theme === 'dark' ? '/favicon-dark.svg' : '/favicon-light.svg';
@@ -26,19 +44,27 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     if (theme === 'dark') {
       document.documentElement.classList.add('dark');
-      console.log('Added dark class, classList:', document.documentElement.classList.toString());
     } else {
       document.documentElement.classList.remove('dark');
     }
-  }, [theme]);
+  }, [theme, themePreference]);
 
   const toggleTheme = () => {
-    console.log('Toggling theme');
-    setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
+    setThemePreference((prev) => {
+      if (prev === 'light') return 'dark';
+      if (prev === 'dark') return 'light';
+      return systemTheme === 'dark' ? 'light' : 'dark';
+    });
   };
 
+  const value = useMemo(
+    () => ({ themePreference, theme, setThemePreference, toggleTheme }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [themePreference, theme],
+  );
+
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+    <ThemeContext.Provider value={value}>
       {children}
     </ThemeContext.Provider>
   );

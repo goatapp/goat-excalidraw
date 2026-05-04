@@ -9,6 +9,7 @@ import { Toaster, toast } from 'sonner';
 import { getPasswordPolicy, validatePassword } from '../utils/passwordPolicy';
 import { PasswordRequirements } from '../components/PasswordRequirements';
 import { AccessControlCard } from './admin/AccessControlCard';
+import { AnalyticsCard } from './admin/AnalyticsCard';
 import { LoginRateLimitCard } from './admin/LoginRateLimitCard';
 import { UserActionModals } from './admin/UserActionModals';
 import { UsersTable } from './admin/UsersTable';
@@ -19,6 +20,18 @@ import {
   readImpersonationState,
   USER_KEY,
 } from '../utils/impersonation';
+
+type AdminStats = {
+  totalDrawings: number;
+  totalUsers: number;
+  activeUsers7d: number;
+  activeUsers30d: number;
+  totalCollections: number;
+  totalSnapshots: number;
+  drawingStorageBytes: number;
+  snapshotStorageBytes: number;
+  topCollections: { collectionId: string | null; collectionName: string; drawingCount: number }[];
+};
 
 type LoginRateLimitFormState = {
   enabled: boolean;
@@ -62,6 +75,7 @@ export const Admin: React.FC = () => {
   const [oidcEnabled, setOidcEnabled] = useState(false);
   const [oidcJitProvisioningEnabled, setOidcJitProvisioningEnabled] = useState<boolean | null>(null);
   const [oidcProviderName, setOidcProviderName] = useState<string | null>(null);
+  const [adminFullAccess, setAdminFullAccess] = useState<boolean | null>(null);
   const [registrationLoading, setRegistrationLoading] = useState(false);
 
   const [loginRateLimitLoading, setLoginRateLimitLoading] = useState(false);
@@ -74,6 +88,9 @@ export const Admin: React.FC = () => {
   const lastAutoSaveAttemptKeyRef = useRef<string | null>(null);
   const [resetIdentifier, setResetIdentifier] = useState('');
   const [resetLoading, setResetLoading] = useState(false);
+
+  const [adminStats, setAdminStats] = useState<AdminStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
 
   const normalizedLoginRateLimit = useMemo<LoginRateLimitFormState>(
     () => ({
@@ -140,6 +157,7 @@ export const Admin: React.FC = () => {
         oidcEnabled?: boolean;
         oidcProvider?: string;
         oidcJitProvisioningEnabled?: boolean;
+        adminFullAccess?: boolean;
       }>('/auth/status');
       setRegistrationEnabled(Boolean(response.data.registrationEnabled));
       setLocalRegistrationAllowed(response.data.authMode !== 'oidc_enforced');
@@ -151,6 +169,11 @@ export const Admin: React.FC = () => {
         typeof response.data.oidcJitProvisioningEnabled === 'boolean'
           ? response.data.oidcJitProvisioningEnabled
           : null
+      );
+      setAdminFullAccess(
+        typeof response.data.adminFullAccess === 'boolean'
+          ? response.data.adminFullAccess
+          : false
       );
     } catch (err: unknown) {
       let message = 'Failed to load registration status';
@@ -207,6 +230,35 @@ export const Admin: React.FC = () => {
       );
     } catch (err: unknown) {
       let message = 'Failed to update OIDC provisioning setting';
+      if (api.isAxiosError(err)) {
+        message = err.response?.data?.message || err.response?.data?.error || message;
+      }
+      setError(message);
+    } finally {
+      setRegistrationLoading(false);
+    }
+  };
+
+  const toggleAdminFullAccess = async () => {
+    if (!isAdmin || adminFullAccess === null) return;
+
+    setRegistrationLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const response = await api.api.post<{ adminFullAccess: boolean }>(
+        '/auth/admin-full-access',
+        { enabled: !adminFullAccess }
+      );
+      setAdminFullAccess(Boolean(response.data.adminFullAccess));
+      setSuccess(
+        response.data.adminFullAccess
+          ? 'Admin full access enabled'
+          : 'Admin full access disabled'
+      );
+    } catch (err: unknown) {
+      let message = 'Failed to update admin full access setting';
       if (api.isAxiosError(err)) {
         message = err.response?.data?.message || err.response?.data?.error || message;
       }
@@ -330,12 +382,29 @@ export const Admin: React.FC = () => {
     }
   };
 
+  const loadAdminStats = async () => {
+    setStatsLoading(true);
+    try {
+      const response = await api.api.get<AdminStats>('/auth/stats');
+      setAdminStats(response.data);
+    } catch (err: unknown) {
+      let message = 'Failed to load analytics';
+      if (api.isAxiosError(err)) {
+        message = err.response?.data?.message || err.response?.data?.error || message;
+      }
+      setError(message);
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!authEnabled || !isAdmin) return;
     void loadCollections();
     void loadUsers();
     void loadLoginRateLimitConfig();
     void loadRegistrationStatus();
+    void loadAdminStats();
   }, [authEnabled, isAdmin]);
 
   useEffect(() => {
@@ -721,15 +790,23 @@ export const Admin: React.FC = () => {
         </div>
       )}
 
+      <AnalyticsCard
+        stats={adminStats}
+        loading={statsLoading}
+        onRefresh={loadAdminStats}
+      />
+
       <AccessControlCard
         registrationEnabled={registrationEnabled}
         localRegistrationAllowed={localRegistrationAllowed}
         oidcEnabled={oidcEnabled}
         oidcProviderName={oidcProviderName}
         oidcJitProvisioningEnabled={oidcJitProvisioningEnabled}
+        adminFullAccess={adminFullAccess}
         loading={registrationLoading}
         onToggleRegistration={toggleRegistration}
         onToggleOidcJitProvisioning={toggleOidcJitProvisioning}
+        onToggleAdminFullAccess={toggleAdminFullAccess}
       />
 
       <LoginRateLimitCard

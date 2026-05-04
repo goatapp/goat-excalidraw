@@ -7,9 +7,11 @@ type AccessControlCardProps = {
   oidcEnabled: boolean;
   oidcProviderName: string | null;
   oidcJitProvisioningEnabled: boolean | null;
+  adminFullAccess: boolean | null;
   loading: boolean;
   onToggleRegistration: () => void | Promise<void>;
   onToggleOidcJitProvisioning: () => void | Promise<void>;
+  onToggleAdminFullAccess: () => void | Promise<void>;
 };
 
 const getRegistrationSummary = (
@@ -52,15 +54,23 @@ const getOidcLabel = (enabled: boolean | null, loading: boolean) => {
   return enabled ? 'Enabled' : 'Invite-only';
 };
 
+const getAdminFullAccessLabel = (enabled: boolean | null, loading: boolean) => {
+  if (enabled === null) return 'Loading…';
+  if (loading) return 'Saving…';
+  return enabled ? 'Enabled' : 'Disabled';
+};
+
 export const AccessControlCard: React.FC<AccessControlCardProps> = ({
   registrationEnabled,
   localRegistrationAllowed,
   oidcEnabled,
   oidcProviderName,
   oidcJitProvisioningEnabled,
+  adminFullAccess,
   loading,
   onToggleRegistration,
   onToggleOidcJitProvisioning,
+  onToggleAdminFullAccess,
 }) => (
   <div className="mb-6 bg-white dark:bg-neutral-900 border-2 border-black dark:border-neutral-700 rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.2)] p-4 sm:p-6">
     <div className="flex items-center gap-3 mb-4">
@@ -111,6 +121,23 @@ export const AccessControlCard: React.FC<AccessControlCardProps> = ({
           </button>
         </div>
       )}
+      <div>
+        <label className="block text-sm font-bold text-slate-700 dark:text-neutral-300 mb-2">
+          Admin full access
+        </label>
+        <button
+          type="button"
+          onClick={() => void onToggleAdminFullAccess()}
+          disabled={loading || adminFullAccess === null}
+          className={`w-full px-4 py-3 rounded-xl border-2 font-bold transition-all text-sm ${
+            adminFullAccess
+              ? 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300'
+              : 'border-slate-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-slate-600 dark:text-neutral-300'
+          }`}
+        >
+          {getAdminFullAccessLabel(adminFullAccess, loading)}
+        </button>
+      </div>
     </div>
 
     {oidcEnabled && oidcJitProvisioningEnabled !== null && (
@@ -123,6 +150,19 @@ export const AccessControlCard: React.FC<AccessControlCardProps> = ({
           {oidcJitProvisioningEnabled
             ? 'Any successfully authenticated OIDC user can get an account on first sign-in.'
             : 'Only users pre-created below can sign in through OIDC. Use OIDC-only invites for accounts that should not have a local password.'}
+        </div>
+      </div>
+    )}
+
+    {adminFullAccess !== null && (
+      <div className="mt-4 rounded-xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-900/20 p-4 text-sm text-amber-900 dark:text-amber-100">
+        <div className="font-semibold">
+          Admin full access: {adminFullAccess ? 'Enabled' : 'Disabled'}
+        </div>
+        <div className="mt-1">
+          {adminFullAccess
+            ? 'Admin users can view, edit, and manage all drawings and collections regardless of ownership.'
+            : 'Admin users can only access their own drawings and those shared with them.'}
         </div>
       </div>
     )}

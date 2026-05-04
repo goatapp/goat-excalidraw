@@ -10,6 +10,7 @@ import multer from "multer";
 import { z } from "zod";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
+import { pinoHttp } from "pino-http";
 import { v4 as uuidv4 } from "uuid";
 import { PrismaClient, Prisma } from "./generated/client/client.js";
 import {
@@ -27,7 +28,6 @@ import authRouter from "./auth.js";
 import { logAuditEvent } from "./utils/audit.js";
 import { registerDashboardRoutes } from "./routes/dashboard.js";
 import { registerImportExportRoutes } from "./routes/importExport.js";
-import { registerSystemRoutes } from "./routes/system.js";
 import { prisma } from "./db/prisma.js";
 import { createDrawingsCacheStore } from "./server/drawingsCache.js";
 import { registerCsrfProtection } from "./server/csrf.js";
@@ -38,10 +38,15 @@ import {
 } from "./server/httpsRedirectPolicy.js";
 import { issueBootstrapSetupCodeIfRequired } from "./auth/bootstrapSetupCode.js";
 import { fileURLToPath } from "node:url";
+import { logger } from "./utils/logger.js";
+import { registerFileRoutes } from "./routes/files.js";
+import { registerStorageRoutes } from "./routes/storage.js";
+import { initS3, isS3Enabled, deleteS3Object } from "./s3.js";
+import { processFilesForS3, cleanupRemovedS3Files } from "./fileProcessing.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const backendRoot = path.resolve(__dirname, "../");
-console.log("Resolved DATABASE_URL:", process.env.DATABASE_URL);
+logger.info({ databaseUrl: process.env.DATABASE_URL }, "Resolved DATABASE_URL");
 
 const normalizeOrigins = (rawOrigins?: string | null): string[] => {
   const fallback = "http://localhost:6767";
@@ -66,7 +71,7 @@ const normalizeOrigins = (rawOrigins?: string | null): string[] => {
 };
 
 const allowedOrigins = normalizeOrigins(config.frontendUrl);
-console.log("Allowed origins:", allowedOrigins);
+logger.info({ allowedOrigins }, "Allowed origins");
 
 const isDev = (process.env.NODE_ENV || "development") !== "production";
 const isLocalDevOrigin = (origin: string): boolean => {
@@ -110,7 +115,7 @@ const initializeUploadDir = async () => {
   try {
     await fsPromises.mkdir(uploadDir, { recursive: true });
   } catch (error) {
-    console.error("Failed to create upload directory:", error);
+    logger.error({ err: error }, "Failed to create upload directory");
   }
 };
 
@@ -129,9 +134,9 @@ const trustProxyValue =
 app.set("trust proxy", trustProxyValue);
 
 if (trustProxyValue === true) {
-  console.log("[config] trust proxy: enabled (handles multiple proxy layers)");
+  logger.info("trust proxy: enabled (handles multiple proxy layers)");
 } else {
-  console.log(`[config] trust proxy: ${trustProxyValue}`);
+  logger.info({ trustProxy: trustProxyValue }, "trust proxy configured");
 }
 
 const httpServer = createServer(app);
@@ -150,10 +155,7 @@ const parseJsonField = <T>(
   try {
     return JSON.parse(rawValue) as T;
   } catch (error) {
-    console.warn("Failed to parse JSON field", {
-      error,
-      valuePreview: rawValue.slice(0, 50),
-    });
+    logger.warn({ err: error, valuePreview: rawValue.slice(0, 50) }, "Failed to parse JSON field");
     return fallback;
   }
 };
@@ -227,6 +229,30 @@ app.use((req, res, next) => {
   next();
 });
 
+app.use(
+  pinoHttp({
+    logger,
+    genReqId: (req) => req.headers["x-request-id"] as string,
+    customLogLevel: (_req, res, err) => {
+      if (res.statusCode >= 500 || err) return "error";
+      if (res.statusCode >= 400) return "warn";
+      return "debug";
+    },
+    serializers: {
+      req: (req) => ({
+        method: req.method,
+        url: req.url,
+      }),
+      res: (res) => ({
+        statusCode: res.statusCode,
+      }),
+    },
+    autoLogging: {
+      ignore: (req) => req.url === "/health" || req.url === "/api/health",
+    },
+  })
+);
+
 const shouldEnforceHttps =
   config.nodeEnv === "production" &&
   config.enforceHttpsRedirect &&
@@ -253,12 +279,14 @@ app.use(
         baseUri: ["'none'"],
         formAction: ["'none'"],
         frameAncestors: ["'none'"],
+        frameSrc: ["https://drive.google.com", "https://www.youtube.com", "https://youtu.be", "https://www.figma.com"],
         objectSrc: ["'none'"],
-        imgSrc: ["'self'", "data:", "blob:"],
+        imgSrc: ["'self'", "data:", "blob:", ...(config.s3.publicUrl ? [new URL(config.s3.publicUrl).origin] : [])],
         connectSrc: [
           "'self'",
           ...allowedOrigins.map((o) => o.replace(/^http/, "ws")),
           "https://esm.sh",
+          "https://libraries.excalidraw.com",
         ],
         workerSrc: ["'self'", "blob:"],
       },
@@ -281,21 +309,6 @@ app.use(
 );
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
-
-app.use((req, res, next) => {
-  const requestId = req.headers["x-request-id"] || "unknown";
-  const userEmail = req.user?.email || req.headers[config.proxyAuthHeader] as string || "anonymous";
-
-  res.on("finish", () => {
-    if (res.statusCode >= 400) {
-      console.error(
-        `[ERROR] ${req.method} ${req.path} - ${res.statusCode} - User: ${userEmail} - IP: ${req.ip} - RequestID: ${requestId}`
-      );
-    }
-  });
-
-  next();
-});
 
 
 const RATE_LIMIT_WINDOW = 15 * 60 * 1000;
@@ -327,7 +340,7 @@ if (hasFrontend) {
   const API_PATH_PREFIXES = [
     "/api", "/auth", "/health", "/csrf-token", "/socket.io/",
     "/drawings", "/collections", "/library", "/import", "/export",
-    "/system", "/share", "/admin", "/users",
+    "/system", "/share", "/users", "/files",
   ];
 
   app.use((req, res, next) => {
@@ -380,7 +393,7 @@ const drawingCreateSchema = drawingBaseSchema
         Object.assign(data, sanitized);
         return true;
       } catch (error) {
-        console.error("Sanitization failed:", error);
+        logger.error({ err: error }, "Sanitization failed");
         return false;
       }
     },
@@ -442,7 +455,7 @@ export const sanitizeDrawingUpdateData = (
     }
     return true;
   } catch (error) {
-    console.error("Sanitization failed:", error);
+    logger.error({ err: error }, "Sanitization failed");
     if (!needsSanitization) {
       return true;
     }
@@ -484,7 +497,7 @@ const validateSqliteHeader = (filePath: string): boolean => {
     fs.closeSync(fd);
 
     if (bytesRead < 16) {
-      console.warn("File too small to be a valid SQLite database");
+      logger.warn("File too small to be a valid SQLite database");
       return false;
     }
 
@@ -495,16 +508,12 @@ const validateSqliteHeader = (filePath: string): boolean => {
 
     const isValid = buffer.equals(expectedHeader);
     if (!isValid) {
-      console.warn("Invalid SQLite file header detected", {
-        filePath,
-        header: buffer.toString("hex"),
-        expected: expectedHeader.toString("hex"),
-      });
+      logger.warn({ filePath, header: buffer.toString("hex"), expected: expectedHeader.toString("hex") }, "Invalid SQLite file header detected");
     }
 
     return isValid;
   } catch (error) {
-    console.error("Failed to validate SQLite header:", error);
+    logger.error({ err: error }, "Failed to validate SQLite header");
     return false;
   }
 };
@@ -532,7 +541,7 @@ const verifyDatabaseIntegrityAsync = (filePath: string): Promise<boolean> => {
 
     worker.on("message", (isValid: boolean) => finish(isValid));
     worker.on("error", (err) => {
-      console.error("Worker error:", err);
+      logger.error({ err }, "Worker error");
       finish(false);
     });
     worker.on("exit", (code) => {
@@ -542,7 +551,7 @@ const verifyDatabaseIntegrityAsync = (filePath: string): Promise<boolean> => {
     });
 
     timeoutHandle = setTimeout(() => {
-      console.warn("Integrity check worker timed out", { filePath });
+      logger.warn({ filePath }, "Integrity check worker timed out");
       worker.terminate();
       finish(false);
     }, 10000);
@@ -557,7 +566,7 @@ const removeFileIfExists = async (filePath?: string) => {
     });
     await fsPromises.unlink(filePath);
   } catch (error) {
-    console.error("Failed to remove file", { filePath, error });
+    logger.error({ filePath, err: error }, "Failed to remove file");
   }
 };
 
@@ -629,15 +638,40 @@ if (enableOnboardingGate) {
         redirectTo: "/auth-setup",
       });
     } catch (error) {
-      console.error("Auth onboarding gate error:", error);
+      logger.error({ err: error }, "Auth onboarding gate error");
       return next();
     }
   });
 }
 
-registerSystemRoutes(app, {
+if (config.s3.bucket) {
+  initS3({
+    bucket: config.s3.bucket,
+    region: config.s3.region,
+    endpoint: config.s3.endpoint ?? undefined,
+    publicUrl: config.s3.publicUrl ?? undefined,
+    forcePathStyle: config.s3.forcePathStyle,
+    accessKeyId: config.s3.accessKeyId ?? undefined,
+    secretAccessKey: config.s3.secretAccessKey ?? undefined,
+  });
+  logger.info(
+    { bucket: config.s3.bucket, region: config.s3.region, endpoint: config.s3.endpoint, publicUrl: config.s3.publicUrl },
+    "S3 storage enabled"
+  );
+} else {
+  logger.info("S3 disabled — S3_BUCKET_NAME not configured. Images stored as base64 in SQLite.");
+}
+
+registerFileRoutes(app, { prisma, requireAuth, asyncHandler });
+registerStorageRoutes(app, {
+  prisma,
+  requireAuth,
   asyncHandler,
-  getBackendVersion,
+  parseJsonField,
+  getAdminFullAccess: async () => {
+    const sc = await authModeService.ensureSystemConfig();
+    return sc.adminFullAccess;
+  },
 });
 
 registerDashboardRoutes(app, {
@@ -660,6 +694,13 @@ registerDashboardRoutes(app, {
   MAX_PAGE_SIZE,
   config,
   logAuditEvent,
+  getAdminFullAccess: async () => {
+    const sc = await authModeService.ensureSystemConfig();
+    return sc.adminFullAccess;
+  },
+  io,
+  processFilesForS3: (files, userId, drawingId) =>
+    processFilesForS3(files, userId, drawingId, prisma),
 });
 
 registerImportExportRoutes({
@@ -693,21 +734,147 @@ export { app, httpServer };
 const isMain = process.argv[1] &&
   import.meta.url === new URL(`file://${path.resolve(process.argv[1])}`).href;
 
-// Snapshot cleanup: delete snapshots older than 2 days (runs hourly)
-const SNAPSHOT_RETENTION_MS = 2 * 24 * 60 * 60 * 1000;
-setInterval(async () => {
+const collectFileIdsFromSnapshots = (
+  snapshots: { files: string | null }[],
+): Set<string> => {
+  const ids = new Set<string>();
+  for (const snap of snapshots) {
+    if (!snap.files) continue;
+    try {
+      const files = JSON.parse(snap.files);
+      if (files && typeof files === "object") {
+        for (const key of Object.keys(files)) ids.add(key);
+      }
+    } catch { /* ignore malformed JSON */ }
+  }
+  return ids;
+};
+
+const cleanupOrphanedS3FilesAfterSnapshotPrune = async (
+  candidateFileIds: Set<string>,
+): Promise<number> => {
+  if (!isS3Enabled() || candidateFileIds.size === 0) return 0;
+
+  let cleaned = 0;
+  for (const fileId of candidateFileIds) {
+    try {
+      const stillReferenced = await prisma.$queryRawUnsafe<{ cnt: bigint }[]>(
+        `SELECT (
+          (SELECT COUNT(*) FROM Drawing WHERE files LIKE '%' || ? || '%') +
+          (SELECT COUNT(*) FROM DrawingSnapshot WHERE files LIKE '%' || ? || '%')
+        ) as cnt`,
+        fileId, fileId,
+      );
+      const count = Number(stillReferenced[0]?.cnt ?? 0);
+      if (count > 0) continue;
+
+      const record = await prisma.s3File.findUnique({ where: { id: fileId } });
+      if (!record) continue;
+
+      await deleteS3Object(record.s3Key);
+      await prisma.s3File.delete({ where: { id: fileId } });
+      cleaned++;
+    } catch (err) {
+      logger.error({ err, fileId }, "Failed to clean up orphaned S3 file after snapshot prune");
+    }
+  }
+  return cleaned;
+};
+
+const cleanupSnapshots = async () => {
+  let totalDeleted = 0;
+  const candidateFileIds = new Set<string>();
+
   try {
-    const cutoff = new Date(Date.now() - SNAPSHOT_RETENTION_MS);
-    const result = await prisma.drawingSnapshot.deleteMany({
+    const cutoff = new Date(Date.now() - config.snapshotMaxAgeDays * 24 * 60 * 60 * 1000);
+    const expiredSnapshots = await prisma.drawingSnapshot.findMany({
+      where: { createdAt: { lt: cutoff } },
+      select: { files: true },
+    });
+    for (const id of collectFileIdsFromSnapshots(expiredSnapshots)) candidateFileIds.add(id);
+
+    const ageResult = await prisma.drawingSnapshot.deleteMany({
       where: { createdAt: { lt: cutoff } },
     });
-    if (result.count > 0) {
-      console.log(`[Cleanup] Deleted ${result.count} old drawing snapshots`);
+    totalDeleted += ageResult.count;
+  } catch (err) {
+    logger.error({ err }, "Snapshot age cleanup failed");
+  }
+
+  try {
+    const maxPerDrawing = config.snapshotMaxPerDrawing;
+    const drawingsWithExcess = await prisma.$queryRawUnsafe<{ drawingId: string; cnt: number }[]>(
+      `SELECT drawingId, COUNT(*) as cnt FROM DrawingSnapshot GROUP BY drawingId HAVING cnt > ?`,
+      maxPerDrawing,
+    );
+
+    for (const { drawingId } of drawingsWithExcess) {
+      const keepBoundary = await prisma.drawingSnapshot.findMany({
+        where: { drawingId },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        skip: maxPerDrawing,
+        select: { createdAt: true },
+      });
+      if (keepBoundary.length > 0) {
+        const excessSnapshots = await prisma.drawingSnapshot.findMany({
+          where: { drawingId, createdAt: { lte: keepBoundary[0].createdAt } },
+          select: { files: true },
+        });
+        for (const id of collectFileIdsFromSnapshots(excessSnapshots)) candidateFileIds.add(id);
+
+        const result = await prisma.drawingSnapshot.deleteMany({
+          where: { drawingId, createdAt: { lte: keepBoundary[0].createdAt } },
+        });
+        totalDeleted += result.count;
+      }
     }
   } catch (err) {
-    console.error("[Cleanup] Snapshot cleanup failed:", err);
+    logger.error({ err }, "Snapshot per-drawing cleanup failed");
   }
-}, 60 * 60 * 1000);
+
+  if (totalDeleted > 0) {
+    logger.info({ deletedCount: totalDeleted }, "Snapshot cleanup completed");
+  }
+
+  const s3Cleaned = await cleanupOrphanedS3FilesAfterSnapshotPrune(candidateFileIds);
+  if (s3Cleaned > 0) {
+    logger.info({ s3Cleaned }, "Orphaned S3 files cleaned up after snapshot prune");
+  }
+};
+
+const purgeExpiredTrash = async () => {
+  try {
+    const cutoff = new Date(Date.now() - config.trashPurgeDays * 24 * 60 * 60 * 1000);
+    const expiredDrawings = await prisma.drawing.findMany({
+      where: { trashedAt: { not: null, lt: cutoff } },
+      select: { id: true, files: true },
+    });
+
+    if (expiredDrawings.length === 0) return;
+
+    for (const drawing of expiredDrawings) {
+      try {
+        const drawingFiles = parseJsonField(drawing.files, {});
+        await prisma.drawing.delete({ where: { id: drawing.id } });
+        cleanupRemovedS3Files(drawingFiles, {}, prisma).catch((err) => {
+          logger.error({ err, drawingId: drawing.id }, "S3 cleanup failed for purged trash drawing");
+        });
+      } catch (err) {
+        logger.error({ err, drawingId: drawing.id }, "Failed to purge trashed drawing");
+      }
+    }
+
+    invalidateDrawingsCache();
+    logger.info({ purgedCount: expiredDrawings.length }, "Trash purge completed");
+  } catch (err) {
+    logger.error({ err }, "Trash purge job failed");
+  }
+};
+
+const cleanupIntervalMs = config.snapshotCleanupIntervalHours * 60 * 60 * 1000;
+setInterval(cleanupSnapshots, cleanupIntervalMs);
+setInterval(purgeExpiredTrash, cleanupIntervalMs);
 
 if (isMain) {
   httpServer.listen(PORT, async () => {
@@ -720,10 +887,10 @@ if (isMain) {
         reason: "startup",
       });
     } catch (error) {
-      console.error("Failed to issue bootstrap setup code:", error);
+      logger.error({ err: error }, "Failed to issue bootstrap setup code");
     }
-    console.log(`Server running on port ${PORT}`);
-    console.log(`Environment: ${config.nodeEnv}`);
-    console.log(`Frontend URL: ${config.frontendUrl}`);
+    logger.info({ port: PORT, env: config.nodeEnv, frontendUrl: config.frontendUrl }, "Server running");
+    cleanupSnapshots();
+    purgeExpiredTrash();
   });
 }

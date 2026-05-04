@@ -27,13 +27,13 @@ describe("useEditorChrome", () => {
       { initialProps: { drawingName: "Roadmap" } }
     );
 
-    expect(document.title).toBe("Roadmap - ExcaliDash");
+    expect(document.title).toBe("Roadmap - ExcaliGOAT");
 
     rerender({ drawingName: "Architecture" });
-    expect(document.title).toBe("Architecture - ExcaliDash");
+    expect(document.title).toBe("Architecture - ExcaliGOAT");
 
     unmount();
-    expect(document.title).toBe("ExcaliDash");
+    expect(document.title).toBe("ExcaliGOAT");
   });
 
   it("keeps header visible when auto-hide is disabled", () => {
