@@ -526,6 +526,43 @@ export const sanitizeDrawingData = (data: {
                   } else {
                     file[key] = value;
                   }
+                } else if (normalizedValue.startsWith("data:image/svg+xml")) {
+                  if (value.length > MAX_DATAURL_SIZE) {
+                    file[key] = "";
+                  } else {
+                    try {
+                      let svgContent: string;
+                      const base64Match = value.match(
+                        /^data:image\/svg\+xml;base64,(.+)$/i
+                      );
+                      if (base64Match) {
+                        svgContent = Buffer.from(
+                          base64Match[1],
+                          "base64"
+                        ).toString("utf-8");
+                      } else {
+                        const commaIndex = value.indexOf(",");
+                        if (commaIndex === -1) {
+                          file[key] = "";
+                          continue;
+                        }
+                        svgContent = decodeURIComponent(
+                          value.slice(commaIndex + 1)
+                        );
+                      }
+
+                      const sanitized = sanitizeSvg(svgContent);
+                      if (!sanitized.trim()) {
+                        file[key] = "";
+                      } else {
+                        file[key] =
+                          "data:image/svg+xml;utf8," +
+                          encodeURIComponent(sanitized);
+                      }
+                    } catch {
+                      file[key] = "";
+                    }
+                  }
                 } else if (/^https:\/\//i.test(value)) {
                   const hasSuspiciousContent = suspiciousPatterns.some(
                     (pattern) => pattern.test(value)

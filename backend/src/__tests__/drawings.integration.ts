@@ -254,6 +254,94 @@ describe("Security Sanitization - Image Data URLs", () => {
     });
   });
 
+  describe("sanitizeDrawingData - SVG data URL handling in files", () => {
+    const makeSvgFile = (svgContent: string, encoding: "utf8" | "base64" = "utf8") => {
+      const dataURL =
+        encoding === "base64"
+          ? "data:image/svg+xml;base64," + Buffer.from(svgContent).toString("base64")
+          : "data:image/svg+xml;utf8," + encodeURIComponent(svgContent);
+      return {
+        "file-1": {
+          id: "file-1",
+          mimeType: "image/svg+xml",
+          dataURL,
+          created: Date.now(),
+        },
+      };
+    };
+
+    const sanitizeFiles = (files: Record<string, any>) => {
+      const result = sanitizeDrawingData({
+        elements: [],
+        appState: { viewBackgroundColor: "#ffffff" },
+        files,
+      });
+      return (result.files as Record<string, any>)["file-1"].dataURL as string;
+    };
+
+    it("should preserve safe SVG data URLs", () => {
+      const svg = "<svg xmlns='http://www.w3.org/2000/svg' width='120' height='80'><rect width='120' height='80' fill='#4f46e5'/></svg>";
+      const resultUrl = sanitizeFiles(makeSvgFile(svg));
+      expect(resultUrl).toContain("data:image/svg+xml;utf8,");
+      const decoded = decodeURIComponent(resultUrl.split(",").slice(1).join(","));
+      expect(decoded).toContain("<rect");
+      expect(decoded).toContain("fill=");
+    });
+
+    it("should strip <script> from SVG data URLs", () => {
+      const svg = "<svg xmlns='http://www.w3.org/2000/svg'><rect width='10' height='10'/><script>alert(1)</script></svg>";
+      const resultUrl = sanitizeFiles(makeSvgFile(svg));
+      expect(resultUrl).not.toBe("");
+      const decoded = decodeURIComponent(resultUrl.split(",").slice(1).join(","));
+      expect(decoded).not.toContain("<script");
+      expect(decoded).toContain("<rect");
+    });
+
+    it("should strip event handlers from SVG data URLs", () => {
+      const svg = '<svg xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10" onload="alert(1)"/></svg>';
+      const resultUrl = sanitizeFiles(makeSvgFile(svg));
+      expect(resultUrl).not.toBe("");
+      const decoded = decodeURIComponent(resultUrl.split(",").slice(1).join(","));
+      expect(decoded).not.toContain("onload");
+    });
+
+    it("should strip <foreignObject> from SVG data URLs", () => {
+      const svg = '<svg xmlns="http://www.w3.org/2000/svg"><foreignObject><div>evil</div></foreignObject><rect width="10" height="10"/></svg>';
+      const resultUrl = sanitizeFiles(makeSvgFile(svg));
+      expect(resultUrl).not.toBe("");
+      const decoded = decodeURIComponent(resultUrl.split(",").slice(1).join(","));
+      expect(decoded).not.toContain("foreignObject");
+    });
+
+    it("should handle base64-encoded SVG data URLs", () => {
+      const svg = "<svg xmlns='http://www.w3.org/2000/svg' width='50' height='50'><circle cx='25' cy='25' r='20' fill='red'/></svg>";
+      const resultUrl = sanitizeFiles(makeSvgFile(svg, "base64"));
+      expect(resultUrl).toContain("data:image/svg+xml;utf8,");
+      const decoded = decodeURIComponent(resultUrl.split(",").slice(1).join(","));
+      expect(decoded).toContain("<circle");
+    });
+
+    it("should reject oversized SVG data URLs", () => {
+      configureSecuritySettings({ maxDataUrlSize: 500 });
+      const svg = "<svg xmlns='http://www.w3.org/2000/svg'>" + "<rect width='1' height='1'/>".repeat(100) + "</svg>";
+      const resultUrl = sanitizeFiles(makeSvgFile(svg));
+      expect(resultUrl).toBe("");
+    });
+
+    it("should handle malformed SVG data URLs gracefully", () => {
+      const files = {
+        "file-1": {
+          id: "file-1",
+          mimeType: "image/svg+xml",
+          dataURL: "data:image/svg+xml;utf8,%%%not-valid-uri-encoding",
+          created: Date.now(),
+        },
+      };
+      const resultUrl = sanitizeFiles(files);
+      expect(resultUrl).toBe("");
+    });
+  });
+
   describe("sanitizeDrawingData - preview svg handling", () => {
     it("should preserve safe SVG layout attributes needed for thumbnail rendering", () => {
       const preview = [
