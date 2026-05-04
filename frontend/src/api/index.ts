@@ -914,6 +914,7 @@ export type DrawingSizeInfo = {
 };
 
 export type FilesDiffResult = {
+  ownerName: string;
   summary: {
     totalCanvasRefs: number;
     totalSqliteFiles: number;

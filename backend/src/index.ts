@@ -663,7 +663,16 @@ if (config.s3.bucket) {
 }
 
 registerFileRoutes(app, { prisma, requireAuth, asyncHandler });
-registerStorageRoutes(app, { prisma, requireAuth, asyncHandler, parseJsonField });
+registerStorageRoutes(app, {
+  prisma,
+  requireAuth,
+  asyncHandler,
+  parseJsonField,
+  getAdminFullAccess: async () => {
+    const sc = await authModeService.ensureSystemConfig();
+    return sc.adminFullAccess;
+  },
+});
 
 registerDashboardRoutes(app, {
   prisma,

@@ -17,6 +17,7 @@ export type StorageRouteDeps = {
     ) => Promise<T>
   ) => express.RequestHandler;
   parseJsonField: <T>(rawValue: string | null | undefined, fallback: T) => T;
+  getAdminFullAccess: () => Promise<boolean>;
 };
 
 const collectReferencedFileIds = (
@@ -45,7 +46,12 @@ export const registerStorageRoutes = (
   app: express.Express,
   deps: StorageRouteDeps
 ): void => {
-  const { prisma, requireAuth, asyncHandler, parseJsonField } = deps;
+  const { prisma, requireAuth, asyncHandler, parseJsonField, getAdminFullAccess } = deps;
+
+  const resolveAdminOverride = async (req: express.Request) => {
+    if (!req.user || req.user.role !== "ADMIN") return false;
+    return getAdminFullAccess();
+  };
 
   app.post(
     "/drawings/:id/trim",
@@ -54,11 +60,13 @@ export const registerStorageRoutes = (
       const userId = req.user?.id as string | undefined;
       if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
+      const adminOverride = await resolveAdminOverride(req);
       const id = req.params.id as string;
       const { confirmName } = req.body ?? {};
 
+      const findWhere = adminOverride ? { id } : { id, userId };
       const drawing = await prisma.drawing.findFirst({
-        where: { id, userId },
+        where: findWhere,
       });
       if (!drawing) {
         return res.status(404).json({ error: "Drawing not found" });
@@ -91,7 +99,7 @@ export const registerStorageRoutes = (
       let s3DeleteErrors = 0;
 
       if (isS3Enabled()) {
-        const s3Prefix = `${FILE_KEY_PREFIX}/${userId}/${id}/`;
+        const s3Prefix = `${FILE_KEY_PREFIX}/${drawing.userId}/${id}/`;
 
         const s3FileRecords = await prisma.s3File.findMany({
           where: { s3Key: { startsWith: s3Prefix } },
@@ -163,10 +171,13 @@ export const registerStorageRoutes = (
       const userId = req.user?.id as string | undefined;
       if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
+      const adminOverride = await resolveAdminOverride(req);
       const id = req.params.id as string;
 
+      const findWhere = adminOverride ? { id } : { id, userId };
       const drawing = await prisma.drawing.findFirst({
-        where: { id, userId },
+        where: findWhere,
+        include: { user: { select: { name: true } } },
       });
       if (!drawing) {
         return res.status(404).json({ error: "Drawing not found" });
@@ -180,7 +191,7 @@ export const registerStorageRoutes = (
 
       const sqliteFileIds = new Set(Object.keys(files));
 
-      const s3Prefix = `${FILE_KEY_PREFIX}/${userId}/${id}/`;
+      const s3Prefix = `${FILE_KEY_PREFIX}/${drawing.userId}/${id}/`;
       let s3FileRecords: Array<{
         id: string;
         s3Key: string;
@@ -242,6 +253,7 @@ export const registerStorageRoutes = (
       const s3Total = s3Objects.reduce((sum, o) => sum + o.size, 0);
 
       return res.json({
+        ownerName: drawing.user.name,
         summary: {
           totalCanvasRefs: allCanvasRefs.size,
           totalSqliteFiles: sqliteFileIds.size,
@@ -268,6 +280,7 @@ export const registerStorageRoutes = (
       const userId = req.user?.id as string | undefined;
       if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
+      const adminOverride = await resolveAdminOverride(req);
       const id = req.params.id as string;
       const { confirmName, fileIds } = req.body ?? {};
 
@@ -275,8 +288,9 @@ export const registerStorageRoutes = (
         return res.status(400).json({ error: "fileIds must be a non-empty array" });
       }
 
+      const findWhere = adminOverride ? { id } : { id, userId };
       const drawing = await prisma.drawing.findFirst({
-        where: { id, userId },
+        where: findWhere,
       });
       if (!drawing) {
         return res.status(404).json({ error: "Drawing not found" });

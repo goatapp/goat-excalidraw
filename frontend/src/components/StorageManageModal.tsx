@@ -167,6 +167,11 @@ export const StorageManageModal: React.FC<StorageManageModalProps> = ({
             </h2>
             <p className="text-sm text-neutral-500 dark:text-neutral-400 truncate">
               {drawingName}
+              {diffData?.ownerName && (
+                <span className="ml-2 text-neutral-400 dark:text-neutral-500">
+                  by {diffData.ownerName}
+                </span>
+              )}
             </p>
           </div>
           <button
