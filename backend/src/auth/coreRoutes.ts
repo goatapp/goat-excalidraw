@@ -41,6 +41,7 @@ type RegisterCoreRoutesDeps = {
     authOnboardingCompleted: boolean;
     registrationEnabled: boolean;
     oidcJitProvisioningEnabled: boolean | null;
+    adminFullAccess: boolean;
   }>;
   findUserByIdentifier: (identifier: string) => Promise<{
     id: string;

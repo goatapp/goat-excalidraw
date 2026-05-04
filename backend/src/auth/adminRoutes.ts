@@ -4,6 +4,7 @@ import { Prisma, PrismaClient } from "../generated/client/client.js";
 import { logAuditEvent } from "../utils/audit.js";
 import {
   adminCreateUserSchema,
+  adminFullAccessToggleSchema,
   adminRoleUpdateSchema,
   adminUpdateUserSchema,
   impersonateSchema,
@@ -28,6 +29,7 @@ type RegisterAdminRoutesDeps = {
     authLoginRateLimitEnabled: boolean;
     authLoginRateLimitWindowMs: number;
     authLoginRateLimitMax: number;
+    adminFullAccess: boolean;
   }>;
   parseLoginRateLimitConfig: (systemConfig: {
     authLoginRateLimitEnabled: boolean;
@@ -229,6 +231,44 @@ export const registerAdminRoutes = (deps: RegisterAdminRoutesDeps) => {
       res.status(500).json({
         error: "Internal server error",
         message: "Failed to update OIDC provisioning setting",
+      });
+    }
+  });
+
+  router.post("/admin-full-access", requireAuth, async (req: Request, res: Response) => {
+    try {
+      if (!(await ensureAuthEnabled(res))) return;
+      if (!requireCsrf(req, res)) return;
+      if (!requireAdmin(req, res)) return;
+
+      const parsed = adminFullAccessToggleSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Bad request", message: "Invalid toggle payload" });
+      }
+
+      const updated = await prisma.systemConfig.upsert({
+        where: { id: defaultSystemConfigId },
+        update: { adminFullAccess: parsed.data.enabled },
+        create: { id: defaultSystemConfigId, adminFullAccess: parsed.data.enabled },
+      });
+
+      if (config.enableAuditLogging) {
+        await logAuditEvent({
+          userId: req.user.id,
+          action: "admin_full_access_toggled",
+          resource: "system_config",
+          ipAddress: req.ip || req.connection.remoteAddress || undefined,
+          userAgent: req.headers["user-agent"] || undefined,
+          details: { adminFullAccess: updated.adminFullAccess },
+        });
+      }
+
+      res.json({ adminFullAccess: updated.adminFullAccess });
+    } catch (error) {
+      logger.error({ err: error }, "Admin full access toggle error");
+      res.status(500).json({
+        error: "Internal server error",
+        message: "Failed to update admin full access setting",
       });
     }
   });

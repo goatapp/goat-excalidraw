@@ -35,6 +35,7 @@ type RegisterOidcRoutesDeps = {
   ensureSystemConfig: () => Promise<{
     id: string;
     oidcJitProvisioningEnabled: boolean | null;
+    adminFullAccess: boolean;
   }>;
   sanitizeText: (input: unknown, maxLength?: number) => string;
   generateTokens: (

@@ -28,7 +28,12 @@ export const registerCommentRoutes = (
   app: express.Express,
   deps: DashboardRouteDeps
 ) => {
-  const { prisma, optionalAuth, asyncHandler, sanitizeText, io } = deps;
+  const { prisma, optionalAuth, asyncHandler, sanitizeText, io, getAdminFullAccess } = deps;
+
+  const resolveAdminOverride = async (req: express.Request) => {
+    if (!req.user || req.user.role !== "ADMIN") return false;
+    return getAdminFullAccess();
+  };
 
   const getRequestPrincipal = async (
     req: express.Request
@@ -58,10 +63,12 @@ export const registerCommentRoutes = (
     asyncHandler(async (req, res) => {
       const principal = await getRequestPrincipal(req);
       const drawingId = req.params.id as string;
+      const adminOverride = await resolveAdminOverride(req);
       const access = await getDrawingAccess({
         prisma,
         principal,
         drawingId,
+        isAdminOverride: adminOverride,
       });
       if (!canViewDrawing(access)) {
         if (respondWithAuthErrorIfPresent(req, res)) return;
@@ -145,10 +152,12 @@ export const registerCommentRoutes = (
       const principal = await getRequestPrincipal(req);
       const drawingId = req.params.id as string;
       const commentId = req.params.commentId as string;
+      const adminOverride = await resolveAdminOverride(req);
       const access = await getDrawingAccess({
         prisma,
         principal,
         drawingId,
+        isAdminOverride: adminOverride,
       });
       if (!canViewDrawing(access)) {
         if (respondWithAuthErrorIfPresent(req, res)) return;
@@ -223,10 +232,12 @@ export const registerCommentRoutes = (
     asyncHandler(async (req, res) => {
       const principal = await getRequestPrincipal(req);
       const drawingId = req.params.id as string;
+      const adminOverride = await resolveAdminOverride(req);
       const access = await getDrawingAccess({
         prisma,
         principal,
         drawingId,
+        isAdminOverride: adminOverride,
       });
       if (!canViewDrawing(access)) {
         if (respondWithAuthErrorIfPresent(req, res)) return;
@@ -296,10 +307,12 @@ export const registerCommentRoutes = (
       const principal = await getRequestPrincipal(req);
       const drawingId = req.params.id as string;
       const commentId = req.params.commentId as string;
+      const adminOverride = await resolveAdminOverride(req);
       const access = await getDrawingAccess({
         prisma,
         principal,
         drawingId,
+        isAdminOverride: adminOverride,
       });
       if (!canViewDrawing(access)) {
         if (respondWithAuthErrorIfPresent(req, res)) return;
@@ -356,10 +369,12 @@ export const registerCommentRoutes = (
       const principal = await getRequestPrincipal(req);
       const drawingId = req.params.id as string;
       const commentId = req.params.commentId as string;
+      const adminOverride = await resolveAdminOverride(req);
       const access = await getDrawingAccess({
         prisma,
         principal,
         drawingId,
+        isAdminOverride: adminOverride,
       });
       if (!canViewDrawing(access)) {
         if (respondWithAuthErrorIfPresent(req, res)) return;
@@ -401,10 +416,12 @@ export const registerCommentRoutes = (
       const principal = await getRequestPrincipal(req);
       const drawingId = req.params.id as string;
       const commentId = req.params.commentId as string;
+      const adminOverride = await resolveAdminOverride(req);
       const access = await getDrawingAccess({
         prisma,
         principal,
         drawingId,
+        isAdminOverride: adminOverride,
       });
       if (!canEditDrawing(access)) {
         if (respondWithAuthErrorIfPresent(req, res)) return;
@@ -448,10 +465,12 @@ export const registerCommentRoutes = (
       const principal = await getRequestPrincipal(req);
       const drawingId = req.params.id as string;
       const commentId = req.params.commentId as string;
+      const adminOverride = await resolveAdminOverride(req);
       const access = await getDrawingAccess({
         prisma,
         principal,
         drawingId,
+        isAdminOverride: adminOverride,
       });
       if (!canEditDrawing(access)) {
         if (respondWithAuthErrorIfPresent(req, res)) return;
@@ -496,10 +515,12 @@ export const registerCommentRoutes = (
       const principal = await getRequestPrincipal(req);
       const drawingId = req.params.id as string;
       const commentId = req.params.commentId as string;
+      const adminOverride = await resolveAdminOverride(req);
       const access = await getDrawingAccess({
         prisma,
         principal,
         drawingId,
+        isAdminOverride: adminOverride,
       });
       if (!canViewDrawing(access)) {
         if (respondWithAuthErrorIfPresent(req, res)) return;
@@ -562,10 +583,12 @@ export const registerCommentRoutes = (
       const drawingId = req.params.id as string;
       const commentId = req.params.commentId as string;
       const emoji = decodeURIComponent(req.params.emoji as string);
+      const adminOverride = await resolveAdminOverride(req);
       const access = await getDrawingAccess({
         prisma,
         principal,
         drawingId,
+        isAdminOverride: adminOverride,
       });
       if (!canViewDrawing(access)) {
         if (respondWithAuthErrorIfPresent(req, res)) return;
@@ -610,7 +633,8 @@ export const registerCommentRoutes = (
     asyncHandler(async (req, res) => {
       const principal = await getRequestPrincipal(req);
       const drawingId = req.params.id as string;
-      const access = await getDrawingAccess({ prisma, principal, drawingId });
+      const adminOverride = await resolveAdminOverride(req);
+      const access = await getDrawingAccess({ prisma, principal, drawingId, isAdminOverride: adminOverride });
       if (!canViewDrawing(access)) {
         if (respondWithAuthErrorIfPresent(req, res)) return;
         return res.status(404).json({ error: "Drawing not found" });

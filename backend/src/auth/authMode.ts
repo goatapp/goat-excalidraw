@@ -38,6 +38,7 @@ export const createAuthModeService = (
         authLoginRateLimitEnabled: true,
         authLoginRateLimitWindowMs: 15 * 60 * 1000,
         authLoginRateLimitMax: 20,
+        adminFullAccess: false,
       },
     });
   };

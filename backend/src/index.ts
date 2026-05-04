@@ -685,6 +685,10 @@ registerDashboardRoutes(app, {
   MAX_PAGE_SIZE,
   config,
   logAuditEvent,
+  getAdminFullAccess: async () => {
+    const sc = await authModeService.ensureSystemConfig();
+    return sc.adminFullAccess;
+  },
   io,
   processFilesForS3: (files, userId, drawingId) =>
     processFilesForS3(files, userId, drawingId, prisma),

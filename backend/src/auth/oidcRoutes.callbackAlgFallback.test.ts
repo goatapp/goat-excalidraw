@@ -162,6 +162,7 @@ const createApp = async (
     ensureSystemConfig: vi.fn(async () => ({
       id: "default",
       oidcJitProvisioningEnabled: true,
+      adminFullAccess: false,
     })),
     sanitizeText: (input: unknown) => String(input ?? ""),
     generateTokens: vi.fn(() => ({

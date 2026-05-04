@@ -39,6 +39,10 @@ export const oidcJitProvisioningToggleSchema = z.object({
   enabled: z.boolean(),
 });
 
+export const adminFullAccessToggleSchema = z.object({
+  enabled: z.boolean(),
+});
+
 export const adminRoleUpdateSchema = z.object({
   identifier: z.string().trim().min(1).max(255),
   role: z.enum(["ADMIN", "USER"]),

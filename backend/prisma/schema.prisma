@@ -39,6 +39,7 @@ model SystemConfig {
   authLoginRateLimitEnabled  Boolean  @default(true)
   authLoginRateLimitWindowMs Int      @default(900000) // 15 minutes
   authLoginRateLimitMax      Int      @default(20)
+  adminFullAccess            Boolean  @default(false)
   bootstrapSetupCodeHash     String?
   bootstrapSetupCodeIssuedAt DateTime?
   bootstrapSetupCodeExpiresAt DateTime?

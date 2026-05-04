@@ -36,7 +36,7 @@ export const registerSocketHandlers = ({
   jwtSecret,
 }: RegisterSocketHandlersDeps) => {
   const roomUsers = new Map<string, User[]>();
-  const socketPrincipalMap = new Map<string, DrawingPrincipal>();
+  const socketPrincipalMap = new Map<string, DrawingPrincipal & { role?: string }>();
 
   const toPresenceName = (value: unknown): string => {
     if (typeof value !== "string") return "User";
@@ -63,10 +63,10 @@ export const registerSocketHandlers = ({
     return "#4f46e5";
   };
 
-  const getSocketAuthUserId = async (token?: string): Promise<string | null> => {
+  const getSocketAuthUser = async (token?: string): Promise<{ id: string; role: string } | null> => {
     const authEnabled = await authModeService.getAuthEnabled();
     if (!authEnabled) {
-      return BOOTSTRAP_USER_ID;
+      return { id: BOOTSTRAP_USER_ID, role: "ADMIN" };
     }
 
     if (!token) return null;
@@ -83,11 +83,11 @@ export const registerSocketHandlers = ({
 
       const user = await prisma.user.findUnique({
         where: { id: decoded.userId },
-        select: { id: true, isActive: true },
+        select: { id: true, isActive: true, role: true },
       });
 
       if (!user || !user.isActive) return null;
-      return user.id;
+      return { id: user.id, role: user.role };
     } catch {
       return null;
     }
@@ -101,10 +101,10 @@ export const registerSocketHandlers = ({
         if (email) {
           const user = await prisma.user.findUnique({
             where: { email },
-            select: { id: true, isActive: true },
+            select: { id: true, isActive: true, role: true },
           });
           if (user?.isActive) {
-            socketPrincipalMap.set(socket.id, { kind: "user", userId: user.id });
+            socketPrincipalMap.set(socket.id, { kind: "user", userId: user.id, role: user.role });
           }
         }
         return next();
@@ -118,10 +118,10 @@ export const registerSocketHandlers = ({
       })();
       const token = tokenFromAuth || tokenFromCookie;
       const authEnabled = await authModeService.getAuthEnabled();
-      const userId = await getSocketAuthUserId(token);
+      const authUser = await getSocketAuthUser(token);
 
-      if (userId) {
-        socketPrincipalMap.set(socket.id, { kind: "user", userId });
+      if (authUser) {
+        socketPrincipalMap.set(socket.id, { kind: "user", userId: authUser.id, role: authUser.role });
         return next();
       }
 
@@ -141,6 +141,12 @@ export const registerSocketHandlers = ({
     >();
     const ACCESS_CACHE_TTL_MS = 1500;
 
+    const getAdminOverrideForSocket = async (): Promise<boolean> => {
+      if (!principal || principal.role !== "ADMIN") return false;
+      const sc = await authModeService.ensureSystemConfig();
+      return sc.adminFullAccess;
+    };
+
     const getCachedOrFreshAccess = async (
       drawingId: string
     ): Promise<"view" | "edit" | "owner" | null> => {
@@ -149,10 +155,12 @@ export const registerSocketHandlers = ({
       if (cached && now - cached.checkedAtMs < ACCESS_CACHE_TTL_MS) {
         return cached.access;
       }
+      const isAdminOverride = await getAdminOverrideForSocket();
       const access = await getDrawingAccess({
         prisma,
         principal,
         drawingId,
+        isAdminOverride,
       });
       if (!canViewDrawing(access)) {
         authorizedDrawingAccess.delete(drawingId);

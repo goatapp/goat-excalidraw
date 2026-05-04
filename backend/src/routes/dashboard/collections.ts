@@ -18,7 +18,13 @@ export const registerCollectionRoutes = (
     invalidateDrawingsCache,
     config,
     logAuditEvent,
+    getAdminFullAccess,
   } = deps;
+
+  const resolveAdminOverride = async (req: express.Request) => {
+    if (!req.user || req.user.role !== "ADMIN") return false;
+    return getAdminFullAccess();
+  };
 
   const normalizeCollectionShareRole = (input: unknown): "view" | "edit" | null => {
     if (input === "view" || input === "edit") return input;
@@ -27,6 +33,7 @@ export const registerCollectionRoutes = (
 
   app.get("/collections", requireAuth, asyncHandler(async (req, res) => {
     if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+    const adminOverride = await resolveAdminOverride(req);
     const trashCollectionId = getUserTrashCollectionId(req.user.id);
     await ensureTrashCollection(prisma, req.user.id);
 
@@ -38,16 +45,16 @@ export const registerCollectionRoutes = (
     }
 
     const rawCollections = await prisma.collection.findMany({
-      where: { userId: req.user.id },
+      where: adminOverride ? {} : { userId: req.user.id },
       orderBy: { createdAt: "desc" },
     });
 
-    const sharedWithMe = await prisma.collectionShare.findMany({
-      where: { granteeUserId: req.user.id },
-      include: {
-        collection: true,
-      },
-    });
+    const sharedWithMe = adminOverride
+      ? []
+      : await prisma.collectionShare.findMany({
+          where: { granteeUserId: req.user.id },
+          include: { collection: true },
+        });
 
     const collectionsWithShares = await prisma.collectionShare.groupBy({
       by: ["collectionId"],
@@ -59,10 +66,11 @@ export const registerCollectionRoutes = (
     const ownedCollections = rawCollections
       .filter((collection) => !(hasInternalTrash && collection.id === "trash"))
       .map((collection) => {
+        const isOwned = collection.userId === req.user!.id;
         const hasShares = sharedCollectionIds.has(collection.id);
         return collection.id === trashCollectionId
           ? { ...collection, id: "trash", name: "Trash", isOwner: true, sharedRole: null, isShared: false }
-          : { ...collection, isOwner: true, sharedRole: null, isShared: hasShares };
+          : { ...collection, isOwner: isOwned, sharedRole: null, isShared: hasShares };
       });
 
     const ownedIds = new Set(rawCollections.map(c => c.id));
@@ -98,6 +106,7 @@ export const registerCollectionRoutes = (
 
   app.put("/collections/:id", requireAuth, asyncHandler(async (req, res) => {
     if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+    const adminOverride = await resolveAdminOverride(req);
 
     const id = req.params.id as string;
     if (isTrashCollectionId(id, req.user.id)) {
@@ -106,9 +115,8 @@ export const registerCollectionRoutes = (
         message: "Trash collection cannot be renamed",
       });
     }
-    const existingCollection = await prisma.collection.findFirst({
-      where: { id, userId: req.user.id },
-    });
+    const findWhere = adminOverride ? { id } : { id, userId: req.user.id };
+    const existingCollection = await prisma.collection.findFirst({ where: findWhere });
     if (!existingCollection) return res.status(404).json({ error: "Collection not found" });
 
     const parsed = collectionNameSchema.safeParse(req.body.name);
@@ -121,15 +129,13 @@ export const registerCollectionRoutes = (
 
     const sanitizedName = sanitizeText(parsed.data, 100);
     const updateResult = await prisma.collection.updateMany({
-      where: { id, userId: req.user.id },
+      where: findWhere,
       data: { name: sanitizedName },
     });
     if (updateResult.count === 0) {
       return res.status(404).json({ error: "Collection not found" });
     }
-    const updatedCollection = await prisma.collection.findFirst({
-      where: { id, userId: req.user.id },
-    });
+    const updatedCollection = await prisma.collection.findFirst({ where: findWhere });
     if (!updatedCollection) {
       return res.status(404).json({ error: "Collection not found" });
     }
@@ -138,6 +144,7 @@ export const registerCollectionRoutes = (
 
   app.delete("/collections/:id", requireAuth, asyncHandler(async (req, res) => {
     if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+    const adminOverride = await resolveAdminOverride(req);
 
     const id = req.params.id as string;
     if (isTrashCollectionId(id, req.user.id)) {
@@ -146,17 +153,16 @@ export const registerCollectionRoutes = (
         message: "Trash collection cannot be deleted",
       });
     }
-    const collection = await prisma.collection.findFirst({
-      where: { id, userId: req.user.id },
-    });
+    const findWhere = adminOverride ? { id } : { id, userId: req.user.id };
+    const collection = await prisma.collection.findFirst({ where: findWhere });
     if (!collection) return res.status(404).json({ error: "Collection not found" });
 
     await prisma.$transaction([
       prisma.drawing.updateMany({
-        where: { collectionId: id, userId: req.user.id },
+        where: adminOverride ? { collectionId: id } : { collectionId: id, userId: req.user.id },
         data: { collectionId: null },
       }),
-      prisma.collection.deleteMany({ where: { id, userId: req.user.id } }),
+      prisma.collection.deleteMany({ where: findWhere }),
     ]);
     invalidateDrawingsCache();
 
@@ -178,6 +184,7 @@ export const registerCollectionRoutes = (
 
   app.get("/collections/:id/share-resolve", requireAuth, asyncHandler(async (req, res) => {
     if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+    const adminOverride = await resolveAdminOverride(req);
 
     const id = req.params.id as string;
     const qRaw = typeof req.query.q === "string" ? req.query.q.trim() : "";
@@ -185,7 +192,7 @@ export const registerCollectionRoutes = (
     if (q.length < 3) return res.json({ users: [] });
 
     const collection = await prisma.collection.findFirst({
-      where: { id, userId: req.user.id },
+      where: adminOverride ? { id } : { id, userId: req.user.id },
     });
     if (!collection) return res.status(404).json({ error: "Collection not found" });
 
@@ -215,10 +222,11 @@ export const registerCollectionRoutes = (
 
   app.get("/collections/:id/shares", requireAuth, asyncHandler(async (req, res) => {
     if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+    const adminOverride = await resolveAdminOverride(req);
     const id = req.params.id as string;
 
     const collection = await prisma.collection.findFirst({
-      where: { id, userId: req.user.id },
+      where: adminOverride ? { id } : { id, userId: req.user.id },
     });
     if (!collection) return res.status(404).json({ error: "Collection not found" });
 
@@ -241,10 +249,11 @@ export const registerCollectionRoutes = (
 
   app.post("/collections/:id/shares", requireAuth, asyncHandler(async (req, res) => {
     if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+    const adminOverride = await resolveAdminOverride(req);
     const id = req.params.id as string;
 
     const collection = await prisma.collection.findFirst({
-      where: { id, userId: req.user.id },
+      where: adminOverride ? { id } : { id, userId: req.user.id },
     });
     if (!collection) return res.status(404).json({ error: "Collection not found" });
 
@@ -304,11 +313,12 @@ export const registerCollectionRoutes = (
 
   app.patch("/collections/:id/shares/:userId", requireAuth, asyncHandler(async (req, res) => {
     if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+    const adminOverride = await resolveAdminOverride(req);
     const id = req.params.id as string;
     const targetUserId = req.params.userId as string;
 
     const collection = await prisma.collection.findFirst({
-      where: { id, userId: req.user.id },
+      where: adminOverride ? { id } : { id, userId: req.user.id },
     });
     if (!collection) return res.status(404).json({ error: "Collection not found" });
 
@@ -345,11 +355,12 @@ export const registerCollectionRoutes = (
 
   app.delete("/collections/:id/shares/:userId", requireAuth, asyncHandler(async (req, res) => {
     if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+    const adminOverride = await resolveAdminOverride(req);
     const id = req.params.id as string;
     const targetUserId = req.params.userId as string;
 
     const collection = await prisma.collection.findFirst({
-      where: { id, userId: req.user.id },
+      where: adminOverride ? { id } : { id, userId: req.user.id },
     });
     if (!collection) return res.status(404).json({ error: "Collection not found" });
 

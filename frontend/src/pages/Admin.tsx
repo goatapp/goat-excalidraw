@@ -75,6 +75,7 @@ export const Admin: React.FC = () => {
   const [oidcEnabled, setOidcEnabled] = useState(false);
   const [oidcJitProvisioningEnabled, setOidcJitProvisioningEnabled] = useState<boolean | null>(null);
   const [oidcProviderName, setOidcProviderName] = useState<string | null>(null);
+  const [adminFullAccess, setAdminFullAccess] = useState<boolean | null>(null);
   const [registrationLoading, setRegistrationLoading] = useState(false);
 
   const [loginRateLimitLoading, setLoginRateLimitLoading] = useState(false);
@@ -156,6 +157,7 @@ export const Admin: React.FC = () => {
         oidcEnabled?: boolean;
         oidcProvider?: string;
         oidcJitProvisioningEnabled?: boolean;
+        adminFullAccess?: boolean;
       }>('/auth/status');
       setRegistrationEnabled(Boolean(response.data.registrationEnabled));
       setLocalRegistrationAllowed(response.data.authMode !== 'oidc_enforced');
@@ -167,6 +169,11 @@ export const Admin: React.FC = () => {
         typeof response.data.oidcJitProvisioningEnabled === 'boolean'
           ? response.data.oidcJitProvisioningEnabled
           : null
+      );
+      setAdminFullAccess(
+        typeof response.data.adminFullAccess === 'boolean'
+          ? response.data.adminFullAccess
+          : false
       );
     } catch (err: unknown) {
       let message = 'Failed to load registration status';
@@ -223,6 +230,35 @@ export const Admin: React.FC = () => {
       );
     } catch (err: unknown) {
       let message = 'Failed to update OIDC provisioning setting';
+      if (api.isAxiosError(err)) {
+        message = err.response?.data?.message || err.response?.data?.error || message;
+      }
+      setError(message);
+    } finally {
+      setRegistrationLoading(false);
+    }
+  };
+
+  const toggleAdminFullAccess = async () => {
+    if (!isAdmin || adminFullAccess === null) return;
+
+    setRegistrationLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const response = await api.api.post<{ adminFullAccess: boolean }>(
+        '/auth/admin-full-access',
+        { enabled: !adminFullAccess }
+      );
+      setAdminFullAccess(Boolean(response.data.adminFullAccess));
+      setSuccess(
+        response.data.adminFullAccess
+          ? 'Admin full access enabled'
+          : 'Admin full access disabled'
+      );
+    } catch (err: unknown) {
+      let message = 'Failed to update admin full access setting';
       if (api.isAxiosError(err)) {
         message = err.response?.data?.message || err.response?.data?.error || message;
       }
@@ -766,9 +802,11 @@ export const Admin: React.FC = () => {
         oidcEnabled={oidcEnabled}
         oidcProviderName={oidcProviderName}
         oidcJitProvisioningEnabled={oidcJitProvisioningEnabled}
+        adminFullAccess={adminFullAccess}
         loading={registrationLoading}
         onToggleRegistration={toggleRegistration}
         onToggleOidcJitProvisioning={toggleOidcJitProvisioning}
+        onToggleAdminFullAccess={toggleAdminFullAccess}
       />
 
       <LoginRateLimitCard

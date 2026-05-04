@@ -54,6 +54,7 @@ export type DashboardRouteDeps = {
     enableAuditLogging: boolean;
   };
   logAuditEvent: LogAuditEvent;
+  getAdminFullAccess: () => Promise<boolean>;
   io?: SocketIOServer;
   processFilesForS3: (
     files: Record<string, any>,

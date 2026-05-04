@@ -111,12 +111,19 @@ export const verifyPassphraseHash = (
   return false;
 };
 
+export const isAdminFullAccessOverride = (
+  user: { role: string } | null | undefined,
+  adminFullAccess: boolean,
+): boolean => adminFullAccess === true && user?.role === "ADMIN";
+
 export const getDrawingAccess = async (params: {
   prisma: PrismaClient;
   principal: DrawingPrincipal | null;
   drawingId: string;
   now?: Date;
+  isAdminOverride?: boolean;
 }): Promise<DrawingAccess> => {
+  if (params.isAdminOverride) return "owner";
   const nowMs = (params.now ?? new Date()).getTime();
 
   let baseAccess: DrawingAccess = "none";
