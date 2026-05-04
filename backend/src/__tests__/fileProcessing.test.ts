@@ -56,7 +56,7 @@ describe("processFilesForS3", () => {
 
     const result = await processFilesForS3(files, "user-1", "drawing-1", prisma as any);
 
-    expect(result).toBe(files);
+    expect(result).toEqual(files);
     expect(mockUploadBuffer).not.toHaveBeenCalled();
     expect(prisma.s3File.upsert).not.toHaveBeenCalled();
   });
