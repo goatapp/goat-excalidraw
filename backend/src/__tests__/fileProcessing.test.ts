@@ -70,7 +70,7 @@ describe("processFilesForS3", () => {
     });
     mockUploadBuffer.mockResolvedValue(undefined);
     mockGetPublicUrl.mockReturnValue(
-      "https://cdn.example.com/excalidash/user-1/drawing-1/file-1.png",
+      "https://cdn.example.com/images/user-1/drawing-1/file-1.png",
     );
     const prisma = makePrisma();
 
@@ -81,11 +81,11 @@ describe("processFilesForS3", () => {
     const result = await processFilesForS3(files, "user-1", "drawing-1", prisma as any);
 
     expect(result["file-1"].dataURL).toBe(
-      "https://cdn.example.com/excalidash/user-1/drawing-1/file-1.png",
+      "https://cdn.example.com/images/user-1/drawing-1/file-1.png",
     );
     expect(mockUploadBuffer).toHaveBeenCalledOnce();
     expect(mockUploadBuffer).toHaveBeenCalledWith(
-      "excalidash/user-1/drawing-1/file-1.png",
+      "images/user-1/drawing-1/file-1.png",
       expect.any(Buffer),
       "image/png",
     );
@@ -94,11 +94,11 @@ describe("processFilesForS3", () => {
       create: {
         id: "file-1",
         userId: "user-1",
-        s3Key: "excalidash/user-1/drawing-1/file-1.png",
+        s3Key: "images/user-1/drawing-1/file-1.png",
         mimeType: "image/png",
       },
       update: {
-        s3Key: "excalidash/user-1/drawing-1/file-1.png",
+        s3Key: "images/user-1/drawing-1/file-1.png",
         mimeType: "image/png",
       },
     });
@@ -117,14 +117,14 @@ describe("processFilesForS3", () => {
       "file-1": {
         id: "file-1",
         mimeType: "image/png",
-        dataURL: "https://cdn.example.com/excalidash/user-1/drawing-1/file-1.png",
+        dataURL: "https://cdn.example.com/images/user-1/drawing-1/file-1.png",
       },
     };
 
     const result = await processFilesForS3(files, "user-1", "drawing-1", prisma as any);
 
     expect(result["file-1"].dataURL).toBe(
-      "https://cdn.example.com/excalidash/user-1/drawing-1/file-1.png",
+      "https://cdn.example.com/images/user-1/drawing-1/file-1.png",
     );
     expect(mockUploadBuffer).not.toHaveBeenCalled();
     expect(prisma.s3File.upsert).not.toHaveBeenCalled();
@@ -207,7 +207,7 @@ describe("processFilesForS3", () => {
     const result = await processFilesForS3(files, "user-1", "drawing-1", prisma as any);
 
     expect(result["file-b64"].dataURL).toBe(
-      "https://cdn.example.com/excalidash/user-1/drawing-1/file-b64.png",
+      "https://cdn.example.com/images/user-1/drawing-1/file-b64.png",
     );
     expect(result["file-s3"].dataURL).toBe(
       "https://cdn.example.com/excalidash/user-1/drawing-1/file-s3.png",
