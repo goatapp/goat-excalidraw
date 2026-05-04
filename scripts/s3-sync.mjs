@@ -169,7 +169,7 @@ async function syncDatabase() {
     fs.unlinkSync(snapshotPath);
     lastDbHash = hash;
     saveManifest();
-    logger.info("Database synced to S3");
+    logger.debug("Database synced to S3");
   } catch (err) {
     logger.error({ err }, "Database sync error");
     try { fs.unlinkSync(snapshotPath); } catch {}
