@@ -6,6 +6,7 @@ import {
   Excalidraw,
   CaptureUpdateAction,
   CommandPalette,
+  Footer,
   MainMenu,
   convertToExcalidrawElements,
   exportToSvg,
@@ -247,8 +248,12 @@ export const Editor: React.FC = () => {
   const [comments, setComments] = useState<api.Comment[]>([]);
   const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
   const [isPlacingComment, setIsPlacingComment] = useState(false);
+  const [isSpacePanning, setIsSpacePanning] = useState(false);
   const [mentionUsers, setMentionUsers] = useState<{ id: string; name: string }[]>([]);
   const [newCommentAnchor, setNewCommentAnchor] = useState<{ x: number; y: number; vx: number; vy: number } | null>(null);
+  const newCommentRef = useRef<HTMLDivElement>(null);
+  const newCommentDragRef = useRef<{ startX: number; startY: number } | null>(null);
+  const newCommentRafRef = useRef<number>(0);
   const commentAppStateRef = useRef<{ scrollX: number; scrollY: number; zoom: { value: number } } | null>(null);
   const [commentAppState, setCommentAppState] = useState<{ scrollX: number; scrollY: number; zoom: { value: number } } | null>(null);
   const commentRafRef = useRef<number | null>(null);
@@ -264,6 +269,33 @@ export const Editor: React.FC = () => {
   const [socketMe, setSocketMe] = useState<UserIdentity>(me);
   const socketMeRef = useRef<UserIdentity>(socketMe);
   const lastPresenceUsersRef = useRef<Peer[] | null>(null);
+
+  useEffect(() => {
+    if (!isPlacingComment) {
+      setIsSpacePanning(false);
+      return;
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space') setIsSpacePanning(true);
+      if (e.code === 'Escape') { setIsPlacingComment(false); setIsCommentsOpen(false); }
+    };
+    const onKeyUp = (e: KeyboardEvent) => { if (e.code === 'Space') setIsSpacePanning(false); };
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+  }, [isPlacingComment]);
+
+  useEffect(() => {
+    if (!newCommentAnchor) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Escape') setNewCommentAnchor(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [newCommentAnchor]);
 
   useEffect(() => {
     setSocketMe(me);
@@ -881,6 +913,47 @@ export const Editor: React.FC = () => {
     const api = excalidrawAPI.current;
     if (!api || api.isDestroyed) return null;
     return api;
+  }, []);
+
+  const handleNewCommentDragStart = useCallback((e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest("button, textarea")) return;
+    e.preventDefault();
+    newCommentDragRef.current = { startX: e.clientX, startY: e.clientY };
+    const el = newCommentRef.current;
+    if (!el) return;
+    el.style.willChange = "transform";
+    el.style.transition = "none";
+
+    const onMove = (ev: MouseEvent) => {
+      if (!newCommentDragRef.current) return;
+      cancelAnimationFrame(newCommentRafRef.current);
+      newCommentRafRef.current = requestAnimationFrame(() => {
+        if (!newCommentDragRef.current) return;
+        const dx = ev.clientX - newCommentDragRef.current.startX;
+        const dy = ev.clientY - newCommentDragRef.current.startY;
+        el.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
+      });
+    };
+
+    const onUp = (ev: MouseEvent) => {
+      cancelAnimationFrame(newCommentRafRef.current);
+      if (newCommentDragRef.current) {
+        const dx = ev.clientX - newCommentDragRef.current.startX;
+        const dy = ev.clientY - newCommentDragRef.current.startY;
+        if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+          setNewCommentAnchor(prev => prev ? { ...prev, vx: prev.vx + dx, vy: prev.vy + dy } : prev);
+        }
+      }
+      el.style.transform = "";
+      el.style.willChange = "";
+      el.style.transition = "";
+      newCommentDragRef.current = null;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
   }, []);
 
   const scrollToComment = useCallback((anchorX: number, anchorY: number) => {
@@ -1964,24 +2037,6 @@ export const Editor: React.FC = () => {
               <History size={20} />
             </button>
           ) : null}
-          {id ? (
-            <button
-              onClick={() => setIsCommentsOpen(true)}
-              className={`p-2 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-lg transition-colors relative ${
-                isPlacingComment
-                  ? "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20"
-                  : "text-gray-600 dark:text-gray-300"
-              }`}
-              title="Comments"
-            >
-              <MessageCircle size={20} />
-              {comments.filter(c => !c.resolved).length > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-indigo-600 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
-                  {comments.filter(c => !c.resolved).length > 9 ? "9+" : comments.filter(c => !c.resolved).length}
-                </span>
-              )}
-            </button>
-          ) : null}
           {(accessLevel === "owner" || accessLevel === "edit") && id ? (
             <button
               onClick={() => setIsShareOpen(true)}
@@ -2158,6 +2213,53 @@ export const Editor: React.FC = () => {
               <MainMenu.DefaultItems.ChangeCanvasBackground />
             </MainMenu>
             <CommandPalette />
+            {id && (
+              <Footer>
+                <button
+                  onClick={() => {
+                    setIsPlacingComment((v) => {
+                      if (v) {
+                        setIsCommentsOpen(false);
+                      } else {
+                        setIsCommentsOpen(true);
+                      }
+                      return !v;
+                    });
+                  }}
+                  className="relative"
+                  title="Comments"
+                  style={{
+                    width: 'var(--lg-button-size)',
+                    height: 'var(--lg-button-size)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: 'var(--border-radius-lg)',
+                    border: 'none',
+                    cursor: 'pointer',
+                    marginInlineStart: '.6em',
+                    boxShadow: '0 0 0 1px var(--color-surface-lowest)',
+                    background: isPlacingComment ? 'var(--color-surface-primary-container)' : 'var(--color-surface-low)',
+                    color: isPlacingComment ? 'var(--color-on-primary-container)' : 'var(--icon-fill-color)',
+                  }}
+                >
+                  <MessageCircle style={{ width: 'var(--lg-icon-size)', height: 'var(--lg-icon-size)' }} />
+                  {comments.filter(c => !c.resolved).length > 0 && (
+                    <span
+                      className="absolute"
+                      style={{
+                        top: 2,
+                        right: 2,
+                        width: 8,
+                        height: 8,
+                        backgroundColor: 'var(--color-danger)',
+                        borderRadius: '50%',
+                      }}
+                    />
+                  )}
+                </button>
+              </Footer>
+            )}
           </Excalidraw>
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-gray-500 dark:text-gray-400">
@@ -2241,6 +2343,7 @@ export const Editor: React.FC = () => {
         {isPlacingComment && (
           <div
             className="absolute inset-0 cursor-crosshair z-[60]"
+            style={{ pointerEvents: isSpacePanning ? 'none' : 'auto' }}
             onClick={(e) => {
               const excalidraw = getAPI();
               if (!excalidraw || !id) return;
@@ -2253,6 +2356,7 @@ export const Editor: React.FC = () => {
                 appState
               );
               setIsPlacingComment(false);
+              setIsCommentsOpen(false);
               setNewCommentAnchor({ x: scene.x, y: scene.y, vx: clientX, vy: clientY });
             }}
           />
@@ -2261,9 +2365,11 @@ export const Editor: React.FC = () => {
         {/* New comment input popover (placement mode result) */}
         {newCommentAnchor && id && (
           <div
-            className="absolute z-[80] animate-in fade-in zoom-in-95 duration-150"
+            ref={newCommentRef}
+            className="absolute z-[80] animate-in fade-in zoom-in-95 duration-150 cursor-grab active:cursor-grabbing"
             style={{ left: newCommentAnchor.vx + 20, top: newCommentAnchor.vy - 10 }}
             onClick={(e) => e.stopPropagation()}
+            onMouseDown={handleNewCommentDragStart}
           >
             <div className="w-72 bg-white dark:bg-neutral-900 border-2 border-neutral-200 dark:border-neutral-700 rounded-xl shadow-xl p-3">
               <div className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 mb-2">New comment</div>
