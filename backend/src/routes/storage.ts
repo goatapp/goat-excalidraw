@@ -252,6 +252,18 @@ export const registerStorageRoutes = (
       const sqliteTotal = elementsBytes + appStateBytes + filesBytes + previewBytes;
       const s3Total = s3Objects.reduce((sum, o) => sum + o.size, 0);
 
+      const snapshotRows = await prisma.drawingSnapshot.findMany({
+        where: { drawingId: id },
+        select: { elements: true, appState: true, files: true },
+      });
+      const snapshotCount = snapshotRows.length;
+      const snapshotBytes = snapshotRows.reduce((sum, snap) => {
+        return sum
+          + Buffer.byteLength(snap.elements ?? "", "utf8")
+          + Buffer.byteLength(snap.appState ?? "", "utf8")
+          + Buffer.byteLength(snap.files ?? "", "utf8");
+      }, 0);
+
       return res.json({
         ownerName: drawing.user.name,
         summary: {
@@ -268,8 +280,39 @@ export const registerStorageRoutes = (
           s3Total,
           total: sqliteTotal + s3Total,
         },
+        snapshots: {
+          count: snapshotCount,
+          totalBytes: snapshotBytes,
+        },
         files: filesList,
       });
+    })
+  );
+
+  app.delete(
+    "/drawings/:id/snapshots",
+    requireAuth,
+    asyncHandler(async (req, res) => {
+      const userId = req.user?.id as string | undefined;
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const adminOverride = await resolveAdminOverride(req);
+      const id = req.params.id as string;
+      const { confirmName } = req.body ?? {};
+
+      const findWhere = adminOverride ? { id } : { id, userId };
+      const drawing = await prisma.drawing.findFirst({ where: findWhere });
+      if (!drawing) return res.status(404).json({ error: "Drawing not found" });
+
+      if (typeof confirmName !== "string" || confirmName !== drawing.name) {
+        return res.status(403).json({ error: "confirmName does not match drawing name" });
+      }
+
+      const result = await prisma.drawingSnapshot.deleteMany({
+        where: { drawingId: id },
+      });
+
+      return res.json({ deletedCount: result.count });
     })
   );
 

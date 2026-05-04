@@ -15,6 +15,7 @@ import {
   getFilesDiff,
   trimDrawing,
   deleteOrphanFiles,
+  deleteAllSnapshots,
   type FilesDiffResult,
   type FileDiffEntry,
 } from '../api';
@@ -53,7 +54,7 @@ export const StorageManageModal: React.FC<StorageManageModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [confirmAction, setConfirmAction] = useState<'trim' | 'delete-orphans' | null>(null);
+  const [confirmAction, setConfirmAction] = useState<'trim' | 'delete-orphans' | 'delete-snapshots' | null>(null);
   const [confirmInput, setConfirmInput] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
   const [lastResult, setLastResult] = useState<string | null>(null);
@@ -144,6 +145,25 @@ export const StorageManageModal: React.FC<StorageManageModalProps> = ({
     }
   };
 
+  const handleDeleteSnapshots = async () => {
+    setActionLoading(true);
+    setError(null);
+    try {
+      const result = await deleteAllSnapshots(drawingId, confirmInput);
+      setLastResult(`Deleted ${result.deletedCount} snapshot(s).`);
+      setConfirmAction(null);
+      setConfirmInput('');
+      await loadDiff();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Snapshot deletion failed';
+      setError(message);
+      setConfirmAction(null);
+      setConfirmInput('');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   const confirmMatch = confirmInput === drawingName;
@@ -215,6 +235,25 @@ export const StorageManageModal: React.FC<StorageManageModalProps> = ({
             </p>
           </div>
 
+          {/* Delete All Snapshots */}
+          {diffData?.snapshots && diffData.snapshots.count > 0 && (
+            <div>
+              <button
+                onClick={() => {
+                  setConfirmAction('delete-snapshots');
+                  setConfirmInput('');
+                }}
+                className="px-4 py-2.5 font-bold rounded-xl border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5 active:translate-y-0 active:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all duration-200 bg-rose-600 text-white flex items-center gap-2"
+              >
+                <Trash2 size={16} />
+                Delete All Snapshots ({diffData.snapshots.count})
+              </button>
+              <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">
+                Remove all version history snapshots for this drawing ({formatSize(diffData.snapshots.totalBytes)}).
+              </p>
+            </div>
+          )}
+
           <hr className="border-neutral-200 dark:border-neutral-700" />
 
           {/* File Comparison */}
@@ -271,6 +310,12 @@ export const StorageManageModal: React.FC<StorageManageModalProps> = ({
                         <span className="font-semibold">S3</span>
                         <span className="font-semibold text-neutral-600 dark:text-neutral-300 tabular-nums">{formatSize(diffData.size.s3Total)}</span>
                       </div>
+                      {diffData.snapshots && diffData.snapshots.count > 0 && (
+                        <div className="flex justify-between border-t border-neutral-200 dark:border-neutral-700 pt-1 mt-1 col-span-2">
+                          <span className="font-semibold">Snapshots ({diffData.snapshots.count})</span>
+                          <span className="font-semibold text-neutral-600 dark:text-neutral-300 tabular-nums">{formatSize(diffData.snapshots.totalBytes)}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -384,7 +429,7 @@ export const StorageManageModal: React.FC<StorageManageModalProps> = ({
                   <AlertTriangle size={24} strokeWidth={2.5} />
                 </div>
                 <h3 className="text-lg font-bold text-neutral-900 dark:text-neutral-100">
-                  {confirmAction === 'trim' ? 'Trim History' : 'Delete Orphan Files'}
+                  {confirmAction === 'trim' ? 'Trim History' : confirmAction === 'delete-snapshots' ? 'Delete All Snapshots' : 'Delete Orphan Files'}
                 </h3>
                 <p className="text-sm text-neutral-500 dark:text-neutral-400">
                   Type the drawing name to confirm:
@@ -414,7 +459,7 @@ export const StorageManageModal: React.FC<StorageManageModalProps> = ({
                   Cancel
                 </button>
                 <button
-                  onClick={confirmAction === 'trim' ? handleTrim : handleDeleteOrphans}
+                  onClick={confirmAction === 'trim' ? handleTrim : confirmAction === 'delete-snapshots' ? handleDeleteSnapshots : handleDeleteOrphans}
                   disabled={!confirmMatch || actionLoading}
                   className="flex-1 px-4 py-2.5 font-bold rounded-xl border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5 active:translate-y-0 active:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all duration-200 bg-rose-600 text-white disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] disabled:hover:translate-y-0 flex items-center justify-center gap-2"
                 >

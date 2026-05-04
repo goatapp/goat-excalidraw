@@ -921,12 +921,20 @@ export type FilesDiffResult = {
     totalS3Files: number;
   };
   size: DrawingSizeInfo;
+  snapshots: {
+    count: number;
+    totalBytes: number;
+  };
   files: FileDiffEntry[];
 };
 
 export type DeleteOrphansResult = {
   deleted: number;
   errors: number;
+};
+
+export type DeleteSnapshotsResult = {
+  deletedCount: number;
 };
 
 export const trimDrawing = async (id: string, confirmName: string): Promise<TrimResult> => {
@@ -941,5 +949,10 @@ export const getFilesDiff = async (id: string): Promise<FilesDiffResult> => {
 
 export const deleteOrphanFiles = async (id: string, confirmName: string, fileIds: string[]): Promise<DeleteOrphansResult> => {
   const response = await api.delete<DeleteOrphansResult>(`/drawings/${id}/files/orphans`, { data: { confirmName, fileIds } });
+  return response.data;
+};
+
+export const deleteAllSnapshots = async (id: string, confirmName: string): Promise<DeleteSnapshotsResult> => {
+  const response = await api.delete<DeleteSnapshotsResult>(`/drawings/${id}/snapshots`, { data: { confirmName } });
   return response.data;
 };
