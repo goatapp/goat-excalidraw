@@ -26,6 +26,7 @@ model User {
   comments            Comment[]
   commentReactions    CommentReaction[]
   collectionSharesGranted CollectionShare[] @relation("CollectionShareGrantee")
+  drawingSnapshots    DrawingSnapshot[]
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
 }
@@ -90,6 +91,8 @@ model DrawingSnapshot {
   id        String   @id @default(uuid())
   drawingId String
   drawing   Drawing  @relation(fields: [drawingId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   version   Int
   elements  String   // JSON string (state before update)
   appState  String   // JSON string

@@ -597,6 +597,7 @@ export const registerDrawingRoutes = (
           await tx.drawingSnapshot.create({
             data: {
               drawingId: id,
+              userId: req.user?.id ?? null,
               version: existingDrawing.version,
               elements: existingDrawing.elements,
               appState: existingDrawing.appState,
@@ -1096,7 +1097,7 @@ export const registerDrawingRoutes = (
     const [snapshots, totalCount] = await Promise.all([
       prisma.drawingSnapshot.findMany({
         where: { drawingId: id },
-        select: { id: true, version: true, createdAt: true },
+        select: { id: true, version: true, createdAt: true, user: { select: { name: true } } },
         orderBy: { createdAt: "desc" },
         take: limit,
         skip: offset,
@@ -1104,7 +1105,15 @@ export const registerDrawingRoutes = (
       prisma.drawingSnapshot.count({ where: { drawingId: id } }),
     ]);
 
-    return res.json({ snapshots, totalCount });
+    return res.json({
+      snapshots: snapshots.map((s) => ({
+        id: s.id,
+        version: s.version,
+        createdAt: s.createdAt,
+        userName: s.user?.name ?? null,
+      })),
+      totalCount,
+    });
   }));
 
   // Get full snapshot for preview
@@ -1155,6 +1164,7 @@ export const registerDrawingRoutes = (
     await prisma.drawingSnapshot.create({
       data: {
         drawingId: id,
+        userId: req.user?.id ?? null,
         version: drawing.version,
         elements: drawing.elements,
         appState: drawing.appState,
