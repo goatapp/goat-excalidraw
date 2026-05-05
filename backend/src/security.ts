@@ -556,8 +556,8 @@ export const sanitizeDrawingData = (data: {
                         file[key] = "";
                       } else {
                         file[key] =
-                          "data:image/svg+xml;utf8," +
-                          encodeURIComponent(sanitized);
+                          "data:image/svg+xml;base64," +
+                          Buffer.from(sanitized).toString("base64");
                       }
                     } catch {
                       file[key] = "";
