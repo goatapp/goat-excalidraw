@@ -4,7 +4,7 @@ import { isS3Enabled, deleteS3Object, listS3Objects } from "../s3.js";
 import { logger } from "../utils/logger.js";
 
 const FILE_KEY_PREFIX =
-  process.env.S3_KEY_PREFIX?.replace(/\/+$/, "") || "excalidash";
+  process.env.S3_KEY_PREFIX?.replace(/\/+$/, "") || "images";
 
 export type StorageRouteDeps = {
   prisma: PrismaClient;

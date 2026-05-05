@@ -9,6 +9,7 @@ import {
   CheckCircle,
   AlertTriangle,
   HardDrive,
+  Eye,
 } from 'lucide-react';
 import clsx from 'clsx';
 import {
@@ -341,12 +342,13 @@ export const StorageManageModal: React.FC<StorageManageModalProps> = ({
                           <th className="px-3 py-2 text-center font-bold text-neutral-700 dark:text-neutral-300">SQLite</th>
                           <th className="px-3 py-2 text-center font-bold text-neutral-700 dark:text-neutral-300">S3</th>
                           <th className="px-3 py-2 text-right font-bold text-neutral-700 dark:text-neutral-300">Size</th>
+                          <th className="px-3 py-2 text-center font-bold text-neutral-700 dark:text-neutral-300"></th>
                         </tr>
                       </thead>
                       <tbody>
                         {diffData.files.length === 0 ? (
                           <tr>
-                            <td colSpan={6} className="px-3 py-6 text-center text-neutral-400">
+                            <td colSpan={7} className="px-3 py-6 text-center text-neutral-400">
                               No files found.
                             </td>
                           </tr>
@@ -372,13 +374,22 @@ export const StorageManageModal: React.FC<StorageManageModalProps> = ({
                                 <StatusIcon active={file.inCanvasActive} present={file.inCanvas} />
                               </td>
                               <td className="px-3 py-2 text-center">
-                                <StatusIcon present={file.inSqlite} />
+                                <StatusIcon active={file.inCanvasActive} present={file.inSqlite} />
                               </td>
                               <td className="px-3 py-2 text-center">
-                                <StatusIcon present={file.inS3} />
+                                <StatusIcon active={file.inCanvasActive} present={file.inS3} />
                               </td>
                               <td className="px-3 py-2 text-right text-neutral-600 dark:text-neutral-400 tabular-nums">
                                 {formatSize(file.s3SizeBytes)}
+                              </td>
+                              <td className="px-3 py-2 text-center">
+                                <button
+                                  onClick={() => window.open(`/api/files/${file.fileId}`, '_blank')}
+                                  className="text-neutral-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                                  title="Preview file"
+                                >
+                                  <Eye size={14} />
+                                </button>
                               </td>
                             </tr>
                           ))
