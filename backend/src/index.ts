@@ -43,6 +43,7 @@ import { registerFileRoutes } from "./routes/files.js";
 import { registerStorageRoutes } from "./routes/storage.js";
 import { initS3, isS3Enabled, deleteS3Object } from "./s3.js";
 import { processFilesForS3, cleanupRemovedS3Files } from "./fileProcessing.js";
+import { applyDelta, type SnapshotDelta } from "./utils/snapshotDelta.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const backendRoot = path.resolve(__dirname, "../");
@@ -835,6 +836,67 @@ const cleanupSnapshots = async () => {
 
   if (totalDeleted > 0) {
     logger.info({ deletedCount: totalDeleted }, "Snapshot cleanup completed");
+
+    // Promote orphaned deltas to keyframes after pruning
+    try {
+      const drawingsToCheck = await prisma.$queryRawUnsafe<{ drawingId: string }[]>(
+        `SELECT DISTINCT drawingId FROM DrawingSnapshot`,
+      );
+      for (const { drawingId } of drawingsToCheck) {
+        const oldest = await prisma.drawingSnapshot.findFirst({
+          where: { drawingId },
+          orderBy: { createdAt: "asc" },
+        });
+        if (oldest && oldest.snapshotType === "delta") {
+          // Resolve its state and promote to keyframe
+          const chain: { delta: string | null; baseSnapshotId: string | null }[] = [oldest];
+          let resolved = false;
+          let current = oldest;
+          for (let i = 0; i < config.snapshotKeyframeInterval + 1; i++) {
+            if (!current.baseSnapshotId) break;
+            const base = await prisma.drawingSnapshot.findFirst({
+              where: { id: current.baseSnapshotId },
+            });
+            if (!base) break;
+            if (base.snapshotType === "full") {
+              let elements = JSON.parse(base.elements || "[]");
+              let appState = JSON.parse(base.appState || "{}");
+              let files = JSON.parse(base.files || "{}");
+              for (let j = chain.length - 1; j >= 0; j--) {
+                if (!chain[j].delta) break;
+                const delta: SnapshotDelta = JSON.parse(chain[j].delta!);
+                const result = applyDelta(elements, appState, files, delta);
+                elements = result.elements;
+                appState = result.appState;
+                files = result.files;
+              }
+              await prisma.drawingSnapshot.update({
+                where: { id: oldest.id },
+                data: {
+                  snapshotType: "full",
+                  elements: JSON.stringify(elements),
+                  appState: JSON.stringify(appState),
+                  files: JSON.stringify(files),
+                  baseSnapshotId: null,
+                  delta: null,
+                },
+              });
+              resolved = true;
+              break;
+            }
+            chain.push(base);
+            current = base;
+          }
+          if (!resolved) {
+            // Can't resolve chain -- delete the orphaned delta
+            await prisma.drawingSnapshot.delete({ where: { id: oldest.id } });
+            logger.warn({ drawingId, snapshotId: oldest.id }, "Deleted unresolvable orphaned delta snapshot");
+          }
+        }
+      }
+    } catch (err) {
+      logger.error({ err }, "Snapshot keyframe promotion failed");
+    }
   }
 
   const s3Cleaned = await cleanupOrphanedS3FilesAfterSnapshotPrune(candidateFileIds);

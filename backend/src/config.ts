@@ -34,6 +34,7 @@ interface Config {
   snapshotMaxAgeDays: number;
   snapshotMaxPerDrawing: number;
   snapshotCleanupIntervalHours: number;
+  snapshotKeyframeInterval: number;
   trashPurgeDays: number;
   s3: S3Config;
 }
@@ -368,6 +369,7 @@ export const config: Config = {
   snapshotMaxAgeDays: getRequiredEnvNumber("SNAPSHOT_MAX_AGE_DAYS", 30),
   snapshotMaxPerDrawing: getRequiredEnvNumber("SNAPSHOT_MAX_PER_DRAWING", 50),
   snapshotCleanupIntervalHours: getRequiredEnvNumber("SNAPSHOT_CLEANUP_INTERVAL_HOURS", 1),
+  snapshotKeyframeInterval: getRequiredEnvNumber("SNAPSHOT_KEYFRAME_INTERVAL", 10),
   trashPurgeDays: getRequiredEnvNumber("TRASH_PURGE_DAYS", 30),
   s3: resolveS3Config(),
 };
