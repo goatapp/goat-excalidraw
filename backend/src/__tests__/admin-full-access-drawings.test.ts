@@ -82,7 +82,7 @@ function buildApp(options?: { role?: "ADMIN" | "USER"; adminFullAccess?: boolean
     getCachedDrawingsBody: vi.fn().mockReturnValue(null),
     cacheDrawingsResponse: vi.fn().mockImplementation((_key: string, payload: any) => Buffer.from(JSON.stringify(payload))),
     MAX_PAGE_SIZE: 100,
-    config: { nodeEnv: "test", enableAuditLogging: false },
+    config: { nodeEnv: "test", enableAuditLogging: false, snapshotKeyframeInterval: 10 },
     logAuditEvent: vi.fn(),
     getAdminFullAccess: vi.fn().mockResolvedValue(adminFullAccess),
     processFilesForS3: vi.fn().mockImplementation((files: any) => Promise.resolve(files)),

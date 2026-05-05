@@ -52,6 +52,7 @@ export type DashboardRouteDeps = {
   config: {
     nodeEnv: string;
     enableAuditLogging: boolean;
+    snapshotKeyframeInterval: number;
   };
   logAuditEvent: LogAuditEvent;
   getAdminFullAccess: () => Promise<boolean>;

@@ -88,16 +88,19 @@ model Drawing {
 }
 
 model DrawingSnapshot {
-  id        String   @id @default(uuid())
-  drawingId String
-  drawing   Drawing  @relation(fields: [drawingId], references: [id], onDelete: Cascade)
-  userId    String?
-  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  version   Int
-  elements  String   // JSON string (state before update)
-  appState  String   // JSON string
-  files     String   @default("{}")
-  createdAt DateTime @default(now())
+  id             String   @id @default(uuid())
+  drawingId      String
+  drawing        Drawing  @relation(fields: [drawingId], references: [id], onDelete: Cascade)
+  userId         String?
+  user           User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  version        Int
+  elements       String   // JSON string (state before update)
+  appState       String   // JSON string
+  files          String   @default("{}")
+  snapshotType   String   @default("full") // "full" | "delta"
+  baseSnapshotId String?  // previous snapshot id (for deltas)
+  delta          String?  // JSON delta payload (for deltas)
+  createdAt      DateTime @default(now())
 
   @@index([drawingId, createdAt])
   @@index([createdAt])

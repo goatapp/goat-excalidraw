@@ -22,6 +22,7 @@ import {
   type DrawingPrincipal,
 } from "../../authz/sharing.js";
 import { SYSTEM_USER_EMAIL } from "../../services/teamCollections.js";
+import { computeDelta, applyDelta, type SnapshotDelta } from "../../utils/snapshotDelta.js";
 
 export const registerDrawingRoutes = (
   app: express.Express,
@@ -90,6 +91,50 @@ export const registerDrawingRoutes = (
       message: "Invalid or expired token",
     });
     return true;
+  };
+
+  const resolveSnapshotState = async (
+    db: typeof prisma,
+    snapshot: { id: string; drawingId: string; snapshotType: string; baseSnapshotId: string | null; elements: string; appState: string; files: string; delta: string | null },
+  ): Promise<{ elements: any[]; appState: Record<string, any>; files: Record<string, any> } | null> => {
+    if (snapshot.snapshotType === "full") {
+      return {
+        elements: parseJsonField(snapshot.elements, []),
+        appState: parseJsonField(snapshot.appState, {}),
+        files: parseJsonField(snapshot.files, {}),
+      };
+    }
+
+    const chain: { delta: string | null; baseSnapshotId: string | null }[] = [snapshot];
+    let current = snapshot;
+    const maxDepth = config.snapshotKeyframeInterval + 1;
+
+    while (current.snapshotType === "delta" && current.baseSnapshotId && chain.length < maxDepth) {
+      const base = await db.drawingSnapshot.findFirst({
+        where: { id: current.baseSnapshotId, drawingId: snapshot.drawingId },
+      });
+      if (!base) return null;
+      if (base.snapshotType === "full") {
+        let elements: any[] = parseJsonField(base.elements, []);
+        let appState: Record<string, any> = parseJsonField(base.appState, {});
+        let files: Record<string, any> = parseJsonField(base.files, {});
+
+        for (let i = chain.length - 1; i >= 0; i--) {
+          const deltaJson = chain[i].delta;
+          if (!deltaJson) return null;
+          const delta: SnapshotDelta = JSON.parse(deltaJson);
+          const result = applyDelta(elements, appState, files, delta);
+          elements = result.elements;
+          appState = result.appState;
+          files = result.files;
+        }
+        return { elements, appState, files };
+      }
+      chain.push(base);
+      current = base as typeof snapshot;
+    }
+
+    return null;
   };
 
   app.get("/drawings", requireAuth, asyncHandler(async (req, res) => {
@@ -594,16 +639,71 @@ export const registerDrawingRoutes = (
     try {
       if (isSceneUpdate) {
         updatedDrawing = await prisma.$transaction(async (tx) => {
-          await tx.drawingSnapshot.create({
-            data: {
-              drawingId: id,
-              userId: req.user?.id ?? null,
-              version: existingDrawing.version,
-              elements: existingDrawing.elements,
-              appState: existingDrawing.appState,
-              files: existingDrawing.files,
-            },
+          const lastSnapshot = await tx.drawingSnapshot.findFirst({
+            where: { drawingId: id },
+            orderBy: { createdAt: "desc" },
+            select: { id: true, snapshotType: true, elements: true, appState: true, files: true },
           });
+
+          let snapshotsSinceKeyframe = 0;
+          if (lastSnapshot) {
+            const lastKeyframe = await tx.drawingSnapshot.findFirst({
+              where: { drawingId: id, snapshotType: "full" },
+              orderBy: { createdAt: "desc" },
+              select: { createdAt: true },
+            });
+            if (lastKeyframe) {
+              snapshotsSinceKeyframe = await tx.drawingSnapshot.count({
+                where: {
+                  drawingId: id,
+                  snapshotType: "delta",
+                  createdAt: { gte: lastKeyframe.createdAt },
+                },
+              });
+            }
+          }
+
+          const shouldBeKeyframe = !lastSnapshot || snapshotsSinceKeyframe >= (config.snapshotKeyframeInterval - 1);
+
+          if (shouldBeKeyframe) {
+            await tx.drawingSnapshot.create({
+              data: {
+                drawingId: id,
+                userId: req.user?.id ?? null,
+                version: existingDrawing.version,
+                elements: existingDrawing.elements,
+                appState: existingDrawing.appState,
+                files: existingDrawing.files,
+                snapshotType: "full",
+              },
+            });
+          } else {
+            const prevElements = parseJsonField(lastSnapshot!.elements, []);
+            const prevAppState = parseJsonField(lastSnapshot!.appState, {});
+            const prevFiles = parseJsonField(lastSnapshot!.files, {});
+            const currElements = parseJsonField(existingDrawing.elements, []);
+            const currAppState = parseJsonField(existingDrawing.appState, {});
+            const currFiles = parseJsonField(existingDrawing.files, {});
+
+            const delta = computeDelta(
+              prevElements, prevAppState, prevFiles,
+              currElements, currAppState, currFiles,
+            );
+
+            await tx.drawingSnapshot.create({
+              data: {
+                drawingId: id,
+                userId: req.user?.id ?? null,
+                version: existingDrawing.version,
+                elements: "[]",
+                appState: "{}",
+                files: "{}",
+                snapshotType: "delta",
+                baseSnapshotId: lastSnapshot!.id,
+                delta: JSON.stringify(delta),
+              },
+            });
+          }
 
           const updateResult = await tx.drawing.updateMany({
             where: updateWhere,
@@ -1097,7 +1197,7 @@ export const registerDrawingRoutes = (
     const [snapshots, totalCount] = await Promise.all([
       prisma.drawingSnapshot.findMany({
         where: { drawingId: id },
-        select: { id: true, version: true, createdAt: true, user: { select: { name: true } } },
+        select: { id: true, version: true, createdAt: true, snapshotType: true, user: { select: { name: true } } },
         orderBy: { createdAt: "desc" },
         take: limit,
         skip: offset,
@@ -1110,6 +1210,7 @@ export const registerDrawingRoutes = (
         id: s.id,
         version: s.version,
         createdAt: s.createdAt,
+        snapshotType: s.snapshotType,
         userName: s.user?.name ?? null,
       })),
       totalCount,
@@ -1132,6 +1233,21 @@ export const registerDrawingRoutes = (
       where: { id: snapshotId, drawingId: id },
     });
     if (!snapshot) return res.status(404).json({ error: "Snapshot not found" });
+
+    if (snapshot.snapshotType === "delta") {
+      const resolved = await resolveSnapshotState(prisma, snapshot);
+      if (!resolved) return res.status(500).json({ error: "Failed to resolve snapshot chain" });
+      return res.json({
+        id: snapshot.id,
+        drawingId: snapshot.drawingId,
+        version: snapshot.version,
+        createdAt: snapshot.createdAt,
+        snapshotType: snapshot.snapshotType,
+        elements: resolved.elements,
+        appState: resolved.appState,
+        files: resolved.files,
+      });
+    }
 
     return res.json({
       ...snapshot,
@@ -1160,7 +1276,7 @@ export const registerDrawingRoutes = (
     if (!drawing) return res.status(404).json({ error: "Drawing not found" });
     if (!snapshot) return res.status(404).json({ error: "Snapshot not found" });
 
-    // Snapshot current state before restoring (so restore is reversible)
+    // Snapshot current state before restoring (always a keyframe so restore is reversible)
     await prisma.drawingSnapshot.create({
       data: {
         drawingId: id,
@@ -1169,16 +1285,33 @@ export const registerDrawingRoutes = (
         elements: drawing.elements,
         appState: drawing.appState,
         files: drawing.files,
+        snapshotType: "full",
       },
     });
 
-    // Apply snapshot
+    // Resolve snapshot state (may be a delta)
+    let restoreElements: string;
+    let restoreAppState: string;
+    let restoreFiles: string;
+
+    if (snapshot.snapshotType === "delta") {
+      const resolved = await resolveSnapshotState(prisma, snapshot);
+      if (!resolved) return res.status(500).json({ error: "Failed to resolve snapshot chain" });
+      restoreElements = JSON.stringify(resolved.elements);
+      restoreAppState = JSON.stringify(resolved.appState);
+      restoreFiles = JSON.stringify(resolved.files);
+    } else {
+      restoreElements = snapshot.elements;
+      restoreAppState = snapshot.appState;
+      restoreFiles = snapshot.files;
+    }
+
     const updated = await prisma.drawing.update({
       where: { id },
       data: {
-        elements: snapshot.elements,
-        appState: snapshot.appState,
-        files: snapshot.files,
+        elements: restoreElements,
+        appState: restoreAppState,
+        files: restoreFiles,
         version: { increment: 1 },
       },
     });
