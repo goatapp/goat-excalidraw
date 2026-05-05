@@ -59,24 +59,55 @@ type DroppedImageData = {
   height: number;
 };
 
+const normalizeSvgDataUrls = (files: Record<string, any>): Record<string, any> => {
+  let changed = false;
+  const result = { ...files };
+  for (const [key, file] of Object.entries(result)) {
+    if (
+      typeof file?.dataURL === "string" &&
+      file.dataURL.startsWith("data:image/svg+xml;utf8,")
+    ) {
+      try {
+        const encoded = file.dataURL.slice(file.dataURL.indexOf(",") + 1);
+        const svgContent = decodeURIComponent(encoded);
+        const base64 = btoa(unescape(encodeURIComponent(svgContent)));
+        result[key] = { ...file, dataURL: `data:image/svg+xml;base64,${base64}` };
+        changed = true;
+      } catch {
+        // leave as-is
+      }
+    }
+  }
+  return changed ? result : files;
+};
+
 const resolveS3Files = async (
   files: Record<string, any>,
 ): Promise<Record<string, any>> => {
-  const entries = Object.entries(files);
+  const normalized = normalizeSvgDataUrls(files);
+  const entries = Object.entries(normalized);
   const needsFetch = entries.filter(
     ([, f]) => typeof f?.dataURL === "string" && f.dataURL.startsWith("/api/files/"),
   );
-  if (needsFetch.length === 0) return files;
+  if (needsFetch.length === 0) return normalized;
 
-  const resolved = { ...files };
+  const resolved = { ...normalized };
   await Promise.all(
     needsFetch.map(async ([key, file]) => {
       try {
         const path = file.dataURL.replace(/^\/api\//, "/");
-        const resp = await api.api.get(path, { responseType: "blob" });
-        const blob = resp.data as Blob;
-        const blobUrl = URL.createObjectURL(blob);
-        resolved[key] = { ...file, dataURL: blobUrl };
+        const isSvg = file.mimeType === "image/svg+xml";
+        const resp = await api.api.get(path, {
+          responseType: isSvg ? "text" : "blob",
+        });
+        if (isSvg) {
+          const svgText = resp.data as string;
+          const base64 = btoa(unescape(encodeURIComponent(svgText)));
+          resolved[key] = { ...file, dataURL: `data:image/svg+xml;base64,${base64}` };
+        } else {
+          const blob = resp.data as Blob;
+          resolved[key] = { ...file, dataURL: URL.createObjectURL(blob) };
+        }
       } catch {
         // leave as-is — image will fail to render but drawing still loads
       }

@@ -282,8 +282,8 @@ describe("Security Sanitization - Image Data URLs", () => {
     it("should preserve safe SVG data URLs", () => {
       const svg = "<svg xmlns='http://www.w3.org/2000/svg' width='120' height='80'><rect width='120' height='80' fill='#4f46e5'/></svg>";
       const resultUrl = sanitizeFiles(makeSvgFile(svg));
-      expect(resultUrl).toContain("data:image/svg+xml;utf8,");
-      const decoded = decodeURIComponent(resultUrl.split(",").slice(1).join(","));
+      expect(resultUrl).toContain("data:image/svg+xml;base64,");
+      const decoded = Buffer.from(resultUrl.split(",").slice(1).join(","), "base64").toString("utf-8");
       expect(decoded).toContain("<rect");
       expect(decoded).toContain("fill=");
     });
@@ -292,7 +292,7 @@ describe("Security Sanitization - Image Data URLs", () => {
       const svg = "<svg xmlns='http://www.w3.org/2000/svg'><rect width='10' height='10'/><script>alert(1)</script></svg>";
       const resultUrl = sanitizeFiles(makeSvgFile(svg));
       expect(resultUrl).not.toBe("");
-      const decoded = decodeURIComponent(resultUrl.split(",").slice(1).join(","));
+      const decoded = Buffer.from(resultUrl.split(",").slice(1).join(","), "base64").toString("utf-8");
       expect(decoded).not.toContain("<script");
       expect(decoded).toContain("<rect");
     });
@@ -301,7 +301,7 @@ describe("Security Sanitization - Image Data URLs", () => {
       const svg = '<svg xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10" onload="alert(1)"/></svg>';
       const resultUrl = sanitizeFiles(makeSvgFile(svg));
       expect(resultUrl).not.toBe("");
-      const decoded = decodeURIComponent(resultUrl.split(",").slice(1).join(","));
+      const decoded = Buffer.from(resultUrl.split(",").slice(1).join(","), "base64").toString("utf-8");
       expect(decoded).not.toContain("onload");
     });
 
@@ -309,15 +309,15 @@ describe("Security Sanitization - Image Data URLs", () => {
       const svg = '<svg xmlns="http://www.w3.org/2000/svg"><foreignObject><div>evil</div></foreignObject><rect width="10" height="10"/></svg>';
       const resultUrl = sanitizeFiles(makeSvgFile(svg));
       expect(resultUrl).not.toBe("");
-      const decoded = decodeURIComponent(resultUrl.split(",").slice(1).join(","));
+      const decoded = Buffer.from(resultUrl.split(",").slice(1).join(","), "base64").toString("utf-8");
       expect(decoded).not.toContain("foreignObject");
     });
 
     it("should handle base64-encoded SVG data URLs", () => {
       const svg = "<svg xmlns='http://www.w3.org/2000/svg' width='50' height='50'><circle cx='25' cy='25' r='20' fill='red'/></svg>";
       const resultUrl = sanitizeFiles(makeSvgFile(svg, "base64"));
-      expect(resultUrl).toContain("data:image/svg+xml;utf8,");
-      const decoded = decodeURIComponent(resultUrl.split(",").slice(1).join(","));
+      expect(resultUrl).toContain("data:image/svg+xml;base64,");
+      const decoded = Buffer.from(resultUrl.split(",").slice(1).join(","), "base64").toString("utf-8");
       expect(decoded).toContain("<circle");
     });
 
