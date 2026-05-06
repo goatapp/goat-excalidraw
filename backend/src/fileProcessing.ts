@@ -1,8 +1,9 @@
 import type { PrismaClient } from "./generated/client/client.js";
-import { isS3Enabled, getS3Config, uploadBuffer, getPublicUrl, deleteS3Object } from "./s3.js";
+import { isS3Enabled, getS3Config, uploadBuffer, getPublicUrl, deleteS3Object, copyS3Object } from "./s3.js";
 import { logger } from "./utils/logger.js";
 
 const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024;
+const S3_UPLOAD_CONCURRENCY = 8;
 
 const FILE_KEY_PREFIX =
   process.env.S3_KEY_PREFIX?.replace(/\/+$/, "") || "images";
@@ -75,34 +76,80 @@ export const processFilesForS3 = async (
   const cfg = getS3Config()!;
   const result: Record<string, any> = { ...filtered };
 
-  const uploadTasks = Object.entries(filtered).map(async ([fileId, file]) => {
-    const dataURL: unknown = file?.dataURL;
-    if (typeof dataURL !== "string" || !dataURL.startsWith("data:")) {
-      return;
+  const entries = Object.entries(filtered);
+  for (let i = 0; i < entries.length; i += S3_UPLOAD_CONCURRENCY) {
+    const batch = entries.slice(i, i + S3_UPLOAD_CONCURRENCY);
+    await Promise.all(
+      batch.map(async ([fileId, file]) => {
+        const dataURL: unknown = file?.dataURL;
+        if (typeof dataURL !== "string" || !dataURL.startsWith("data:")) {
+          return;
+        }
+
+        const decoded = decodeDataURL(dataURL);
+        if (!decoded) return;
+
+        const ext = MIME_TO_EXT[decoded.mimeType] ?? "bin";
+        const s3Key = `${FILE_KEY_PREFIX}/${userId}/${drawingId}/${fileId}.${ext}`;
+
+        await uploadBuffer(s3Key, decoded.buffer, decoded.mimeType);
+
+        const accessUrl = cfg.publicUrl
+          ? getPublicUrl(s3Key)
+          : `/api/files/${fileId}`;
+
+        await prisma.s3File.upsert({
+          where: { id: fileId },
+          create: { id: fileId, userId, s3Key, mimeType: decoded.mimeType },
+          update: { s3Key, mimeType: decoded.mimeType },
+        });
+
+        result[fileId] = { ...file, dataURL: accessUrl };
+      }),
+    );
+  }
+
+  return result;
+};
+
+export const copyFilesForDuplicate = async (
+  files: Record<string, any>,
+  userId: string,
+  newDrawingId: string,
+  prisma: Pick<PrismaClient, "s3File">,
+): Promise<Record<string, any>> => {
+  if (!isS3Enabled()) return files;
+
+  const cfg = getS3Config()!;
+  const result: Record<string, any> = { ...files };
+  const copiedKeys: string[] = [];
+
+  try {
+    for (const [fileId, file] of Object.entries(files)) {
+      const record = await prisma.s3File.findUnique({ where: { id: fileId } });
+      if (!record) continue;
+
+      const ext = record.s3Key.split(".").pop() ?? "bin";
+      const newKey = `${FILE_KEY_PREFIX}/${userId}/${newDrawingId}/${fileId}.${ext}`;
+
+      await copyS3Object(record.s3Key, newKey);
+      copiedKeys.push(newKey);
+
+      const newFileId = fileId;
+      await prisma.s3File.create({
+        data: { id: `${newDrawingId}_${newFileId}`, userId, s3Key: newKey, mimeType: record.mimeType },
+      });
+
+      const accessUrl = cfg.publicUrl ? getPublicUrl(newKey) : `/api/files/${newFileId}`;
+      result[fileId] = { ...file, dataURL: accessUrl };
     }
-
-    const decoded = decodeDataURL(dataURL);
-    if (!decoded) return;
-
-    const ext = MIME_TO_EXT[decoded.mimeType] ?? "bin";
-    const s3Key = `${FILE_KEY_PREFIX}/${userId}/${drawingId}/${fileId}.${ext}`;
-
-    await uploadBuffer(s3Key, decoded.buffer, decoded.mimeType);
-
-    const accessUrl = cfg.publicUrl
-      ? getPublicUrl(s3Key)
-      : `/api/files/${fileId}`;
-
-    await prisma.s3File.upsert({
-      where: { id: fileId },
-      create: { id: fileId, userId, s3Key, mimeType: decoded.mimeType },
-      update: { s3Key, mimeType: decoded.mimeType },
-    });
-
-    result[fileId] = { ...file, dataURL: accessUrl };
-  });
-
-  await Promise.all(uploadTasks);
+  } catch (err) {
+    logger.error({ err, newDrawingId }, "S3 copy failed during duplicate, rolling back");
+    for (const key of copiedKeys) {
+      try { await deleteS3Object(key); } catch {}
+    }
+    return files;
+  }
 
   return result;
 };
