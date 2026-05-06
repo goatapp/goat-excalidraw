@@ -276,7 +276,7 @@ app.use(
         defaultSrc: ["'none'"],
         scriptSrc: ["'self'", "'wasm-unsafe-eval'", "'unsafe-eval'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
-        fontSrc: ["'self'", "https://esm.sh"],
+        fontSrc: ["'self'", "data:", "https://esm.sh"],
         baseUri: ["'none'"],
         formAction: ["'none'"],
         frameAncestors: ["'none'"],
