@@ -384,7 +384,7 @@ export const StorageManageModal: React.FC<StorageManageModalProps> = ({
                               </td>
                               <td className="px-3 py-2 text-center">
                                 <button
-                                  onClick={() => window.open(`/api/files/${file.fileId}`, '_blank')}
+                                  onClick={() => window.open(`/api/files/${drawingId}/${file.fileId}`, '_blank')}
                                   className="text-neutral-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
                                   title="Preview file"
                                 >

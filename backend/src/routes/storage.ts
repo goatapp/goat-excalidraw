@@ -112,8 +112,7 @@ export const registerStorageRoutes = (
         const orphanedKeys = new Set<string>();
 
         for (const record of s3FileRecords) {
-          const fileId = record.id;
-          if (!survivingFileIds.has(fileId)) {
+          if (!survivingFileIds.has(record.fileId)) {
             orphanedKeys.add(record.s3Key);
           }
         }
@@ -135,13 +134,13 @@ export const registerStorageRoutes = (
           }
         }
 
-        const orphanedRecordIds = s3FileRecords
-          .filter((r) => !survivingFileIds.has(r.id))
-          .map((r) => r.id);
+        const orphanedFileIds = s3FileRecords
+          .filter((r) => !survivingFileIds.has(r.fileId))
+          .map((r) => r.fileId);
 
-        if (orphanedRecordIds.length > 0) {
+        if (orphanedFileIds.length > 0) {
           await prisma.s3File.deleteMany({
-            where: { id: { in: orphanedRecordIds } },
+            where: { drawingId: id, fileId: { in: orphanedFileIds } },
           });
         }
       }
@@ -197,7 +196,7 @@ export const registerStorageRoutes = (
 
       const s3Prefix = `${FILE_KEY_PREFIX}/${drawing.userId}/${id}/`;
       let s3FileRecords: Array<{
-        id: string;
+        fileId: string;
         s3Key: string;
         mimeType: string;
       }> = [];
@@ -205,14 +204,14 @@ export const registerStorageRoutes = (
 
       if (isS3Enabled()) {
         s3FileRecords = await prisma.s3File.findMany({
-          where: { s3Key: { startsWith: s3Prefix } },
-          select: { id: true, s3Key: true, mimeType: true },
+          where: { drawingId: id },
+          select: { fileId: true, s3Key: true, mimeType: true },
         });
         s3Objects = await listS3Objects(s3Prefix);
       }
 
       const s3RecordMap = new Map(
-        s3FileRecords.map((r) => [r.id, r])
+        s3FileRecords.map((r) => [r.fileId, r])
       );
       const s3ObjectMap = new Map(
         s3Objects.map((o) => {
@@ -224,7 +223,7 @@ export const registerStorageRoutes = (
       const allFileIds = new Set<string>();
       for (const fid of allCanvasRefs) allFileIds.add(fid);
       for (const fid of sqliteFileIds) allFileIds.add(fid);
-      for (const r of s3FileRecords) allFileIds.add(r.id);
+      for (const r of s3FileRecords) allFileIds.add(r.fileId);
       for (const o of s3Objects) {
         const fid = fileIdFromS3Key(o.key);
         if (fid) allFileIds.add(fid);
@@ -378,7 +377,7 @@ export const registerStorageRoutes = (
 
       if (isS3Enabled()) {
         const s3Records = await prisma.s3File.findMany({
-          where: { id: { in: validFileIds } },
+          where: { drawingId: id, fileId: { in: validFileIds } },
         });
 
         const S3_CONCURRENCY = 8;
@@ -400,7 +399,7 @@ export const registerStorageRoutes = (
 
         if (s3Records.length > 0) {
           await prisma.s3File.deleteMany({
-            where: { id: { in: s3Records.map((r) => r.id) } },
+            where: { drawingId: id, fileId: { in: s3Records.map((r) => r.fileId) } },
           });
         }
       }

@@ -76,12 +76,32 @@ export const processFilesForS3 = async (
   const cfg = getS3Config()!;
   const result: Record<string, any> = { ...filtered };
 
+  const OLD_API_FILES_RE = /^\/api\/files\/[\w-]+$/;
+
   const entries = Object.entries(filtered);
   for (let i = 0; i < entries.length; i += S3_UPLOAD_CONCURRENCY) {
     const batch = entries.slice(i, i + S3_UPLOAD_CONCURRENCY);
     await Promise.all(
       batch.map(async ([fileId, file]) => {
         const dataURL: unknown = file?.dataURL;
+
+        // Re-register files with legacy /api/files/{fileId} URLs (missing S3File record after migration)
+        if (typeof dataURL === "string" && OLD_API_FILES_RE.test(dataURL) && !dataURL.includes(`/files/${drawingId}/`)) {
+          const mimeType = typeof file?.mimeType === "string" ? file.mimeType : "application/octet-stream";
+          const ext = MIME_TO_EXT[mimeType] ?? "bin";
+          const s3Key = `${FILE_KEY_PREFIX}/${userId}/${drawingId}/${fileId}.${ext}`;
+          const newUrl = cfg.publicUrl ? getPublicUrl(s3Key) : `/api/files/${drawingId}/${fileId}`;
+
+          await prisma.s3File.upsert({
+            where: { drawingId_fileId: { drawingId, fileId } },
+            create: { drawingId, fileId, userId, s3Key, mimeType },
+            update: { s3Key, mimeType },
+          });
+
+          result[fileId] = { ...file, dataURL: newUrl };
+          return;
+        }
+
         if (typeof dataURL !== "string" || !dataURL.startsWith("data:")) {
           return;
         }
@@ -96,11 +116,11 @@ export const processFilesForS3 = async (
 
         const accessUrl = cfg.publicUrl
           ? getPublicUrl(s3Key)
-          : `/api/files/${fileId}`;
+          : `/api/files/${drawingId}/${fileId}`;
 
         await prisma.s3File.upsert({
-          where: { id: fileId },
-          create: { id: fileId, userId, s3Key, mimeType: decoded.mimeType },
+          where: { drawingId_fileId: { drawingId, fileId } },
+          create: { drawingId, fileId, userId, s3Key, mimeType: decoded.mimeType },
           update: { s3Key, mimeType: decoded.mimeType },
         });
 
@@ -115,6 +135,7 @@ export const processFilesForS3 = async (
 export const copyFilesForDuplicate = async (
   files: Record<string, any>,
   userId: string,
+  sourceDrawingId: string,
   newDrawingId: string,
   prisma: Pick<PrismaClient, "s3File">,
 ): Promise<Record<string, any>> => {
@@ -126,7 +147,9 @@ export const copyFilesForDuplicate = async (
 
   try {
     for (const [fileId, file] of Object.entries(files)) {
-      const record = await prisma.s3File.findUnique({ where: { id: fileId } });
+      const record = await prisma.s3File.findUnique({
+        where: { drawingId_fileId: { drawingId: sourceDrawingId, fileId } },
+      });
       if (!record) continue;
 
       const ext = record.s3Key.split(".").pop() ?? "bin";
@@ -135,12 +158,11 @@ export const copyFilesForDuplicate = async (
       await copyS3Object(record.s3Key, newKey);
       copiedKeys.push(newKey);
 
-      const newFileId = fileId;
       await prisma.s3File.create({
-        data: { id: `${newDrawingId}_${newFileId}`, userId, s3Key: newKey, mimeType: record.mimeType },
+        data: { drawingId: newDrawingId, fileId, userId, s3Key: newKey, mimeType: record.mimeType },
       });
 
-      const accessUrl = cfg.publicUrl ? getPublicUrl(newKey) : `/api/files/${newFileId}`;
+      const accessUrl = cfg.publicUrl ? getPublicUrl(newKey) : `/api/files/${newDrawingId}/${fileId}`;
       result[fileId] = { ...file, dataURL: accessUrl };
     }
   } catch (err) {
@@ -157,6 +179,7 @@ export const copyFilesForDuplicate = async (
 export const cleanupRemovedS3Files = async (
   previousFiles: Record<string, any>,
   currentFiles: Record<string, any>,
+  drawingId: string,
   prisma: Pick<PrismaClient, "s3File">,
 ): Promise<void> => {
   if (!isS3Enabled()) return;
@@ -169,10 +192,12 @@ export const cleanupRemovedS3Files = async (
   await Promise.all(
     removedIds.map(async (fileId) => {
       try {
-        const record = await prisma.s3File.findUnique({ where: { id: fileId } });
+        const record = await prisma.s3File.findUnique({
+          where: { drawingId_fileId: { drawingId, fileId } },
+        });
         if (!record) return;
         await deleteS3Object(record.s3Key);
-        await prisma.s3File.delete({ where: { id: fileId } });
+        await prisma.s3File.delete({ where: { drawingId_fileId: { drawingId, fileId } } });
         logger.info({ fileId, s3Key: record.s3Key }, "Cleaned up removed S3 file");
       } catch (err) {
         logger.error({ err, fileId }, "Failed to clean up removed S3 file");

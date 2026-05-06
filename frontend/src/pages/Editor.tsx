@@ -9,7 +9,7 @@ import {
   Footer,
   MainMenu,
   convertToExcalidrawElements,
-  exportToSvg,
+  exportToBlob,
   viewportCoordsToSceneCoords,
 } from '@excalidraw/excalidraw';
 import { getInitialLangCode, LanguageSelector } from '../components/LanguageSelector';
@@ -81,6 +81,14 @@ const normalizeSvgDataUrls = (files: Record<string, any>): Record<string, any> =
   return changed ? result : files;
 };
 
+const blobToDataUrl = (blob: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error("FileReader failed"));
+    reader.readAsDataURL(blob);
+  });
+
 const resolveS3Files = async (
   files: Record<string, any>,
 ): Promise<Record<string, any>> => {
@@ -96,18 +104,10 @@ const resolveS3Files = async (
     needsFetch.map(async ([key, file]) => {
       try {
         const path = file.dataURL.replace(/^\/api\//, "/");
-        const isSvg = file.mimeType === "image/svg+xml";
-        const resp = await api.api.get(path, {
-          responseType: isSvg ? "text" : "blob",
-        });
-        if (isSvg) {
-          const svgText = resp.data as string;
-          const base64 = btoa(unescape(encodeURIComponent(svgText)));
-          resolved[key] = { ...file, dataURL: `data:image/svg+xml;base64,${base64}` };
-        } else {
-          const blob = resp.data as Blob;
-          resolved[key] = { ...file, dataURL: URL.createObjectURL(blob) };
-        }
+        const resp = await api.api.get(path, { responseType: "blob" });
+        const blob = resp.data as Blob;
+        const dataUrl = await blobToDataUrl(blob);
+        resolved[key] = { ...file, dataURL: dataUrl };
       } catch {
         // leave as-is — image will fail to render but drawing still loads
       }
@@ -115,6 +115,7 @@ const resolveS3Files = async (
   );
   return resolved;
 };
+
 
 const toFiniteNumber = (value: any): number => {
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
@@ -1328,7 +1329,7 @@ export const Editor: React.FC = () => {
           staleEmptySnapshot: staleEmptyPreview,
           staleNonRenderableSnapshot: staleNonRenderablePreview,
         } = resolveSafeSnapshot(candidateSnapshot);
-        const currentFiles = latestFilesRef.current ?? files;
+        const currentFiles = await resolveS3Files(latestFilesRef.current ?? files);
         const normalizedSnapshot = normalizeImageElementStatus(currentSnapshot, currentFiles);
         if (suspiciousBlankLoadRef.current && !hasRenderableElements(currentSnapshot)) {
           console.warn("[Editor] Blocking non-renderable preview due to suspicious blank load", {
@@ -1347,25 +1348,21 @@ export const Editor: React.FC = () => {
           });
         }
 
-        const svg = await exportToSvg({
-          elements: normalizedSnapshot,
+        const visibleElements = normalizedSnapshot.filter((el: any) => !el.isDeleted);
+        const blob = await exportToBlob({
+          elements: visibleElements,
           appState: {
             ...appState,
             exportBackground: true,
             viewBackgroundColor: appState.viewBackgroundColor || '#ffffff',
           },
           files: currentFiles,
+          maxWidthOrHeight: 600,
+          mimeType: 'image/webp',
+          quality: 0.75,
         });
-        const preview = svg.outerHTML;
-
-        console.log("[Editor] Saving preview", {
-          drawingId,
-          elementCount: normalizedSnapshot.length,
-        });
-
+        const preview = await blobToDataUrl(blob);
         await api.updateDrawing(drawingId, { preview });
-
-        console.log("[Editor] Preview save complete", { drawingId });
       } catch (err) {
         console.error('Failed to save preview', err);
       }

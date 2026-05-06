@@ -754,7 +754,7 @@ export const registerDrawingRoutes = (
 
     if (previousFiles) {
       const currentFiles = parseJsonField(updatedDrawing.files, {});
-      cleanupRemovedS3Files(previousFiles, currentFiles, prisma).catch((err) => {
+      cleanupRemovedS3Files(previousFiles, currentFiles, id, prisma).catch((err) => {
         logger.error({ err, drawingId: id }, "S3 file cleanup failed");
       });
     }
@@ -788,7 +788,7 @@ export const registerDrawingRoutes = (
     }
     invalidateDrawingsCache();
 
-    cleanupRemovedS3Files(drawingFiles, {}, prisma).catch((err) => {
+    cleanupRemovedS3Files(drawingFiles, {}, id, prisma).catch((err) => {
       logger.error({ err, drawingId: id }, "S3 file cleanup on delete failed");
     });
 
@@ -836,6 +836,7 @@ export const registerDrawingRoutes = (
     const updatedFiles = await copyFilesForDuplicate(
       originalFiles,
       req.user.id,
+      original.id,
       newDrawing.id,
       prisma,
     );

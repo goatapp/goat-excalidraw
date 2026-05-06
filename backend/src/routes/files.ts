@@ -31,20 +31,20 @@ export const registerFileRoutes = (
   );
 
   app.get(
-    "/files/:fileId",
+    "/files/:drawingId/:fileId",
     requireAuth,
     asyncHandler(async (req, res) => {
       if (!isS3Enabled()) {
         return res.status(501).json({ error: "S3 storage is not configured" });
       }
 
-      const { fileId } = req.params;
-      if (!isValidFileId(fileId)) {
-        return res.status(400).json({ error: "Invalid fileId" });
+      const { drawingId, fileId } = req.params;
+      if (!isValidFileId(drawingId) || !isValidFileId(fileId)) {
+        return res.status(400).json({ error: "Invalid parameters" });
       }
 
       const fileRecord = await prisma.s3File.findUnique({
-        where: { id: fileId },
+        where: { drawingId_fileId: { drawingId, fileId } },
       });
 
       if (!fileRecord) {
@@ -52,12 +52,10 @@ export const registerFileRoutes = (
       }
 
       const { body, contentType } = await downloadObject(fileRecord.s3Key);
-
       if (contentType) {
         res.setHeader("Content-Type", contentType);
       }
       res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
-
       return body.pipe(res);
     })
   );

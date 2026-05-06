@@ -572,7 +572,7 @@ export const sanitizeDrawingData = (data: {
                   } else {
                     file[key] = value;
                   }
-                } else if (/^\/api\/files\/[\w-]{1,200}$/.test(value)) {
+                } else if (/^\/api\/files\/[\w-]{1,200}(\/[\w-]{1,200})?$/.test(value)) {
                   file[key] = value;
                 } else {
                   file[key] = sanitizeText(value, 1000);
