@@ -106,6 +106,9 @@ jspm_packages/
 # Output of 'npm pack'
 *.tgz
 
+# Excalidraw vendor build stamp
+frontend/vendor/.commit
+
 # Yarn Integrity file
 .yarn-integrity
 

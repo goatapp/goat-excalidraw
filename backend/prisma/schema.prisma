@@ -249,11 +249,13 @@ model CollectionShare {
 }
 
 model S3File {
-  id        String   @id
+  drawingId String
+  fileId    String
   userId    String
   s3Key     String
   mimeType  String
   createdAt DateTime @default(now())
 
+  @@id([drawingId, fileId])
   @@index([userId])
 }

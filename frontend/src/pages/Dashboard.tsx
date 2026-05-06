@@ -665,10 +665,16 @@ export const Dashboard: React.FC = () => {
                 <div className="absolute inset-0 opacity-[0.3] bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] [background-size:24px_24px]"></div>
 
                 {d.preview ? (
-                  <div
-                    className="w-full h-full p-2 flex items-center justify-center [&>svg]:w-auto [&>svg]:h-auto [&>svg]:max-w-full [&>svg]:max-h-full [&>svg]:drop-shadow-sm relative z-10"
-                    dangerouslySetInnerHTML={{ __html: d.preview }}
-                  />
+                  d.preview.trimStart().startsWith("<") ? (
+                    <div
+                      className="w-full h-full p-2 flex items-center justify-center [&>svg]:w-auto [&>svg]:h-auto [&>svg]:max-w-full [&>svg]:max-h-full [&>svg]:drop-shadow-sm relative z-10"
+                      dangerouslySetInnerHTML={{ __html: d.preview }}
+                    />
+                  ) : (
+                    <div className="w-full h-full p-2 flex items-center justify-center relative z-10">
+                      <img src={d.preview.trim()} className="max-w-full max-h-full object-contain drop-shadow-sm rounded" alt="" />
+                    </div>
+                  )
                 ) : (
                   <div className="text-slate-300 relative z-10"><Folder size={24} /></div>
                 )}

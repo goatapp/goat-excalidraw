@@ -4,6 +4,7 @@ import {
   GetObjectCommand,
   DeleteObjectCommand,
   ListObjectsV2Command,
+  CopyObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { logger } from "./utils/logger.js";
@@ -189,6 +190,24 @@ export const deleteS3Object = async (key: string): Promise<void> => {
   const command = new DeleteObjectCommand({
     Bucket: s3Config.bucket,
     Key: key,
+  });
+
+  await s3Client.send(command);
+};
+
+export const copyS3Object = async (
+  sourceKey: string,
+  destinationKey: string,
+): Promise<void> => {
+  if (!s3Client || !s3Config) {
+    throw new Error("S3 is not configured");
+  }
+
+  const command = new CopyObjectCommand({
+    Bucket: s3Config.bucket,
+    CopySource: `${s3Config.bucket}/${sourceKey}`,
+    Key: destinationKey,
+    CacheControl: "public, max-age=31536000, immutable",
   });
 
   await s3Client.send(command);

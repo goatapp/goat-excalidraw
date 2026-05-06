@@ -30,7 +30,7 @@ echo "Building packages..."
 echo "Packing tarballs..."
 rm -rf "$VENDOR_DIR"
 mkdir -p "$VENDOR_DIR"
-for pkg in common math element excalidraw; do
+for pkg in common math element fractional-indexing utils excalidraw; do
   tgz=$(cd "$CLONE_DIR/packages/$pkg" && npm pack --pack-destination "$VENDOR_DIR" 2>/dev/null | tail -1)
   echo "  $tgz"
 done
@@ -46,6 +46,8 @@ echo "Installing from vendor/..."
   ./vendor/excalidraw-common-*.tgz \
   ./vendor/excalidraw-math-*.tgz \
   ./vendor/excalidraw-element-*.tgz \
+  ./vendor/excalidraw-fractional-indexing-*.tgz \
+  ./vendor/excalidraw-utils-*.tgz \
   ./vendor/excalidraw-excalidraw-*.tgz)
 
 echo "Done. @excalidraw packages installed from source."

@@ -1,4 +1,5 @@
 import express from "express";
+import type { Server as SocketIOServer } from "socket.io";
 import { PrismaClient } from "../generated/client/client.js";
 import { isS3Enabled, deleteS3Object, listS3Objects } from "../s3.js";
 import { logger } from "../utils/logger.js";
@@ -8,6 +9,7 @@ const FILE_KEY_PREFIX =
 
 export type StorageRouteDeps = {
   prisma: PrismaClient;
+  io: SocketIOServer;
   requireAuth: express.RequestHandler;
   asyncHandler: <T = void>(
     fn: (
@@ -46,7 +48,7 @@ export const registerStorageRoutes = (
   app: express.Express,
   deps: StorageRouteDeps
 ): void => {
-  const { prisma, requireAuth, asyncHandler, parseJsonField, getAdminFullAccess } = deps;
+  const { prisma, io, requireAuth, asyncHandler, parseJsonField, getAdminFullAccess } = deps;
 
   const resolveAdminOverride = async (req: express.Request) => {
     if (!req.user || req.user.role !== "ADMIN") return false;
@@ -110,8 +112,7 @@ export const registerStorageRoutes = (
         const orphanedKeys = new Set<string>();
 
         for (const record of s3FileRecords) {
-          const fileId = record.id;
-          if (!survivingFileIds.has(fileId)) {
+          if (!survivingFileIds.has(record.fileId)) {
             orphanedKeys.add(record.s3Key);
           }
         }
@@ -133,13 +134,13 @@ export const registerStorageRoutes = (
           }
         }
 
-        const orphanedRecordIds = s3FileRecords
-          .filter((r) => !survivingFileIds.has(r.id))
-          .map((r) => r.id);
+        const orphanedFileIds = s3FileRecords
+          .filter((r) => !survivingFileIds.has(r.fileId))
+          .map((r) => r.fileId);
 
-        if (orphanedRecordIds.length > 0) {
+        if (orphanedFileIds.length > 0) {
           await prisma.s3File.deleteMany({
-            where: { id: { in: orphanedRecordIds } },
+            where: { drawingId: id, fileId: { in: orphanedFileIds } },
           });
         }
       }
@@ -149,9 +150,11 @@ export const registerStorageRoutes = (
         data: {
           elements: JSON.stringify(activeElements),
           files: JSON.stringify(cleanedFiles),
-          version: 1,
+          version: { increment: 1 },
         },
       });
+
+      io.to(`drawing_${id}`).emit("drawing-server-update", { drawingId: id });
 
       return res.json({
         trimmed: {
@@ -193,7 +196,7 @@ export const registerStorageRoutes = (
 
       const s3Prefix = `${FILE_KEY_PREFIX}/${drawing.userId}/${id}/`;
       let s3FileRecords: Array<{
-        id: string;
+        fileId: string;
         s3Key: string;
         mimeType: string;
       }> = [];
@@ -201,14 +204,14 @@ export const registerStorageRoutes = (
 
       if (isS3Enabled()) {
         s3FileRecords = await prisma.s3File.findMany({
-          where: { s3Key: { startsWith: s3Prefix } },
-          select: { id: true, s3Key: true, mimeType: true },
+          where: { drawingId: id },
+          select: { fileId: true, s3Key: true, mimeType: true },
         });
         s3Objects = await listS3Objects(s3Prefix);
       }
 
       const s3RecordMap = new Map(
-        s3FileRecords.map((r) => [r.id, r])
+        s3FileRecords.map((r) => [r.fileId, r])
       );
       const s3ObjectMap = new Map(
         s3Objects.map((o) => {
@@ -220,7 +223,7 @@ export const registerStorageRoutes = (
       const allFileIds = new Set<string>();
       for (const fid of allCanvasRefs) allFileIds.add(fid);
       for (const fid of sqliteFileIds) allFileIds.add(fid);
-      for (const r of s3FileRecords) allFileIds.add(r.id);
+      for (const r of s3FileRecords) allFileIds.add(r.fileId);
       for (const o of s3Objects) {
         const fid = fileIdFromS3Key(o.key);
         if (fid) allFileIds.add(fid);
@@ -331,6 +334,14 @@ export const registerStorageRoutes = (
         return res.status(400).json({ error: "fileIds must be a non-empty array" });
       }
 
+      const FILEID_PATTERN = /^[\w-]{1,200}$/;
+      const invalidIds = (fileIds as unknown[]).filter(
+        (fid) => typeof fid !== "string" || !FILEID_PATTERN.test(fid)
+      );
+      if (invalidIds.length > 0) {
+        return res.status(400).json({ error: "Invalid fileId format", invalidIds });
+      }
+
       const findWhere = adminOverride ? { id } : { id, userId };
       const drawing = await prisma.drawing.findFirst({
         where: findWhere,
@@ -362,28 +373,40 @@ export const registerStorageRoutes = (
       let deletedCount = 0;
       let errorCount = 0;
 
-      for (const fileId of fileIds as string[]) {
-        try {
-          if (isS3Enabled()) {
-            const s3Record = await prisma.s3File.findUnique({
-              where: { id: fileId },
-            });
-            if (s3Record) {
-              await deleteS3Object(s3Record.s3Key);
-              await prisma.s3File.delete({ where: { id: fileId } });
+      const validFileIds = fileIds as string[];
+
+      if (isS3Enabled()) {
+        const s3Records = await prisma.s3File.findMany({
+          where: { drawingId: id, fileId: { in: validFileIds } },
+        });
+
+        const S3_CONCURRENCY = 8;
+        for (let i = 0; i < s3Records.length; i += S3_CONCURRENCY) {
+          const batch = s3Records.slice(i, i + S3_CONCURRENCY);
+          const results = await Promise.allSettled(
+            batch.map((r) => deleteS3Object(r.s3Key))
+          );
+          for (const [idx, result] of results.entries()) {
+            if (result.status === "rejected") {
+              logger.error(
+                { err: result.reason, s3Key: batch[idx].s3Key },
+                "Failed to delete orphan S3 object"
+              );
+              errorCount++;
             }
           }
-
-          delete files[fileId];
-
-          deletedCount++;
-        } catch (err: any) {
-          logger.error(
-            { err, fileId },
-            "Failed to delete orphan file"
-          );
-          errorCount++;
         }
+
+        if (s3Records.length > 0) {
+          await prisma.s3File.deleteMany({
+            where: { drawingId: id, fileId: { in: s3Records.map((r) => r.fileId) } },
+          });
+        }
+      }
+
+      for (const fileId of validFileIds) {
+        delete files[fileId];
+        deletedCount++;
       }
 
       const deletedFileIdSet = new Set(fileIds as string[]);
@@ -404,8 +427,11 @@ export const registerStorageRoutes = (
         data: {
           files: JSON.stringify(files),
           elements: JSON.stringify(cleanedElements),
+          version: { increment: 1 },
         },
       });
+
+      io.to(`drawing_${id}`).emit("drawing-server-update", { drawingId: id });
 
       return res.json({ deleted: deletedCount, errors: errorCount });
     })

@@ -285,13 +285,19 @@ export const DrawingCard: React.FC<DrawingCardProps> = ({
           )}
 
           {previewSvg ? (
-            <div
-              className={clsx(
-                "w-full h-full p-3 sm:p-4 lg:p-5 flex items-center justify-center [&>svg]:w-auto [&>svg]:h-auto [&>svg]:max-w-full [&>svg]:max-h-full [&>svg]:drop-shadow-sm transition-transform duration-500",
-                !hasEmbeddedImages && "dark:[&>svg]:invert dark:[&>svg_rect[fill='white']]:opacity-0 dark:[&>svg_rect[fill='#ffffff']]:opacity-0"
-              )}
-              dangerouslySetInnerHTML={{ __html: previewSvg }}
-            />
+            previewSvg.trimStart().startsWith("<") ? (
+              <div
+                className={clsx(
+                  "w-full h-full p-3 sm:p-4 lg:p-5 flex items-center justify-center [&>svg]:w-auto [&>svg]:h-auto [&>svg]:max-w-full [&>svg]:max-h-full [&>svg]:drop-shadow-sm transition-transform duration-500",
+                  !hasEmbeddedImages && "dark:[&>svg]:invert dark:[&>svg_rect[fill='white']]:opacity-0 dark:[&>svg_rect[fill='#ffffff']]:opacity-0"
+                )}
+                dangerouslySetInnerHTML={{ __html: previewSvg }}
+              />
+            ) : (
+              <div className="w-full h-full p-3 sm:p-4 lg:p-5 flex items-center justify-center transition-transform duration-500">
+                <img src={previewSvg.trim()} className="max-w-full max-h-full object-contain drop-shadow-sm rounded" alt="" />
+              </div>
+            )
           ) : (
             <div className="w-16 h-16 sm:w-20 sm:h-20 lg:w-24 lg:h-24 bg-white dark:bg-neutral-900 rounded-2xl shadow-sm flex items-center justify-center text-neutral-300 dark:text-neutral-400 border border-slate-100 dark:border-neutral-700 transform group-hover:scale-110 group-hover:rotate-3 transition-all duration-500">
               <PenTool size={32} strokeWidth={1.5} className="sm:w-9 sm:h-9 lg:w-10 lg:h-10" />

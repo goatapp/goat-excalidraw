@@ -70,6 +70,10 @@ export const normalizePreviewSvg = (preview: string | null | undefined): string 
     return preview ?? null;
   }
 
+  if (!preview.trimStart().startsWith("<")) {
+    return preview;
+  }
+
   if (typeof DOMParser === "undefined") {
     return preview;
   }

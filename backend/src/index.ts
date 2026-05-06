@@ -276,7 +276,7 @@ app.use(
         defaultSrc: ["'none'"],
         scriptSrc: ["'self'", "'wasm-unsafe-eval'", "'unsafe-eval'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
-        fontSrc: ["'self'", "https://esm.sh"],
+        fontSrc: ["'self'", "data:", "https://esm.sh"],
         baseUri: ["'none'"],
         formAction: ["'none'"],
         frameAncestors: ["'none'"],
@@ -666,6 +666,7 @@ if (config.s3.bucket) {
 registerFileRoutes(app, { prisma, requireAuth, asyncHandler });
 registerStorageRoutes(app, {
   prisma,
+  io,
   requireAuth,
   asyncHandler,
   parseJsonField,
@@ -769,12 +770,14 @@ const cleanupOrphanedS3FilesAfterSnapshotPrune = async (
       const count = Number(stillReferenced[0]?.cnt ?? 0);
       if (count > 0) continue;
 
-      const record = await prisma.s3File.findUnique({ where: { id: fileId } });
-      if (!record) continue;
-
-      await deleteS3Object(record.s3Key);
-      await prisma.s3File.delete({ where: { id: fileId } });
-      cleaned++;
+      const records = await prisma.s3File.findMany({ where: { fileId } });
+      for (const record of records) {
+        await deleteS3Object(record.s3Key);
+        await prisma.s3File.delete({
+          where: { drawingId_fileId: { drawingId: record.drawingId, fileId: record.fileId } },
+        });
+        cleaned++;
+      }
     } catch (err) {
       logger.error({ err, fileId }, "Failed to clean up orphaned S3 file after snapshot prune");
     }
@@ -919,7 +922,7 @@ const purgeExpiredTrash = async () => {
       try {
         const drawingFiles = parseJsonField(drawing.files, {});
         await prisma.drawing.delete({ where: { id: drawing.id } });
-        cleanupRemovedS3Files(drawingFiles, {}, prisma).catch((err) => {
+        cleanupRemovedS3Files(drawingFiles, {}, drawing.id, prisma).catch((err) => {
           logger.error({ err, drawingId: drawing.id }, "S3 cleanup failed for purged trash drawing");
         });
       } catch (err) {

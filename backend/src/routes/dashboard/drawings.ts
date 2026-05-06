@@ -2,7 +2,7 @@ import crypto from "crypto";
 import express from "express";
 import { Prisma } from "../../generated/client/client.js";
 import { logger } from "../../utils/logger.js";
-import { cleanupRemovedS3Files } from "../../fileProcessing.js";
+import { cleanupRemovedS3Files, copyFilesForDuplicate } from "../../fileProcessing.js";
 import { DashboardRouteDeps, SortDirection, SortField } from "./types.js";
 import {
   getUserTrashCollectionId,
@@ -754,7 +754,7 @@ export const registerDrawingRoutes = (
 
     if (previousFiles) {
       const currentFiles = parseJsonField(updatedDrawing.files, {});
-      cleanupRemovedS3Files(previousFiles, currentFiles, prisma).catch((err) => {
+      cleanupRemovedS3Files(previousFiles, currentFiles, id, prisma).catch((err) => {
         logger.error({ err, drawingId: id }, "S3 file cleanup failed");
       });
     }
@@ -788,7 +788,7 @@ export const registerDrawingRoutes = (
     }
     invalidateDrawingsCache();
 
-    cleanupRemovedS3Files(drawingFiles, {}, prisma).catch((err) => {
+    cleanupRemovedS3Files(drawingFiles, {}, id, prisma).catch((err) => {
       logger.error({ err, drawingId: id }, "S3 file cleanup on delete failed");
     });
 
@@ -831,6 +831,22 @@ export const registerDrawingRoutes = (
         version: 1,
       },
     });
+
+    const originalFiles = parseJsonField(original.files, {});
+    const updatedFiles = await copyFilesForDuplicate(
+      originalFiles,
+      req.user.id,
+      original.id,
+      newDrawing.id,
+      prisma,
+    );
+    if (Object.keys(updatedFiles).length > 0) {
+      await prisma.drawing.update({
+        where: { id: newDrawing.id },
+        data: { files: JSON.stringify(updatedFiles) },
+      });
+    }
+
     invalidateDrawingsCache();
 
     return res.json({
@@ -838,7 +854,7 @@ export const registerDrawingRoutes = (
       collectionId: toPublicTrashCollectionId(newDrawing.collectionId, req.user.id),
       elements: parseJsonField(newDrawing.elements, []),
       appState: parseJsonField(newDrawing.appState, {}),
-      files: parseJsonField(newDrawing.files, {}),
+      files: updatedFiles,
     });
   }));
 
