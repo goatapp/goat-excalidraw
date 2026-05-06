@@ -870,17 +870,19 @@ export const updateLibrary = async (items: LibraryItem[]): Promise<LibraryItem[]
 // S3 file helpers
 // ---------------------------------------------------------------------------
 
-let s3EnabledCache: boolean | null = null;
+let s3EnabledPromise: Promise<boolean> | null = null;
 
-export const isS3Enabled = async (): Promise<boolean> => {
-  if (s3EnabledCache !== null) return s3EnabledCache;
-  try {
-    const response = await api.get<{ s3Enabled: boolean }>("/files/config");
-    s3EnabledCache = response.data.s3Enabled === true;
-  } catch {
-    s3EnabledCache = false;
+export const isS3Enabled = (): Promise<boolean> => {
+  if (!s3EnabledPromise) {
+    s3EnabledPromise = api
+      .get<{ s3Enabled: boolean }>("/files/config")
+      .then((r) => r.data.s3Enabled === true)
+      .catch(() => {
+        s3EnabledPromise = null;
+        return false;
+      });
   }
-  return s3EnabledCache;
+  return s3EnabledPromise;
 };
 
 // ---------------------------------------------------------------------------
