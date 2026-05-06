@@ -767,6 +767,13 @@ export const Editor: React.FC = () => {
       scheduleRemoteFlush();
     });
 
+    // Server-side mutations (storage trim, orphan delete) bypass the
+    // collaborative element-update channel — refetch so the open editor
+    // doesn't paper over the server change with its stale state.
+    socket.on('drawing-server-update', async () => {
+      window.location.reload();
+    });
+
     socket.on('error', (data: any) => {
       const message = typeof data?.message === "string" ? data.message : null;
       console.warn("[Editor] Socket error:", data);
@@ -899,6 +906,7 @@ export const Editor: React.FC = () => {
       socket.off('comment-resolved');
       socket.off('comment-reacted');
       socket.off('comment-moved');
+      socket.off('drawing-server-update');
       socket.disconnect();
       socketRef.current = null;
       if (remoteFlushRafIdRef.current !== null) {
@@ -1180,7 +1188,9 @@ export const Editor: React.FC = () => {
           });
           return;
         }
-        let persistableFiles = files ?? latestFilesRef.current ?? {};
+        let persistableFiles: Record<string, any> = files ?? latestFilesRef.current ?? {};
+        // Compress images before sending to the backend; the backend's
+        // processFilesForS3 will then upload the compressed bytes to S3.
         const compressedFilesResult = await compressExcalidrawFiles(persistableFiles);
         if (compressedFilesResult.changed) {
           persistableFiles = compressedFilesResult.files;

@@ -666,6 +666,7 @@ if (config.s3.bucket) {
 registerFileRoutes(app, { prisma, requireAuth, asyncHandler });
 registerStorageRoutes(app, {
   prisma,
+  io,
   requireAuth,
   asyncHandler,
   parseJsonField,

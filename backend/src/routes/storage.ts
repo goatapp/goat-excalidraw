@@ -1,4 +1,5 @@
 import express from "express";
+import type { Server as SocketIOServer } from "socket.io";
 import { PrismaClient } from "../generated/client/client.js";
 import { isS3Enabled, deleteS3Object, listS3Objects } from "../s3.js";
 import { logger } from "../utils/logger.js";
@@ -8,6 +9,7 @@ const FILE_KEY_PREFIX =
 
 export type StorageRouteDeps = {
   prisma: PrismaClient;
+  io: SocketIOServer;
   requireAuth: express.RequestHandler;
   asyncHandler: <T = void>(
     fn: (
@@ -46,7 +48,7 @@ export const registerStorageRoutes = (
   app: express.Express,
   deps: StorageRouteDeps
 ): void => {
-  const { prisma, requireAuth, asyncHandler, parseJsonField, getAdminFullAccess } = deps;
+  const { prisma, io, requireAuth, asyncHandler, parseJsonField, getAdminFullAccess } = deps;
 
   const resolveAdminOverride = async (req: express.Request) => {
     if (!req.user || req.user.role !== "ADMIN") return false;
@@ -152,6 +154,8 @@ export const registerStorageRoutes = (
           version: { increment: 1 },
         },
       });
+
+      io.to(`drawing_${id}`).emit("drawing-server-update", { drawingId: id });
 
       return res.json({
         trimmed: {
@@ -427,6 +431,8 @@ export const registerStorageRoutes = (
           version: { increment: 1 },
         },
       });
+
+      io.to(`drawing_${id}`).emit("drawing-server-update", { drawingId: id });
 
       return res.json({ deleted: deletedCount, errors: errorCount });
     })
