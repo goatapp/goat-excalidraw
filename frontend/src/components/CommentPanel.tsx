@@ -48,7 +48,7 @@ export const CommentPanelContent: React.FC<ContentProps> = ({
   return (
     <div className="flex flex-col h-full">
       {/* Sort controls */}
-      <div className="flex items-center gap-2 px-4 py-2 border-b border-neutral-100 dark:border-neutral-800">
+      <div className="flex items-center gap-2 px-4 py-2">
         <button
           onClick={() => setSortBy("date")}
           className={`text-xs px-2 py-1 rounded-md transition-colors ${
@@ -73,7 +73,7 @@ export const CommentPanelContent: React.FC<ContentProps> = ({
 
       {/* Search */}
       {comments.length > 0 && (
-        <div className="px-4 py-2 border-b border-neutral-100 dark:border-neutral-800">
+        <div className="px-4 py-3">
           <div className="relative">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
             <input
@@ -81,7 +81,7 @@ export const CommentPanelContent: React.FC<ContentProps> = ({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search comments..."
-              className="w-full pl-9 pr-3 py-1.5 text-sm bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 dark:placeholder-neutral-500 outline-none focus:border-indigo-400 dark:focus:border-indigo-500 transition-colors"
+              className="w-full !pl-9 !pr-3 !py-1.5 text-sm bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 dark:placeholder-neutral-500 outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-400 dark:focus:ring-indigo-500 focus:!border-transparent transition-colors"
             />
           </div>
         </div>
