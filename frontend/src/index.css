@@ -34,6 +34,11 @@ html.dark body {
   height: 0;
 }
 
+.sidebar-tabs-root,
+.sidebar-tabs-root [role="tabpanel"] {
+  min-height: 0;
+}
+
 @font-face {
   font-family: 'Excalifont';
   src: url('./assets/fonts/Excalifont-Regular.woff2') format('woff2');
