@@ -1,21 +1,24 @@
-import { Suspense, lazy } from 'react';
+import { Suspense, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from './context/ThemeContext';
 import { UploadProvider } from './context/UploadContext';
 import { AuthProvider } from './context/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Loader2 } from 'lucide-react';
+import { Toaster, toast } from 'sonner';
+import { lazyWithRetry } from './utils/lazyWithRetry';
+import { useVersionCheck } from './hooks/useVersionCheck';
 
-const Dashboard = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })));
-const Editor = lazy(() => import('./pages/Editor').then(m => ({ default: m.Editor })));
-const Settings = lazy(() => import('./pages/Settings').then(m => ({ default: m.Settings })));
-const Profile = lazy(() => import('./pages/Profile').then(m => ({ default: m.Profile })));
-const Admin = lazy(() => import('./pages/Admin').then(m => ({ default: m.Admin })));
-const Login = lazy(() => import('./pages/Login').then(m => ({ default: m.Login })));
-const Register = lazy(() => import('./pages/Register').then(m => ({ default: m.Register })));
-const PasswordResetRequest = lazy(() => import('./pages/PasswordResetRequest').then(m => ({ default: m.PasswordResetRequest })));
-const PasswordResetConfirm = lazy(() => import('./pages/PasswordResetConfirm').then(m => ({ default: m.PasswordResetConfirm })));
-const AuthSetupChoice = lazy(() => import('./pages/AuthSetupChoice').then(m => ({ default: m.AuthSetupChoice })));
+const Dashboard = lazyWithRetry(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })));
+const Editor = lazyWithRetry(() => import('./pages/Editor').then(m => ({ default: m.Editor })));
+const Settings = lazyWithRetry(() => import('./pages/Settings').then(m => ({ default: m.Settings })));
+const Profile = lazyWithRetry(() => import('./pages/Profile').then(m => ({ default: m.Profile })));
+const Admin = lazyWithRetry(() => import('./pages/Admin').then(m => ({ default: m.Admin })));
+const Login = lazyWithRetry(() => import('./pages/Login').then(m => ({ default: m.Login })));
+const Register = lazyWithRetry(() => import('./pages/Register').then(m => ({ default: m.Register })));
+const PasswordResetRequest = lazyWithRetry(() => import('./pages/PasswordResetRequest').then(m => ({ default: m.PasswordResetRequest })));
+const PasswordResetConfirm = lazyWithRetry(() => import('./pages/PasswordResetConfirm').then(m => ({ default: m.PasswordResetConfirm })));
+const AuthSetupChoice = lazyWithRetry(() => import('./pages/AuthSetupChoice').then(m => ({ default: m.AuthSetupChoice })));
 
 const PageLoader = () => (
   <div className="min-h-screen bg-slate-50 dark:bg-neutral-950 flex items-center justify-center">
@@ -24,6 +27,32 @@ const PageLoader = () => (
 );
 
 function App() {
+  useVersionCheck(() => {
+    toast('A new version is available.', {
+      id: 'version-update',
+      duration: Infinity,
+      action: {
+        label: 'Reload',
+        onClick: () => window.location.reload(),
+      },
+    });
+  });
+
+  useEffect(() => {
+    const handler = () => {
+      toast.error('A new version has been deployed. Please reload the page.', {
+        id: 'chunk-error',
+        duration: Infinity,
+        action: {
+          label: 'Reload',
+          onClick: () => window.location.reload(),
+        },
+      });
+    };
+    window.addEventListener('chunk-load-error', handler);
+    return () => window.removeEventListener('chunk-load-error', handler);
+  }, []);
+
   return (
     <ThemeProvider>
       <Router>
@@ -91,6 +120,7 @@ function App() {
           </UploadProvider>
         </AuthProvider>
       </Router>
+      <Toaster position="top-center" />
     </ThemeProvider>
   );
 }

@@ -582,6 +582,25 @@ app.get("/health", (req, res) => {
   res.status(200).json({ status: "ok" });
 });
 
+let cachedAppVersion: string | null = null;
+app.get("/version", (req, res) => {
+  if (!cachedAppVersion) {
+    const candidates = [
+      path.resolve(backendRoot, "VERSION"),
+      path.resolve(backendRoot, "../VERSION"),
+    ];
+    for (const candidate of candidates) {
+      try {
+        cachedAppVersion = fs.readFileSync(candidate, "utf8").trim();
+        break;
+      } catch { /* try next */ }
+    }
+    if (!cachedAppVersion) cachedAppVersion = "unknown";
+  }
+  res.setHeader("Cache-Control", "no-store");
+  res.json({ version: cachedAppVersion });
+});
+
 
 const enableOnboardingGate =
   config.authMode === "local" &&
