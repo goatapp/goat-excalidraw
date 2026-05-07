@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { MessageCircle, Search } from "lucide-react";
 import * as api from "../api";
-import { renderBody } from "./comment-utils";
+import { renderBodyHighlighted } from "./comment-utils";
 
 type ContentProps = {
   comments: api.Comment[];
@@ -29,13 +29,9 @@ export const CommentPanelContent: React.FC<ContentProps> = ({
   const [searchQuery, setSearchQuery] = useState("");
 
   const filtered = searchQuery.trim()
-    ? comments.filter((c) => {
-        const q = searchQuery.toLowerCase();
-        return (
-          c.body.toLowerCase().includes(q) ||
-          c.user.name.toLowerCase().includes(q)
-        );
-      })
+    ? comments.filter((c) =>
+        c.body.toLowerCase().includes(searchQuery.toLowerCase())
+      )
     : comments;
 
   const sorted = [...filtered].sort((a, b) => {
@@ -137,7 +133,7 @@ export const CommentPanelContent: React.FC<ContentProps> = ({
                     </span>
                   </div>
                   <p className="text-sm text-neutral-600 dark:text-neutral-400 line-clamp-2">
-                    {renderBody(comment.body)}
+                    {renderBodyHighlighted(comment.body, searchQuery)}
                   </p>
                   <div className="flex items-center gap-3 mt-1.5">
                     {comment.replyCount > 0 && (
