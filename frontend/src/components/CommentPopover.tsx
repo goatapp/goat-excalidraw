@@ -450,7 +450,7 @@ export const CommentPopover: React.FC<Props> = ({
   return (
     <div
       ref={popoverRef}
-      className="absolute z-[80] animate-in fade-in zoom-in-95 duration-150"
+      className="absolute z-[80]"
       style={{
         left: position.x + 20,
         top: position.y - 10,

@@ -67,7 +67,7 @@ export const CommentPinOverlay: React.FC<Props> = ({
               e.stopPropagation();
               onPinClick(comment.id);
             }}
-            className={`absolute pointer-events-auto transition-all duration-150 -translate-x-1/2 -translate-y-1/2 ${
+            className={`absolute pointer-events-auto transition-transform duration-150 -translate-x-1/2 -translate-y-1/2 ${
               isActive ? "scale-125 z-10" : "hover:scale-110"
             }`}
             style={{ left: x, top: y }}
