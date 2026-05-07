@@ -289,7 +289,6 @@ export const Editor: React.FC = () => {
   const newCommentRafRef = useRef<number>(0);
   const commentAppStateRef = useRef<{ scrollX: number; scrollY: number; zoom: { value: number } } | null>(null);
   const [commentAppState, setCommentAppState] = useState<{ scrollX: number; scrollY: number; zoom: { value: number } } | null>(null);
-  const commentRafRef = useRef<number | null>(null);
   const previewBackup = useRef<{ elements: readonly any[]; appState: any; files: any } | null>(null);
   const { isHeaderVisible, setIsHeaderVisible } = useEditorChrome({
     drawingName,
@@ -2217,16 +2216,20 @@ export const Editor: React.FC = () => {
             langCode={langCode}
             initialData={initialData}
             onChange={(elements: readonly any[], appState: any, files?: Record<string, any>) => {
-              commentAppStateRef.current = {
-                scrollX: appState.scrollX ?? 0,
-                scrollY: appState.scrollY ?? 0,
-                zoom: appState.zoom ?? { value: 1 },
-              };
-              if (comments.length > 0 && commentRafRef.current === null) {
-                commentRafRef.current = requestAnimationFrame(() => {
-                  commentRafRef.current = null;
-                  setCommentAppState(commentAppStateRef.current);
-                });
+              const nextScrollX = appState.scrollX ?? 0;
+              const nextScrollY = appState.scrollY ?? 0;
+              const nextZoom = appState.zoom ?? { value: 1 };
+              if (
+                comments.length > 0 && (
+                  !commentAppStateRef.current ||
+                  commentAppStateRef.current.scrollX !== nextScrollX ||
+                  commentAppStateRef.current.scrollY !== nextScrollY ||
+                  commentAppStateRef.current.zoom.value !== nextZoom.value
+                )
+              ) {
+                const next = { scrollX: nextScrollX, scrollY: nextScrollY, zoom: nextZoom };
+                commentAppStateRef.current = next;
+                setCommentAppState(next);
               }
               handleCanvasChange(elements, appState, files);
             }}
