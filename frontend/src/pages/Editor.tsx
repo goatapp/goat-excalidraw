@@ -1,13 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, Download, Loader2, ChevronUp, ChevronDown, Share2, History, Video, MessageCircle, Terminal } from 'lucide-react';
+import { ArrowLeft, Download, Loader2, ChevronUp, ChevronDown, Share2, History, Video, MessageCircle, Terminal, Clock } from 'lucide-react';
 import clsx from 'clsx';
 import {
   Excalidraw,
   CaptureUpdateAction,
   CommandPalette,
+  DefaultSidebar,
   Footer,
   MainMenu,
+  Sidebar,
   convertToExcalidrawElements,
   exportToBlob,
   viewportCoordsToSceneCoords,
@@ -38,8 +40,8 @@ import type { ElementVersionInfo } from './editor/shared';
 import { useEditorChrome } from './editor/useEditorChrome';
 import { useEditorIdentity } from './editor/useEditorIdentity';
 import { ShareModal } from '../components/ShareModal';
-import { HistoryPanel } from '../components/HistoryPanel';
-import { CommentPanel } from '../components/CommentPanel';
+import { HistoryPanelContent } from '../components/HistoryPanel';
+import { CommentPanelContent } from '../components/CommentPanel';
 import { CommentPinOverlay } from '../components/CommentPin';
 import { CommentPopover } from '../components/CommentPopover';
 import { CommentInput } from '../components/CommentInput';
@@ -275,8 +277,7 @@ export const Editor: React.FC = () => {
   const [autoHideEnabled, setAutoHideEnabled] = useState(getStoredAutoHideEnabled);
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [langCode, setLangCode] = useState(getInitialLangCode);
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const [isCommentsOpen, setIsCommentsOpen] = useState(false);
+  const [sidebarTab, setSidebarTab] = useState<string | null>(null);
   const [comments, setComments] = useState<api.Comment[]>([]);
   const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
   const [isPlacingComment, setIsPlacingComment] = useState(false);
@@ -309,7 +310,7 @@ export const Editor: React.FC = () => {
     }
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Space') setIsSpacePanning(true);
-      if (e.code === 'Escape') { setIsPlacingComment(false); setIsCommentsOpen(false); }
+      if (e.code === 'Escape') { setIsPlacingComment(false); }
     };
     const onKeyUp = (e: KeyboardEvent) => { if (e.code === 'Space') setIsSpacePanning(false); };
     window.addEventListener('keydown', onKeyDown);
@@ -2068,7 +2069,12 @@ export const Editor: React.FC = () => {
           ) : null}
           {canEdit && id ? (
             <button
-              onClick={() => setIsHistoryOpen(true)}
+              onClick={() => {
+                const excalidraw = getAPI();
+                if (excalidraw) {
+                  excalidraw.toggleSidebar({ name: "default", tab: "history", force: true });
+                }
+              }}
               className="p-2 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-lg text-gray-600 dark:text-gray-300 transition-colors"
               title="Version History"
             >
@@ -2252,14 +2258,108 @@ export const Editor: React.FC = () => {
             </MainMenu>
             <CommandPalette />
             {id && (
+              <DefaultSidebar onStateChange={(state) => setSidebarTab(state?.tab ?? null)}>
+                <DefaultSidebar.TabTriggers>
+                  <Sidebar.TabTrigger tab="comments">
+                    <div className="relative">
+                      <MessageCircle size={20} />
+                      {comments.filter(c => !c.resolved).length > 0 && (
+                        <span
+                          className="absolute"
+                          style={{
+                            top: -2,
+                            right: -2,
+                            width: 7,
+                            height: 7,
+                            backgroundColor: 'var(--color-danger)',
+                            borderRadius: '50%',
+                          }}
+                        />
+                      )}
+                    </div>
+                  </Sidebar.TabTrigger>
+                  <Sidebar.TabTrigger tab="history">
+                    <Clock size={20} />
+                  </Sidebar.TabTrigger>
+                </DefaultSidebar.TabTriggers>
+                <Sidebar.Tab tab="comments">
+                  <CommentPanelContent
+                    comments={comments}
+                    onSelectComment={(commentId) => {
+                      setActiveCommentId(commentId);
+                      const c = comments.find(x => x.id === commentId);
+                      if (c?.anchorX != null && c?.anchorY != null) {
+                        scrollToComment(c.anchorX, c.anchorY);
+                      }
+                    }}
+                  />
+                </Sidebar.Tab>
+                <Sidebar.Tab tab="history">
+                  <HistoryPanelContent
+                    drawingId={id}
+                    active={sidebarTab === "history"}
+                    onPreview={(snapshot) => {
+                      const excalidraw = getAPI();
+                      if (!excalidraw) return;
+                      if (snapshot) {
+                        if (!previewBackup.current) {
+                          previewBackup.current = {
+                            elements: excalidraw.getSceneElementsIncludingDeleted(),
+                            appState: excalidraw.getAppState(),
+                            files: excalidraw.getFiles(),
+                          };
+                        }
+                        const elements = Array.isArray(snapshot.elements) ? snapshot.elements : [];
+                        const rawFiles = snapshot.files || {};
+                        if (Object.keys(rawFiles).length > 0) {
+                          resolveS3Files(rawFiles).then((resolved) => {
+                            excalidraw.addFiles(Object.values(resolved));
+                          });
+                        }
+                        excalidraw.updateScene({
+                          elements,
+                          appState: {
+                            ...snapshot.appState,
+                            collaborators: new Map(),
+                          },
+                          captureUpdate: CaptureUpdateAction.NEVER,
+                        });
+                      } else {
+                        if (previewBackup.current) {
+                          excalidraw.updateScene({
+                            elements: previewBackup.current.elements as any[],
+                            appState: previewBackup.current.appState,
+                            captureUpdate: CaptureUpdateAction.NEVER,
+                          });
+                          if (previewBackup.current.files) {
+                            excalidraw.addFiles(Object.values(previewBackup.current.files));
+                          }
+                          previewBackup.current = null;
+                        }
+                      }
+                    }}
+                    onRestore={() => {
+                      previewBackup.current = null;
+                      window.location.reload();
+                    }}
+                    onClose={() => {
+                      const excalidraw = getAPI();
+                      if (excalidraw) {
+                        excalidraw.toggleSidebar({ name: "default" });
+                      }
+                    }}
+                  />
+                </Sidebar.Tab>
+              </DefaultSidebar>
+            )}
+            {id && (
               <Footer>
                 <button
                   onClick={() => {
                     setIsPlacingComment((v) => {
-                      if (v) {
-                        setIsCommentsOpen(false);
-                      } else {
-                        setIsCommentsOpen(true);
+                      const excalidraw = getAPI();
+                      if (!v && excalidraw) {
+                        excalidraw.toggleSidebar({ name: "default", tab: "comments", force: true });
                       }
                       return !v;
                     });
@@ -2394,7 +2494,6 @@ export const Editor: React.FC = () => {
                 appState
               );
               setIsPlacingComment(false);
-              setIsCommentsOpen(false);
               setNewCommentAnchor({ x: scene.x, y: scene.y, vx: clientX, vy: clientY });
             }}
           />
@@ -2449,76 +2548,6 @@ export const Editor: React.FC = () => {
             isOpen={isShareOpen}
             onClose={() => setIsShareOpen(false)}
             accessLevel={accessLevel === "none" ? undefined : accessLevel}
-          />
-          <HistoryPanel
-            drawingId={id}
-            isOpen={isHistoryOpen}
-            onClose={() => {
-              setIsHistoryOpen(false);
-            }}
-            onPreview={(snapshot) => {
-              const excalidraw = getAPI();
-              if (!excalidraw) return;
-              if (snapshot) {
-                // Save current state before first preview
-                if (!previewBackup.current) {
-                  previewBackup.current = {
-                    elements: excalidraw.getSceneElementsIncludingDeleted(),
-                    appState: excalidraw.getAppState(),
-                    files: excalidraw.getFiles(),
-                  };
-                }
-                // Show snapshot on canvas (read-only preview)
-                const elements = Array.isArray(snapshot.elements) ? snapshot.elements : [];
-                const rawFiles = snapshot.files || {};
-                if (Object.keys(rawFiles).length > 0) {
-                  resolveS3Files(rawFiles).then((resolved) => {
-                    excalidraw.addFiles(Object.values(resolved));
-                  });
-                }
-                excalidraw.updateScene({
-                  elements,
-                  appState: {
-                    ...snapshot.appState,
-                    collaborators: new Map(),
-                  },
-                  captureUpdate: CaptureUpdateAction.NEVER,
-                });
-              } else {
-                // Restore original state
-                if (previewBackup.current) {
-                  excalidraw.updateScene({
-                    elements: previewBackup.current.elements as any[],
-                    appState: previewBackup.current.appState,
-                    captureUpdate: CaptureUpdateAction.NEVER,
-                  });
-                  if (previewBackup.current.files) {
-                    excalidraw.addFiles(Object.values(previewBackup.current.files));
-                  }
-                  previewBackup.current = null;
-                }
-              }
-            }}
-            onRestore={() => {
-              // Clear preview backup and reload page to get fresh state from server
-              previewBackup.current = null;
-              window.location.reload();
-            }}
-          />
-          <CommentPanel
-            drawingId={id}
-            isOpen={isCommentsOpen}
-            onClose={() => setIsCommentsOpen(false)}
-            comments={comments}
-            onSelectComment={(commentId) => {
-              setActiveCommentId(commentId);
-              // Scroll canvas to the comment's anchor
-              const c = comments.find(x => x.id === commentId);
-              if (c?.anchorX != null && c?.anchorY != null) {
-                scrollToComment(c.anchorX, c.anchorY);
-              }
-            }}
-            currentUserId={user?.id ?? null}
           />
         </>
       ) : null}
