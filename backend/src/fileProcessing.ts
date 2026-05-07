@@ -85,7 +85,7 @@ export const processFilesForS3 = async (
       batch.map(async ([fileId, file]) => {
         const dataURL: unknown = file?.dataURL;
 
-        // Re-register files with legacy /api/files/{fileId} URLs (missing S3File record after migration)
+        // Re-register files with legacy /api/files/{fileId} URLs (missing S3File record after migration) TODO: remove after migration is complete
         if (typeof dataURL === "string" && OLD_API_FILES_RE.test(dataURL) && !dataURL.includes(`/files/${drawingId}/`)) {
           const mimeType = typeof file?.mimeType === "string" ? file.mimeType : "application/octet-stream";
           const ext = MIME_TO_EXT[mimeType] ?? "bin";
