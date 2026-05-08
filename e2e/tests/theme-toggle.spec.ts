@@ -39,7 +39,8 @@ test.describe("Theme Toggle", () => {
 
     const html = page.locator("html");
     const themeButton = page.getByRole("button", { name: /Dark Mode|Light Mode/i });
-    
+    await expect(themeButton).toBeVisible({ timeout: 15000 });
+
     const isDark = await html.evaluate((el) => el.classList.contains("dark"));
     if (!isDark) {
       await themeButton.click();
@@ -70,6 +71,7 @@ test.describe("Theme Toggle", () => {
 
     const html = page.locator("html");
     const themeButton = page.getByRole("button", { name: /Dark Mode|Light Mode/i });
+    await expect(themeButton).toBeVisible({ timeout: 15000 });
 
     const initialDark = await html.evaluate((el) => el.classList.contains("dark"));
     if (!initialDark) {
@@ -89,6 +91,7 @@ test.describe("Theme Toggle", () => {
 
     const html = page.locator("html");
     const themeButton = page.getByRole("button", { name: /Dark Mode|Light Mode/i });
+    await expect(themeButton).toBeVisible({ timeout: 15000 });
 
     const isDark = await html.evaluate((el) => el.classList.contains("dark"));
     if (!isDark) {
@@ -113,6 +116,7 @@ test.describe("Theme Toggle", () => {
 
     const html = page.locator("html");
     const themeButton = page.getByRole("button", { name: /Dark Mode|Light Mode/i });
+    await expect(themeButton).toBeVisible({ timeout: 15000 });
 
     const isDark = await html.evaluate((el) => el.classList.contains("dark"));
     if (isDark) {
