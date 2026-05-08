@@ -39,6 +39,7 @@ import {
 import type { ElementVersionInfo } from './editor/shared';
 import { useEditorChrome } from './editor/useEditorChrome';
 import { useEditorIdentity } from './editor/useEditorIdentity';
+import { useStalenessRecovery } from './editor/useStalenessRecovery';
 import { ShareModal } from '../components/ShareModal';
 import { HistoryPanelContent } from '../components/HistoryPanel';
 import { CommentPanelContent } from '../components/CommentPanel';
@@ -370,6 +371,7 @@ export const Editor: React.FC = () => {
   const remoteFlushScheduledRef = useRef(false);
   const remoteFlushRafIdRef = useRef<number | null>(null);
   const initialFileIdsRef = useRef<Set<string>>(new Set());
+  const stalenessRecoveryRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     setAutoHideEnabled(getStoredAutoHideEnabled());
@@ -705,6 +707,9 @@ export const Editor: React.FC = () => {
         (window as any).__EXCALIDASH_SOCKET_STATUS__ = { connected: true };
       }
       joinRoom();
+      if (hasHydratedInitialScene.current) {
+        stalenessRecoveryRef.current?.();
+      }
     });
 
     socket.on('disconnect', () => {
@@ -954,6 +959,22 @@ export const Editor: React.FC = () => {
     if (!api || api.isDestroyed) return null;
     return api;
   }, []);
+
+  const { triggerStalenessRecovery } = useStalenessRecovery({
+    drawingId: id,
+    currentDrawingVersionRef,
+    getAPI,
+    latestElementsRef,
+    latestFilesRef,
+    lastSyncedFilesRef,
+    lastPersistedFilesRef,
+    lastSyncedElementOrderSigRef,
+    recordElementVersion,
+    computeElementOrderSig,
+    resolveS3Files,
+    hasHydratedInitialScene: hasHydratedInitialScene,
+  });
+  stalenessRecoveryRef.current = triggerStalenessRecovery;
 
   const handleNewCommentDragStart = useCallback((e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest("button, textarea")) return;

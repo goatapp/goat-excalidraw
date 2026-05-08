@@ -497,6 +497,11 @@ export const getDrawing = async (id: string) => {
   return deserializeDrawing(response.data);
 };
 
+export const getDrawingVersion = async (id: string): Promise<{ version: number; updatedAt: string }> => {
+  const response = await api.get<{ version: number; updatedAt: string }>(`/drawings/${id}/version`);
+  return response.data;
+};
+
 export type ShareResolvedUser = { id: string; name: string; email: string };
 
 export const resolveShareUsers = async (drawingId: string, q: string): Promise<ShareResolvedUser[]> => {

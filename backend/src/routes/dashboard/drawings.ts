@@ -536,6 +536,23 @@ export const registerDrawingRoutes = (
     });
   }));
 
+  app.get("/drawings/:id/version", optionalAuth, asyncHandler(async (req, res) => {
+    const principal = await getRequestPrincipal(req);
+    const adminOverride = await resolveAdminOverride(req);
+    const id = req.params.id as string;
+    const access = await getDrawingAccess({ prisma, principal, drawingId: id, isAdminOverride: adminOverride });
+    if (!canViewDrawing(access)) {
+      if (respondWithAuthErrorIfPresent(req, res)) return;
+      return res.status(404).json({ error: "Drawing not found" });
+    }
+    const drawing = await prisma.drawing.findUnique({
+      where: { id },
+      select: { version: true, updatedAt: true },
+    });
+    if (!drawing) return res.status(404).json({ error: "Drawing not found" });
+    return res.json({ version: drawing.version, updatedAt: drawing.updatedAt });
+  }));
+
   app.put("/drawings/:id", optionalAuth, asyncHandler(async (req, res) => {
     const principal = await getRequestPrincipal(req);
     const adminOverride = await resolveAdminOverride(req);
