@@ -90,8 +90,11 @@ test.describe("Theme Toggle", () => {
     await page.waitForLoadState("networkidle");
 
     const html = page.locator("html");
-    const themeButton = page.getByRole("button", { name: /Dark Mode|Light Mode/i });
-    await expect(themeButton).toBeVisible({ timeout: 15000 });
+    const settingsHeading = page.locator("h1", { hasText: "Settings" });
+    await expect(settingsHeading).toBeVisible({ timeout: 15000 });
+
+    const themeButton = page.locator("button", { hasText: /Dark Mode|Light Mode/ });
+    await expect(themeButton).toBeVisible({ timeout: 5000 });
 
     const isDark = await html.evaluate((el) => el.classList.contains("dark"));
     if (!isDark) {
@@ -115,8 +118,11 @@ test.describe("Theme Toggle", () => {
     await page.waitForLoadState("networkidle");
 
     const html = page.locator("html");
-    const themeButton = page.getByRole("button", { name: /Dark Mode|Light Mode/i });
-    await expect(themeButton).toBeVisible({ timeout: 15000 });
+    const settingsHeading = page.locator("h1", { hasText: "Settings" });
+    await expect(settingsHeading).toBeVisible({ timeout: 15000 });
+
+    const themeButton = page.locator("button", { hasText: /Dark Mode|Light Mode/ });
+    await expect(themeButton).toBeVisible({ timeout: 5000 });
 
     const isDark = await html.evaluate((el) => el.classList.contains("dark"));
     if (isDark) {
