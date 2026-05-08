@@ -18,12 +18,22 @@ RUN sed -i '/"resolved": "file:vendor\/excalidraw-/{n;s/"integrity": "sha512-[^"
 COPY frontend/ ./
 COPY VERSION ../VERSION
 
-ARG VITE_APP_VERSION
+ARG VITE_APP_VERSION=""
+ARG CODEBUILD_BUILD_ID=""
 ARG VITE_APP_BUILD_LABEL
-ENV VITE_APP_VERSION=$VITE_APP_VERSION
 ENV VITE_APP_BUILD_LABEL=$VITE_APP_BUILD_LABEL
 
-RUN npm run build
+RUN VERSION_FILE=$(cat ../VERSION) && \
+    if [ -n "$VITE_APP_VERSION" ]; then \
+      FINAL_VERSION="$VITE_APP_VERSION"; \
+    elif [ -n "$CODEBUILD_BUILD_ID" ]; then \
+      FINAL_VERSION="${VERSION_FILE}+build.$(date -u +%Y%m%d%H%M%S)"; \
+    else \
+      FINAL_VERSION="$VERSION_FILE"; \
+    fi && \
+    export VITE_APP_VERSION="$FINAL_VERSION" && \
+    echo "$FINAL_VERSION" > ../VERSION && \
+    npm run build
 
 # Stage 2: Build backend
 FROM node:25-alpine AS backend-builder
@@ -68,6 +78,7 @@ COPY --from=backend-builder /app/dist ./dist
 COPY --from=backend-builder /app/src/generated ./dist/generated
 
 COPY --from=frontend-builder /app/frontend/dist ./public
+COPY --from=frontend-builder /app/VERSION ./VERSION
 
 COPY scripts/s3-sync.mjs ./scripts/s3-sync.mjs
 COPY docker-entrypoint.combined.sh ./docker-entrypoint.combined.sh
