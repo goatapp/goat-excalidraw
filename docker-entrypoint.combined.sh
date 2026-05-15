@@ -43,22 +43,19 @@ else
 fi
 export CSRF_SECRET
 
-# --- S3 restore (before migrations, so restored DB gets migrated) ---
-if [ -n "${S3_BUCKET_NAME:-}" ]; then
-    echo "Restoring data from S3..."
-    node /app/scripts/s3-sync.mjs --restore || echo "S3 restore failed, continuing with local state"
-fi
-
-# --- Schema and migration bootstrap ---
+# --- Schema and migration bootstrap (always runs first) ---
 if [ ! -f "/app/prisma/schema.prisma" ]; then
     echo "Mount appears empty (missing schema.prisma). Bootstrapping schema and migrations..."
 else
     echo "Syncing schema and migrations from template..."
 fi
 
+rm -rf /app/prisma/migrations
 mkdir -p /app/prisma/migrations
 cp /app/prisma_template/schema.prisma /app/prisma/schema.prisma
-cp -R /app/prisma_template/migrations/. /app/prisma/migrations/
+if [ -d "/app/prisma_template/migrations" ]; then
+    cp -R /app/prisma_template/migrations/. /app/prisma/migrations/
+fi
 
 # --- Fix permissions ---
 echo "Fixing filesystem permissions..."
@@ -68,39 +65,68 @@ chmod 755 /app/uploads
 chmod 600 "${JWT_SECRET_FILE}"
 chmod 600 "${CSRF_SECRET_FILE}"
 
-if [ -f "/app/prisma/dev.db" ]; then
-    echo "Database file found, ensuring write permissions..."
-    chmod 600 /app/prisma/dev.db
-    [ -f "/app/prisma/dev.db-wal" ] && chmod 600 /app/prisma/dev.db-wal
-    [ -f "/app/prisma/dev.db-shm" ] && chmod 600 /app/prisma/dev.db-shm
-fi
+# --- One-time SQLite → PostgreSQL data migration ---
+if [ "${MIGRATE_FROM_SQLITE}" = "true" ]; then
+    echo "=== SQLite to PostgreSQL Migration ==="
 
-# --- Run migrations ---
-if [ "${RUN_MIGRATIONS}" = "true" ] || [ "${RUN_MIGRATIONS}" = "1" ]; then
+    if [ -z "${S3_BUCKET_NAME:-}" ]; then
+        echo "ERROR: MIGRATE_FROM_SQLITE=true but S3_BUCKET_NAME is not set."
+        echo "Cannot download SQLite backup without S3 configuration."
+        exit 1
+    fi
+
+    echo "Downloading SQLite backup from S3..."
+    su-exec nodejs node /app/scripts/s3-restore-db.mjs
+
     echo "Running database migrations..."
-
-    lock_waited=0
-    while ! mkdir "${MIGRATION_LOCK_DIR}" 2>/dev/null; do
-        if [ "${lock_waited}" -ge "${MIGRATION_LOCK_TIMEOUT_SECONDS}" ]; then
-            echo "Timed out waiting for migration lock after ${MIGRATION_LOCK_TIMEOUT_SECONDS}s"
-            exit 1
-        fi
-        lock_waited=$((lock_waited + 1))
-        sleep 1
-    done
-
-    trap 'rmdir "${MIGRATION_LOCK_DIR}" 2>/dev/null || true' EXIT INT TERM
     su-exec nodejs npx prisma migrate deploy
-    rmdir "${MIGRATION_LOCK_DIR}" 2>/dev/null || true
-    trap - EXIT INT TERM
-else
-    echo "Skipping database migrations (RUN_MIGRATIONS=${RUN_MIGRATIONS})"
+
+    echo "Copying data from SQLite to PostgreSQL..."
+    su-exec nodejs node /app/scripts/migrate-sqlite-to-pg.mjs
+
+    echo "=== Migration complete. Remove MIGRATE_FROM_SQLITE env var for future deploys. ==="
 fi
 
-# --- Start S3 sync background process ---
-if [ -n "${S3_BUCKET_NAME:-}" ]; then
-    echo "Starting S3 sync background process..."
-    su-exec nodejs node /app/scripts/s3-sync.mjs &
+# --- Run migrations (normal path) ---
+if [ "${MIGRATE_FROM_SQLITE}" != "true" ]; then
+    if [ "${RUN_MIGRATIONS}" = "true" ] || [ "${RUN_MIGRATIONS}" = "1" ]; then
+        echo "Running database migrations..."
+
+        lock_waited=0
+        while ! mkdir "${MIGRATION_LOCK_DIR}" 2>/dev/null; do
+            if [ "${lock_waited}" -ge "${MIGRATION_LOCK_TIMEOUT_SECONDS}" ]; then
+                echo "Timed out waiting for migration lock after ${MIGRATION_LOCK_TIMEOUT_SECONDS}s"
+                exit 1
+            fi
+            lock_waited=$((lock_waited + 1))
+            sleep 1
+        done
+
+        trap 'rmdir "${MIGRATION_LOCK_DIR}" 2>/dev/null || true' EXIT INT TERM
+        su-exec nodejs npx prisma migrate deploy
+        rmdir "${MIGRATION_LOCK_DIR}" 2>/dev/null || true
+        trap - EXIT INT TERM
+    else
+        echo "Skipping database migrations (RUN_MIGRATIONS=${RUN_MIGRATIONS})"
+    fi
+
+    # --- Safety guard: detect empty database that should have been migrated from SQLite ---
+    if [ -n "${S3_BUCKET_NAME:-}" ] && [ "${SKIP_EMPTY_DB_CHECK}" != "true" ]; then
+        USER_COUNT=$(su-exec nodejs node -e "
+            import { PrismaClient } from './dist/generated/client/client.js';
+            import { PrismaPg } from '@prisma/adapter-pg';
+            const adapter = new PrismaPg(process.env.DATABASE_URL);
+            const p = new PrismaClient({ adapter });
+            p.user.count().then(c => { console.log(c); return p.\$disconnect(); }).catch(() => { console.log('0'); p.\$disconnect(); });
+        " 2>/dev/null || echo "0")
+        if [ "${USER_COUNT}" = "0" ]; then
+            echo ""
+            echo "WARNING: PostgreSQL database has no users but S3_BUCKET_NAME is set."
+            echo "If you are migrating from SQLite, set MIGRATE_FROM_SQLITE=true and redeploy."
+            echo "If you intend to start fresh, set SKIP_EMPTY_DB_CHECK=true to suppress this warning."
+            echo ""
+        fi
+    fi
 fi
 
 # --- Start application ---

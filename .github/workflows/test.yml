@@ -50,6 +50,21 @@ jobs:
     name: Backend Tests
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: excalidash_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v4
 
@@ -69,13 +84,13 @@ jobs:
         run: |
           cd backend
           npx prisma generate
-        env:
-          DATABASE_URL: file:./prisma/test.db
 
       - name: Run backend tests
         run: |
           cd backend
           npm test
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/excalidash_test
 
   frontend-unit-tests:
     name: Frontend Unit Tests
@@ -118,6 +133,24 @@ jobs:
     needs: build-excalidraw
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: excalidash_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/excalidash_e2e
+
     steps:
       - uses: actions/checkout@v4
 
@@ -135,15 +168,11 @@ jobs:
         run: |
           cd backend
           npx prisma generate
-        env:
-          DATABASE_URL: file:${{ github.workspace }}/backend/prisma/e2e-test.db
 
       - name: Setup backend database
         run: |
           cd backend
           npx prisma migrate deploy
-        env:
-          DATABASE_URL: file:${{ github.workspace }}/backend/prisma/e2e-test.db
 
       - name: Download vendor tarballs
         uses: actions/download-artifact@v4
@@ -175,7 +204,7 @@ jobs:
         run: |
           # Start backend server in background
           cd backend
-          DATABASE_URL="file:${{ github.workspace }}/backend/prisma/e2e-test.db" FRONTEND_URL="http://localhost:6767" npm run dev &
+          FRONTEND_URL="http://localhost:6767" npm run dev &
           BACKEND_PID=$!
           cd ..
 
@@ -216,8 +245,6 @@ jobs:
           kill $BACKEND_PID $FRONTEND_PID 2>/dev/null || true
 
           exit $TEST_EXIT_CODE
-        env:
-          DATABASE_URL: file:${{ github.workspace }}/backend/prisma/e2e-test.db
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@v4
@@ -240,6 +267,21 @@ jobs:
     name: Security Sanitization Tests
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: excalidash_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v4
 
@@ -259,10 +301,10 @@ jobs:
         run: |
           cd backend
           npx prisma generate
-        env:
-          DATABASE_URL: file:./prisma/test.db
 
       - name: Run security tests
         run: |
           cd backend
           npx tsx src/securityTest.ts
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/excalidash_test

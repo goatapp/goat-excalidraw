@@ -262,7 +262,7 @@ describe("Storage routes", () => {
       expect(res.status).toBe(200);
       expect(res.body.ownerName).toBe("Owner");
       expect(res.body.summary.totalCanvasRefs).toBe(2);
-      expect(res.body.summary.totalSqliteFiles).toBe(3);
+      expect(res.body.summary.totalDbFiles).toBe(3);
       expect(res.body.files).toBeInstanceOf(Array);
       expect(res.body.files.length).toBeGreaterThan(0);
     });

@@ -305,7 +305,7 @@ export const StorageManageModal: React.FC<StorageManageModalProps> = ({
                       </div>
                       <div className="flex justify-between border-t border-neutral-200 dark:border-neutral-700 pt-1 mt-1">
                         <span className="font-semibold">SQLite</span>
-                        <span className="font-semibold text-neutral-600 dark:text-neutral-300 tabular-nums">{formatSize(diffData.size.sqliteTotal)}</span>
+                        <span className="font-semibold text-neutral-600 dark:text-neutral-300 tabular-nums">{formatSize(diffData.size.dbTotal)}</span>
                       </div>
                       <div className="flex justify-between border-t border-neutral-200 dark:border-neutral-700 pt-1 mt-1">
                         <span className="font-semibold">S3</span>
@@ -324,7 +324,7 @@ export const StorageManageModal: React.FC<StorageManageModalProps> = ({
                 {/* Summary */}
                 <p className="text-sm text-neutral-500 dark:text-neutral-400 mb-3">
                   Canvas refs: <span className="font-semibold text-neutral-700 dark:text-neutral-300">{diffData.summary.totalCanvasRefs}</span>
-                  {' · '}SQLite: <span className="font-semibold text-neutral-700 dark:text-neutral-300">{diffData.summary.totalSqliteFiles}</span>
+                  {' · '}DB: <span className="font-semibold text-neutral-700 dark:text-neutral-300">{diffData.summary.totalDbFiles}</span>
                   {' · '}S3: <span className="font-semibold text-neutral-700 dark:text-neutral-300">{diffData.summary.totalS3Files}</span>
                 </p>
 
@@ -374,7 +374,7 @@ export const StorageManageModal: React.FC<StorageManageModalProps> = ({
                                 <StatusIcon active={file.inCanvasActive} present={file.inCanvas} />
                               </td>
                               <td className="px-3 py-2 text-center">
-                                <StatusIcon active={file.inCanvasActive} present={file.inSqlite} />
+                                <StatusIcon active={file.inCanvasActive} present={file.inDb} />
                               </td>
                               <td className="px-3 py-2 text-center">
                                 <StatusIcon active={file.inCanvasActive} present={file.inS3} />

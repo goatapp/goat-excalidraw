@@ -1,11 +1,29 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: excalidash-postgres
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=excalidash
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - excalidash-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: excalidash-backend
     environment:
-      - DATABASE_URL=file:/app/prisma/dev.db
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/excalidash
       - PORT=8000
       - NODE_ENV=production
       - AUTH_MODE=${AUTH_MODE:-local}
@@ -29,8 +47,9 @@ services:
       # - OIDC_REDIRECT_URI=http://localhost:6767/api/auth/oidc/callback
       # - OIDC_SCOPES=openid profile email
       # - OIDC_ADMIN_GROUPS=admins
-    volumes:
-      - backend-data:/app/prisma
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - excalidash-network
     restart: unless-stopped
@@ -83,4 +102,4 @@ networks:
     driver: bridge
 
 volumes:
-  backend-data:
+  postgres-data:

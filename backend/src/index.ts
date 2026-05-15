@@ -5,7 +5,6 @@ import fs from "fs";
 import { promises as fsPromises } from "fs";
 import { createServer } from "http";
 import { Server } from "socket.io";
-import { Worker } from "worker_threads";
 import multer from "multer";
 import { z } from "zod";
 import helmet from "helmet";
@@ -209,17 +208,6 @@ const upload = multer({
   limits: {
     fileSize: MAX_UPLOAD_SIZE_BYTES,
     files: 1,
-  },
-  fileFilter: (req, file, cb) => {
-    if (file.fieldname === "db") {
-      const isSqliteDb =
-        file.originalname.endsWith(".db") ||
-        file.originalname.endsWith(".sqlite");
-      if (!isSqliteDb) {
-        return cb(new Error("Only .db or .sqlite files are allowed"));
-      }
-    }
-    cb(null, true);
   },
 });
 
@@ -490,75 +478,6 @@ const respondWithValidationErrors = (
 
 const collectionNameSchema = z.string().trim().min(1).max(100);
 
-const validateSqliteHeader = (filePath: string): boolean => {
-  try {
-    const buffer = Buffer.alloc(16);
-    const fd = fs.openSync(filePath, "r");
-    const bytesRead = fs.readSync(fd, buffer, 0, 16, 0);
-    fs.closeSync(fd);
-
-    if (bytesRead < 16) {
-      logger.warn("File too small to be a valid SQLite database");
-      return false;
-    }
-
-    const expectedHeader = Buffer.from([
-      0x53, 0x51, 0x4c, 0x69, 0x74, 0x65, 0x20, 0x66, 0x6f, 0x72, 0x6d, 0x61,
-      0x74, 0x20, 0x33, 0x00,
-    ]);
-
-    const isValid = buffer.equals(expectedHeader);
-    if (!isValid) {
-      logger.warn({ filePath, header: buffer.toString("hex"), expected: expectedHeader.toString("hex") }, "Invalid SQLite file header detected");
-    }
-
-    return isValid;
-  } catch (error) {
-    logger.error({ err: error }, "Failed to validate SQLite header");
-    return false;
-  }
-};
-const verifyDatabaseIntegrityAsync = (filePath: string): Promise<boolean> => {
-  if (!validateSqliteHeader(filePath)) {
-    return Promise.resolve(false);
-  }
-
-  return new Promise((resolve) => {
-    const worker = new Worker(
-      path.resolve(__dirname, "./workers/db-verify.js"),
-      {
-        workerData: { filePath },
-      }
-    );
-    let timeoutHandle: NodeJS.Timeout;
-    let settled = false;
-
-    const finish = (result: boolean) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeoutHandle);
-      resolve(result);
-    };
-
-    worker.on("message", (isValid: boolean) => finish(isValid));
-    worker.on("error", (err) => {
-      logger.error({ err }, "Worker error");
-      finish(false);
-    });
-    worker.on("exit", (code) => {
-      if (code !== 0) {
-        finish(false);
-      }
-    });
-
-    timeoutHandle = setTimeout(() => {
-      logger.warn({ filePath }, "Integrity check worker timed out");
-      worker.terminate();
-      finish(false);
-    }, 10000);
-  });
-};
-
 const removeFileIfExists = async (filePath?: string) => {
   if (!filePath) return;
   try {
@@ -679,7 +598,7 @@ if (config.s3.bucket) {
     "S3 storage enabled"
   );
 } else {
-  logger.info("S3 disabled — S3_BUCKET_NAME not configured. Images stored as base64 in SQLite.");
+  logger.info("S3 disabled — S3_BUCKET_NAME not configured. Images stored as base64 in the database.");
 }
 
 registerFileRoutes(app, { prisma, requireAuth, asyncHandler });
@@ -739,7 +658,6 @@ registerImportExportRoutes({
   ensureTrashCollection,
   invalidateDrawingsCache,
   removeFileIfExists,
-  verifyDatabaseIntegrityAsync,
   MAX_IMPORT_ARCHIVE_ENTRIES,
   MAX_IMPORT_COLLECTIONS,
   MAX_IMPORT_DRAWINGS,
@@ -781,8 +699,8 @@ const cleanupOrphanedS3FilesAfterSnapshotPrune = async (
     try {
       const stillReferenced = await prisma.$queryRawUnsafe<{ cnt: bigint }[]>(
         `SELECT (
-          (SELECT COUNT(*) FROM Drawing WHERE files LIKE '%' || ? || '%') +
-          (SELECT COUNT(*) FROM DrawingSnapshot WHERE files LIKE '%' || ? || '%')
+          (SELECT COUNT(*) FROM "Drawing" WHERE files LIKE '%' || $1 || '%') +
+          (SELECT COUNT(*) FROM "DrawingSnapshot" WHERE files LIKE '%' || $2 || '%')
         ) as cnt`,
         fileId, fileId,
       );
@@ -827,7 +745,7 @@ const cleanupSnapshots = async () => {
   try {
     const maxPerDrawing = config.snapshotMaxPerDrawing;
     const drawingsWithExcess = await prisma.$queryRawUnsafe<{ drawingId: string; cnt: number }[]>(
-      `SELECT drawingId, COUNT(*) as cnt FROM DrawingSnapshot GROUP BY drawingId HAVING cnt > ?`,
+      `SELECT "drawingId", COUNT(*) as cnt FROM "DrawingSnapshot" GROUP BY "drawingId" HAVING COUNT(*) > $1`,
       maxPerDrawing,
     );
 
@@ -862,7 +780,7 @@ const cleanupSnapshots = async () => {
     // Promote orphaned deltas to keyframes after pruning
     try {
       const drawingsToCheck = await prisma.$queryRawUnsafe<{ drawingId: string }[]>(
-        `SELECT DISTINCT drawingId FROM DrawingSnapshot`,
+        `SELECT DISTINCT "drawingId" FROM "DrawingSnapshot"`,
       );
       for (const { drawingId } of drawingsToCheck) {
         const oldest = await prisma.drawingSnapshot.findFirst({

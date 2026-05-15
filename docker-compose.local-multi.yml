@@ -18,7 +18,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     environment:
-      - DATABASE_URL=file:/app/prisma/dev.db
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/excalidash
       - PORT=8000
       - NODE_ENV=production
       - AUTH_MODE=local
@@ -51,7 +51,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     environment:
-      - DATABASE_URL=file:/app/prisma/dev.db
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/excalidash
       - PORT=8000
       - NODE_ENV=development
       - AUTH_MODE=oidc_enforced
@@ -93,7 +93,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     environment:
-      - DATABASE_URL=file:/app/prisma/dev.db
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/excalidash
       - PORT=8000
       - NODE_ENV=development
       - AUTH_MODE=hybrid

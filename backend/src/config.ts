@@ -3,12 +3,8 @@
  */
 import dotenv from "dotenv";
 import crypto from "crypto";
-import path from "path";
-import { fileURLToPath } from "node:url";
 
 dotenv.config();
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 interface Config {
   port: number;
@@ -175,35 +171,9 @@ const parseFrontendUrl = (raw: string | undefined): string | undefined => {
   return normalized.length > 0 ? normalized : undefined;
 };
 
-const resolveDatabaseUrl = (rawUrl?: string) => {
-  const backendRoot = path.resolve(__dirname, "../");
-  const defaultDbPath = path.resolve(backendRoot, "prisma/dev.db");
-
-  if (!rawUrl || rawUrl.trim().length === 0) {
-    return `file:${defaultDbPath}`;
-  }
-
-  if (!rawUrl.startsWith("file:")) {
-    return rawUrl;
-  }
-
-  const filePath = rawUrl.replace(/^file:/, "");
-  const prismaDir = path.resolve(backendRoot, "prisma");
-  const normalizedRelative = filePath.replace(/^\.\/?/, "");
-  const hasLeadingPrismaDir =
-    normalizedRelative === "prisma" || normalizedRelative.startsWith("prisma/");
-
-  const absolutePath = path.isAbsolute(filePath)
-    ? filePath
-    : path.resolve(
-        hasLeadingPrismaDir ? backendRoot : prismaDir,
-        normalizedRelative,
-      );
-
-  return `file:${absolutePath}`;
-};
-
-process.env.DATABASE_URL = resolveDatabaseUrl(process.env.DATABASE_URL);
+if (!process.env.DATABASE_URL || process.env.DATABASE_URL.trim().length === 0) {
+  process.env.DATABASE_URL = "postgresql://127.0.0.1:5432/excalidash";
+}
 
 const getOptionalBoolean = (key: string, defaultValue: boolean): boolean => {
   const value = process.env[key];

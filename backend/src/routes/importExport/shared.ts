@@ -65,7 +65,6 @@ export type RegisterImportExportDeps = {
   ) => Promise<void>;
   invalidateDrawingsCache: () => void;
   removeFileIfExists: (filePath?: string) => Promise<void>;
-  verifyDatabaseIntegrityAsync: (filePath: string) => Promise<boolean>;
   MAX_IMPORT_ARCHIVE_ENTRIES: number;
   MAX_IMPORT_COLLECTIONS: number;
   MAX_IMPORT_DRAWINGS: number;
@@ -222,18 +221,6 @@ export const resolveSafeUploadedFilePath = async (
   return joinedPath;
 };
 
-export const openReadonlySqliteDb = async (filePath: string): Promise<any> => {
-  try {
-    const { DatabaseSync } = await import("node:sqlite") as any;
-    return new DatabaseSync(filePath, {
-      readOnly: true,
-      enableForeignKeyConstraints: false,
-    });
-  } catch {
-    const Database = (await import("better-sqlite3")).default;
-    return new Database(filePath, { readonly: true, fileMustExist: true });
-  }
-};
 
 export const getCurrentLatestPrismaMigrationName = async (
   backendRoot: string

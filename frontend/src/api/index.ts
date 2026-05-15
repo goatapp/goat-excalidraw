@@ -907,7 +907,7 @@ export type FileDiffEntry = {
   fileId: string;
   inCanvas: boolean;
   inCanvasActive: boolean;
-  inSqlite: boolean;
+  inDb: boolean;
   inS3: boolean;
   inS3Record: boolean;
   s3Key: string | null;
@@ -920,7 +920,7 @@ export type DrawingSizeInfo = {
   appStateBytes: number;
   filesBytes: number;
   previewBytes: number;
-  sqliteTotal: number;
+  dbTotal: number;
   s3Total: number;
   total: number;
 };
@@ -929,7 +929,7 @@ export type FilesDiffResult = {
   ownerName: string;
   summary: {
     totalCanvasRefs: number;
-    totalSqliteFiles: number;
+    totalDbFiles: number;
     totalS3Files: number;
   };
   size: DrawingSizeInfo;

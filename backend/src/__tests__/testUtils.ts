@@ -3,15 +3,9 @@
  */
 import { PrismaClient } from "../generated/client/client.js";
 import bcrypt from "bcrypt";
-import path from "path";
-import { fileURLToPath } from "node:url";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const TEST_DB_PATH = path.resolve(__dirname, "../../prisma", "test.db");
 
 /**
  * Get a test Prisma client pointing to the test database.
- * Returns the app's singleton to avoid dual-connection visibility issues with better-sqlite3.
  */
 export const getTestPrisma = async (): Promise<PrismaClient> => {
   const { prisma } = await import("../db/prisma.js");
@@ -23,7 +17,7 @@ export const getTestPrisma = async (): Promise<PrismaClient> => {
  * Schema is pushed once by vitest.globalSetup.ts before any test file runs.
  */
 export const setupTestDb = () => {
-  process.env.DATABASE_URL = `file:${TEST_DB_PATH}`;
+  process.env.DATABASE_URL = process.env.TEST_DATABASE_URL || "postgresql://postgres:postgres@127.0.0.1:5432/excalidash_test";
 };
 
 export const resetTestDb = async (prisma: PrismaClient) => {
