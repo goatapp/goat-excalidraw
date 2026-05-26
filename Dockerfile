@@ -1,5 +1,5 @@
 # Stage 1: Build frontend
-FROM node:25-alpine AS frontend-builder
+FROM node:26-alpine AS frontend-builder
 
 RUN apk add --no-cache git bash
 
@@ -36,7 +36,7 @@ RUN VERSION_FILE=$(cat ../VERSION) && \
     npm run build
 
 # Stage 2: Build backend
-FROM node:25-alpine AS backend-builder
+FROM node:26-alpine AS backend-builder
 
 WORKDIR /app
 
@@ -55,7 +55,7 @@ COPY backend/src ./src
 RUN npx tsc
 
 # Stage 3: Production
-FROM node:25-alpine
+FROM node:26-alpine
 
 RUN apk add --no-cache openssl su-exec && \
     addgroup -g 1001 -S nodejs && \
