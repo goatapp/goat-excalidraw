@@ -49,6 +49,9 @@
     "uuid": "^14.0.0",
     "zod": "^4.4.3"
   },
+  "overrides": {
+    "@hono/node-server": ">=1.19.13"
+  },
   "devDependencies": {
     "@types/archiver": "^7.0.0",
     "@types/bcrypt": "^6.0.0",
