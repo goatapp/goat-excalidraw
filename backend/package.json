@@ -49,6 +49,10 @@
     "uuid": "^14.0.0",
     "zod": "^4.4.3"
   },
+  "overrides": {
+    "tr46": "5.1.1",
+    "whatwg-url": "14.2.0"
+  },
   "devDependencies": {
     "@types/archiver": "^7.0.0",
     "@types/bcrypt": "^6.0.0",
