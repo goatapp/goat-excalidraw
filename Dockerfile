@@ -49,7 +49,7 @@ COPY backend/prisma.config.ts ./
 RUN npm ci && npm cache clean --force
 
 COPY backend/prisma ./prisma/
-RUN DATABASE_URL="file:./prisma/dev.db" npx prisma generate
+RUN npx prisma generate
 
 COPY backend/src ./src
 RUN npx tsc
@@ -80,7 +80,8 @@ COPY --from=backend-builder /app/src/generated ./dist/generated
 COPY --from=frontend-builder /app/frontend/dist ./public
 COPY --from=frontend-builder /app/VERSION ./VERSION
 
-COPY scripts/s3-sync.mjs ./scripts/s3-sync.mjs
+COPY scripts/s3-restore-db.mjs ./scripts/s3-restore-db.mjs
+COPY scripts/migrate-sqlite-to-pg.mjs ./scripts/migrate-sqlite-to-pg.mjs
 COPY docker-entrypoint.combined.sh ./docker-entrypoint.combined.sh
 RUN chmod +x docker-entrypoint.combined.sh
 

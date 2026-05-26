@@ -19,7 +19,7 @@ services:
     environment:
       # Use an absolute sqlite path so Prisma CLI + the running app always point
       # at the same DB file (avoids schema being applied to a different relative path).
-      - DATABASE_URL=file:/app/prisma/e2e-test.db
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/excalidash_e2e
       - PORT=8000
       - NODE_ENV=test
       # Include both with and without :80 because browsers omit default ports in Origin.

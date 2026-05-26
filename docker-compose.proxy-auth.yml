@@ -60,7 +60,7 @@ services:
       minio-init:
         condition: service_completed_successfully
     environment:
-      - DATABASE_URL=file:/app/prisma/dev.db
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/excalidash
       - PORT=8000
       - NODE_ENV=production
       - FRONTEND_URL=http://localhost:8000

@@ -896,13 +896,13 @@ export const registerAdminRoutes = (deps: RegisterAdminRoutesDeps) => {
         prisma.collection.count(),
         prisma.drawingSnapshot.count(),
         prisma.$queryRawUnsafe<{ collectionId: string | null; cnt: number }[]>(
-          `SELECT collectionId, COUNT(*) as cnt FROM Drawing GROUP BY collectionId ORDER BY cnt DESC LIMIT 10`,
+          `SELECT "collectionId", COUNT(*) as cnt FROM "Drawing" GROUP BY "collectionId" ORDER BY cnt DESC LIMIT 10`,
         ),
         prisma.$queryRawUnsafe<{ bytes: number }[]>(
-          `SELECT COALESCE(SUM(LENGTH(elements) + LENGTH(appState) + LENGTH(files) + LENGTH(COALESCE(preview, ''))), 0) as bytes FROM Drawing`,
+          `SELECT COALESCE(SUM(LENGTH(elements) + LENGTH("appState") + LENGTH(files) + LENGTH(COALESCE(preview, ''))), 0) as bytes FROM "Drawing"`,
         ),
         prisma.$queryRawUnsafe<{ bytes: number }[]>(
-          `SELECT COALESCE(SUM(LENGTH(elements) + LENGTH(appState) + LENGTH(files)), 0) as bytes FROM DrawingSnapshot`,
+          `SELECT COALESCE(SUM(LENGTH(elements) + LENGTH("appState") + LENGTH(files)), 0) as bytes FROM "DrawingSnapshot"`,
         ),
       ]);
 
@@ -954,7 +954,7 @@ export const registerAdminRoutes = (deps: RegisterAdminRoutesDeps) => {
       const [totalCount, topDrawings] = await Promise.all([
         prisma.drawingSnapshot.count(),
         prisma.$queryRawUnsafe<{ drawingId: string; cnt: number }[]>(
-          `SELECT s.drawingId, COUNT(*) as cnt FROM DrawingSnapshot s GROUP BY s.drawingId ORDER BY cnt DESC LIMIT 10`,
+          `SELECT s."drawingId", COUNT(*) as cnt FROM "DrawingSnapshot" s GROUP BY s."drawingId" ORDER BY cnt DESC LIMIT 10`,
         ),
       ]);
 

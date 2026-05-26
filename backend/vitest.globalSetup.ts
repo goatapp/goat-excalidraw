@@ -1,15 +1,7 @@
 import { execSync } from "child_process";
-import { unlinkSync } from "fs";
-import path from "path";
-import { fileURLToPath } from "node:url";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default function setup() {
-  const dbPath = path.resolve(__dirname, "prisma/test.db");
-  const databaseUrl = `file:${dbPath}`;
-
-  try { unlinkSync(dbPath); } catch {}
+  const databaseUrl = process.env.DATABASE_URL || "postgresql://postgres:postgres@127.0.0.1:5432/excalidash_test";
 
   const cleanEnv: Record<string, string | undefined> = { ...process.env, DATABASE_URL: databaseUrl, RUST_LOG: "info" };
   for (const key of Object.keys(cleanEnv)) {
@@ -18,7 +10,7 @@ export default function setup() {
     }
   }
   execSync("npx prisma db push --force-reset", {
-    cwd: __dirname,
+    cwd: import.meta.dirname,
     env: cleanEnv,
     stdio: "pipe",
   });

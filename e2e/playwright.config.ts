@@ -76,7 +76,7 @@ export default defineConfig({
       stdout: "pipe",
       stderr: "pipe",
       env: {
-        DATABASE_URL: "file:./dev.db",
+        DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/excalidash_test",
         FRONTEND_URL,
         CSRF_MAX_REQUESTS: "1000",
       },

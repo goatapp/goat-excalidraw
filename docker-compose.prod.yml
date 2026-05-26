@@ -3,7 +3,7 @@ services:
     image: zimengxiong/excalidash-backend:latest
     container_name: excalidash-backend
     environment:
-      - DATABASE_URL=file:/app/prisma/dev.db
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/excalidash
       - PORT=8000
       - NODE_ENV=production
       - AUTH_MODE=${AUTH_MODE:-local}

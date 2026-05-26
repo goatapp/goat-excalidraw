@@ -1,4 +1,19 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: excalidash-postgres
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=excalidash
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
   minio:
     image: minio/minio:latest
     container_name: excalidraw-minio
@@ -41,8 +56,10 @@ services:
     depends_on:
       minio-init:
         condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
     environment:
-      - DATABASE_URL=file:/app/prisma/dev.db
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/excalidash
       - PORT=8000
       - NODE_ENV=production
       - FRONTEND_URL=http://localhost:8000
@@ -79,3 +96,4 @@ volumes:
   app-data:
   app-uploads:
   minio-data:
+  postgres-data:

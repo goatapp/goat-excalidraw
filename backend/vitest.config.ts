@@ -9,7 +9,7 @@ export default defineConfig({
     hookTimeout: 30000,
     globalSetup: "./vitest.globalSetup.ts",
     env: {
-      DATABASE_URL: "file:./prisma/test.db",
+      DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:5432/excalidash_test",
       NODE_ENV: "test",
       AUTH_MODE: "local",
       ENABLE_AUDIT_LOGGING: "true",

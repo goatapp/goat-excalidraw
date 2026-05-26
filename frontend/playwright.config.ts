@@ -20,7 +20,7 @@ export default defineConfig({
   ],
   webServer: process.env.CI ? [
     {
-      command: "cd ../backend && DATABASE_URL=file:./dev.db npm run dev",
+      command: "cd ../backend && DATABASE_URL=postgresql://postgres:postgres@localhost:5432/excalidash_test npm run dev",
       url: "http://localhost:8000/health",
       reuseExistingServer: false,
       timeout: 120000,

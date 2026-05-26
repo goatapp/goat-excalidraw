@@ -192,7 +192,7 @@ export const registerStorageRoutes = (
       const allCanvasRefs = collectReferencedFileIds(elements, true);
       const activeCanvasRefs = collectReferencedFileIds(elements, false);
 
-      const sqliteFileIds = new Set(Object.keys(files));
+      const dbFileIds = new Set(Object.keys(files));
 
       const s3Prefix = `${FILE_KEY_PREFIX}/${drawing.userId}/${id}/`;
       let s3FileRecords: Array<{
@@ -222,7 +222,7 @@ export const registerStorageRoutes = (
 
       const allFileIds = new Set<string>();
       for (const fid of allCanvasRefs) allFileIds.add(fid);
-      for (const fid of sqliteFileIds) allFileIds.add(fid);
+      for (const fid of dbFileIds) allFileIds.add(fid);
       for (const r of s3FileRecords) allFileIds.add(r.fileId);
       for (const o of s3Objects) {
         const fid = fileIdFromS3Key(o.key);
@@ -237,7 +237,7 @@ export const registerStorageRoutes = (
           fileId,
           inCanvas: allCanvasRefs.has(fileId),
           inCanvasActive: activeCanvasRefs.has(fileId),
-          inSqlite: sqliteFileIds.has(fileId),
+          inDb: dbFileIds.has(fileId),
           inS3: !!s3Obj,
           inS3Record: !!s3Record,
           s3Key: s3Record?.s3Key ?? s3Obj?.key ?? null,
@@ -252,7 +252,7 @@ export const registerStorageRoutes = (
       const previewBytes = drawing.preview
         ? Buffer.byteLength(drawing.preview, "utf8")
         : 0;
-      const sqliteTotal = elementsBytes + appStateBytes + filesBytes + previewBytes;
+      const dbTotal = elementsBytes + appStateBytes + filesBytes + previewBytes;
       const s3Total = s3Objects.reduce((sum, o) => sum + o.size, 0);
 
       const snapshotRows = await prisma.drawingSnapshot.findMany({
@@ -271,7 +271,7 @@ export const registerStorageRoutes = (
         ownerName: drawing.user.name,
         summary: {
           totalCanvasRefs: allCanvasRefs.size,
-          totalSqliteFiles: sqliteFileIds.size,
+          totalDbFiles: dbFileIds.size,
           totalS3Files: s3Objects.length,
         },
         size: {
@@ -279,9 +279,9 @@ export const registerStorageRoutes = (
           appStateBytes,
           filesBytes,
           previewBytes,
-          sqliteTotal,
+          dbTotal,
           s3Total,
-          total: sqliteTotal + s3Total,
+          total: dbTotal + s3Total,
         },
         snapshots: {
           count: snapshotCount,

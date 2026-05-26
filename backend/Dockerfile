@@ -3,7 +3,7 @@ FROM node:25-alpine AS builder
 
 WORKDIR /app
 
-# Native build deps for modules that may compile from source (e.g., better-sqlite3 on arm64)
+# Native build deps for modules that may compile from source (e.g., bcrypt on arm64)
 RUN apk add --no-cache python3 make g++
 
 # Copy package files
