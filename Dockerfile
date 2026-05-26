@@ -1,7 +1,7 @@
 # Stage 1: Build frontend
 FROM node:26-alpine AS frontend-builder
 
-RUN apk add --no-cache git bash
+RUN apk add --no-cache git bash && npm install -g yarn
 
 WORKDIR /app/frontend
 
