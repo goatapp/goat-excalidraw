@@ -2254,6 +2254,7 @@ export const Editor: React.FC = () => {
               }
               handleCanvasChange(elements, appState, files);
             }}
+            onThemeChange={(t) => setThemePreference(t as "light" | "dark" | "system")}
             onPointerUpdate={onPointerUpdate}
             onLibraryChange={handleLibraryChange}
             onExcalidrawAPI={setExcalidrawAPI}
@@ -2273,7 +2274,6 @@ export const Editor: React.FC = () => {
               <MainMenu.DefaultItems.ToggleTheme
                 allowSystemTheme
                 theme={themePreference as "light" | "dark" | "system"}
-                onSelect={setThemePreference as (theme: "light" | "dark" | "system") => void}
               />
               <MainMenu.ItemCustom>
                 <LanguageSelector langCode={langCode} onChange={setLangCode} />
