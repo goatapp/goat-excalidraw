@@ -145,7 +145,7 @@ export const registerDrawingRoutes = (
     const adminOverride = await resolveAdminOverride(req);
     const trashCollectionId = getUserTrashCollectionId(req.user.id);
     const { search, collectionId, includeData, limit, offset, sortField, sortDirection } = req.query;
-    const where: Prisma.DrawingWhereInput = adminOverride ? {} : { userId: req.user.id };
+    const where: Prisma.DrawingWhereInput = {};
     const searchTerm =
       typeof search === "string" && search.trim().length > 0 ? search.trim() : undefined;
 
@@ -154,12 +154,15 @@ export const registerDrawingRoutes = (
     }
 
     let collectionFilterKey = adminOverride ? "admin:default" : "default";
+    let isAllDrawingsView = false;
     if (collectionId === "null") {
+      if (!adminOverride) where.userId = req.user.id;
       where.collectionId = null;
       collectionFilterKey = adminOverride ? "admin:null" : "null";
     } else if (collectionId) {
       const normalizedCollectionId = String(collectionId);
       if (normalizedCollectionId === "trash") {
+        if (!adminOverride) where.userId = req.user.id;
         where.collectionId = { in: [trashCollectionId, "trash"] };
         collectionFilterKey = adminOverride ? "admin:trash" : "trash";
       } else {
@@ -176,19 +179,26 @@ export const registerDrawingRoutes = (
           if (!share) {
             return res.status(404).json({ error: "Collection not found" });
           }
-          delete (where as any).userId;
           (where as any).collectionId = normalizedCollectionId;
           collectionFilterKey = `shared:${normalizedCollectionId}:${share.role}`;
         } else {
-          if (adminOverride) delete (where as any).userId;
+          if (!adminOverride) where.userId = req.user.id;
           where.collectionId = normalizedCollectionId;
           collectionFilterKey = adminOverride ? `admin:id:${normalizedCollectionId}` : `id:${normalizedCollectionId}`;
         }
       }
     } else if (!adminOverride) {
-      where.OR = [
-        { collectionId: { notIn: [trashCollectionId, "trash"] } },
-        { collectionId: null },
+      isAllDrawingsView = true;
+      where.AND = [
+        { OR: [
+          { collectionId: { notIn: [trashCollectionId, "trash"] } },
+          { collectionId: null },
+        ]},
+        { OR: [
+          { userId: req.user.id },
+          { permissions: { some: { granteeUserId: req.user.id } } },
+          { collection: { shares: { some: { granteeUserId: req.user.id } } } },
+        ]},
       ];
     }
 
@@ -246,6 +256,23 @@ export const registerDrawingRoutes = (
       createdAt: true,
       updatedAt: true,
       trashedAt: true,
+      userId: true,
+      ...(isAllDrawingsView && {
+        permissions: {
+          where: { granteeUserId: req.user!.id },
+          select: { permission: true },
+          take: 1,
+        },
+        collection: {
+          select: {
+            shares: {
+              where: { granteeUserId: req.user!.id },
+              select: { role: true },
+              take: 1,
+            },
+          },
+        },
+      }),
       _count: unresolvedCommentCount,
     };
 
@@ -262,7 +289,25 @@ export const registerDrawingRoutes = (
     if (!shouldIncludeData) {
       queryOptions.select = summarySelect;
     } else {
-      queryOptions.include = { _count: unresolvedCommentCount };
+      queryOptions.include = {
+        _count: unresolvedCommentCount,
+        ...(isAllDrawingsView && {
+          permissions: {
+            where: { granteeUserId: req.user!.id },
+            select: { permission: true },
+            take: 1,
+          },
+          collection: {
+            select: {
+              shares: {
+                where: { granteeUserId: req.user!.id },
+                select: { role: true },
+                take: 1,
+              },
+            },
+          },
+        }),
+      };
     }
 
     const [drawings, totalCount] = await Promise.all([
@@ -270,8 +315,18 @@ export const registerDrawingRoutes = (
       prisma.drawing.count({ where }),
     ]);
 
+    const computeAccessLevel = (d: any): "owner" | "edit" | "view" => {
+      if (d.userId === req.user!.id) return "owner";
+      const directPerm = d.permissions?.[0]?.permission;
+      if (directPerm === "edit") return "edit";
+      if (directPerm === "view") return "view";
+      const collectionRole = d.collection?.shares?.[0]?.role;
+      if (collectionRole === "edit") return "edit";
+      return "view";
+    };
+
     const flattenCommentCount = (d: any) => {
-      const { _count, ...rest } = d;
+      const { _count, permissions: _perms, collection: _col, userId: _uid, ...rest } = d;
       return { ...rest, unresolvedCommentCount: _count?.comments ?? 0 };
     };
 
@@ -279,7 +334,8 @@ export const registerDrawingRoutes = (
     if (shouldIncludeData) {
       responsePayload = (drawings as any[]).map((d: any) => ({
         ...flattenCommentCount(d),
-        collectionId: toPublicTrashCollectionId(d.collectionId, req.user!.id),
+        collectionId: d.userId !== req.user!.id ? null : toPublicTrashCollectionId(d.collectionId, req.user!.id),
+        ...(isAllDrawingsView && { accessLevel: computeAccessLevel(d) }),
         elements: parseJsonField(d.elements, []),
         appState: parseJsonField(d.appState, {}),
         files: parseJsonField(d.files, {}),
@@ -287,7 +343,8 @@ export const registerDrawingRoutes = (
     } else {
       responsePayload = (drawings as any[]).map((d: any) => ({
         ...flattenCommentCount(d),
-        collectionId: toPublicTrashCollectionId(d.collectionId, req.user!.id),
+        collectionId: d.userId !== req.user!.id ? null : toPublicTrashCollectionId(d.collectionId, req.user!.id),
+        ...(isAllDrawingsView && { accessLevel: computeAccessLevel(d) }),
       }));
     }
 
