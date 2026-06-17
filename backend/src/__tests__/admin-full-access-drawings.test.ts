@@ -124,7 +124,8 @@ describe("Admin full access – drawing routes", () => {
 
       expect(res.status).toBe(200);
       const findManyCall = prisma.drawing.findMany.mock.calls[0][0];
-      expect(findManyCall.where).toHaveProperty("userId", ADMIN_USER_ID);
+      const accessFilter = findManyCall.where.AND[1].OR;
+      expect(accessFilter[0]).toEqual({ userId: ADMIN_USER_ID });
     });
 
     it("regular user sees only own drawings even when toggle is on", async () => {
@@ -136,7 +137,8 @@ describe("Admin full access – drawing routes", () => {
 
       expect(res.status).toBe(200);
       const findManyCall = prisma.drawing.findMany.mock.calls[0][0];
-      expect(findManyCall.where).toHaveProperty("userId", ADMIN_USER_ID);
+      const accessFilter = findManyCall.where.AND[1].OR;
+      expect(accessFilter[0]).toEqual({ userId: ADMIN_USER_ID });
     });
   });
 
