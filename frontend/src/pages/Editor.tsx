@@ -2272,8 +2272,8 @@ export const Editor: React.FC = () => {
               <MainMenu.DefaultItems.Preferences />
               <MainMenu.DefaultItems.ToggleTheme
                 allowSystemTheme
-                theme={themePreference}
-                onSelect={setThemePreference}
+                theme={themePreference as "light" | "dark" | "system"}
+                onSelect={setThemePreference as (theme: "light" | "dark" | "system") => void}
               />
               <MainMenu.ItemCustom>
                 <LanguageSelector langCode={langCode} onChange={setLangCode} />
