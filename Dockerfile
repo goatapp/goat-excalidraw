@@ -59,7 +59,7 @@ FROM node:26-alpine
 
 COPY --from=litestream/litestream:0.5.12-scratch /usr/local/bin/litestream /usr/local/bin/litestream
 
-RUN apk add --no-cache openssl su-exec && \
+RUN apk add --no-cache openssl su-exec sqlite && \
     addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
 

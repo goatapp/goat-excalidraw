@@ -66,6 +66,16 @@ if [ "${LITESTREAM_ENABLED:-}" = "true" ]; then
             echo "No S3 bucket configured, starting fresh"
         fi
     fi
+    # Verify restored database integrity
+    if [ -f "/app/prisma/dev.db" ]; then
+        echo "Verifying database integrity..."
+        INTEGRITY=$(su-exec nodejs sqlite3 /app/prisma/dev.db "PRAGMA integrity_check;" 2>&1)
+        if [ "$INTEGRITY" != "ok" ]; then
+            echo "ERROR: Database integrity check failed: $INTEGRITY"
+            echo "Removing corrupt database, starting fresh..."
+            rm -f /app/prisma/dev.db /app/prisma/dev.db-wal /app/prisma/dev.db-shm
+        fi
+    fi
 elif [ -n "${S3_BUCKET_NAME:-}" ]; then
     echo "Restoring data from S3..."
     node /app/scripts/s3-sync.mjs --restore || echo "S3 restore failed, continuing with local state"
