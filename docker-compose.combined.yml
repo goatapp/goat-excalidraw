@@ -59,6 +59,7 @@ services:
       - AWS_REGION=us-east-1
     #  - S3_PUBLIC_URL=http://localhost:9000/excalidraw
       - S3_FORCE_PATH_STYLE=true
+      - LITESTREAM_ENABLED=true
     volumes:
       - app-data:/app/prisma
       - app-uploads:/app/uploads

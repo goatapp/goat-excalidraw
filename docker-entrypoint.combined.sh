@@ -1,6 +1,15 @@
 #!/bin/sh
 set -e
 
+# --- Litestream defaults ---
+export LITESTREAM_S3_PATH="${LITESTREAM_S3_PATH:-${S3_PREFIX:-excalidraw/}litestream}"
+export LITESTREAM_SYNC_INTERVAL="${LITESTREAM_SYNC_INTERVAL:-30s}"
+export LOG_LEVEL="${LOG_LEVEL:-warn}"
+export LITESTREAM_SNAPSHOT_INTERVAL="${LITESTREAM_SNAPSHOT_INTERVAL:-24h}"
+export LITESTREAM_RETENTION="${LITESTREAM_RETENTION:-72h}"
+export S3_FORCE_PATH_STYLE="${S3_FORCE_PATH_STYLE:-false}"
+export AWS_REGION="${AWS_REGION:-us-east-1}"
+
 JWT_SECRET_FILE="/app/prisma/.jwt_secret"
 CSRF_SECRET_FILE="/app/prisma/.csrf_secret"
 MIGRATION_LOCK_DIR="/app/prisma/.migration-lock"
@@ -43,8 +52,21 @@ else
 fi
 export CSRF_SECRET
 
-# --- S3 restore (before migrations, so restored DB gets migrated) ---
-if [ -n "${S3_BUCKET_NAME:-}" ]; then
+# --- Restore database (before migrations, so restored DB gets migrated) ---
+if [ "${LITESTREAM_ENABLED:-}" = "true" ]; then
+    # Remove template DB so Litestream restore can provide the real one
+    rm -f /app/prisma/dev.db /app/prisma/dev.db-wal /app/prisma/dev.db-shm
+    chown nodejs:nodejs /app/prisma
+    echo "Restoring database from Litestream replica..."
+    if ! su-exec nodejs litestream restore -config /etc/litestream.yml /app/prisma/dev.db 2>&1; then
+        echo "Litestream restore failed (no replica yet), trying legacy S3 snapshot..."
+        if [ -n "${S3_BUCKET_NAME:-}" ]; then
+            node /app/scripts/s3-sync.mjs --restore || echo "S3 restore also failed, starting fresh"
+        else
+            echo "No S3 bucket configured, starting fresh"
+        fi
+    fi
+elif [ -n "${S3_BUCKET_NAME:-}" ]; then
     echo "Restoring data from S3..."
     node /app/scripts/s3-sync.mjs --restore || echo "S3 restore failed, continuing with local state"
 fi
@@ -97,12 +119,17 @@ else
     echo "Skipping database migrations (RUN_MIGRATIONS=${RUN_MIGRATIONS})"
 fi
 
-# --- Start S3 sync background process ---
-if [ -n "${S3_BUCKET_NAME:-}" ]; then
+# --- Start S3 sync background process (skip if Litestream handles DB replication) ---
+if [ -n "${S3_BUCKET_NAME:-}" ] && [ "${LITESTREAM_ENABLED:-}" != "true" ]; then
     echo "Starting S3 sync background process..."
     su-exec nodejs node /app/scripts/s3-sync.mjs &
 fi
 
 # --- Start application ---
-echo "Starting application as nodejs..."
-exec su-exec nodejs node dist/index.js
+if [ "${LITESTREAM_ENABLED:-}" = "true" ]; then
+    echo "Starting application under Litestream replication..."
+    exec su-exec nodejs litestream replicate -config /etc/litestream.yml -exec "node dist/index.js"
+else
+    echo "Starting application as nodejs..."
+    exec su-exec nodejs node dist/index.js
+fi
