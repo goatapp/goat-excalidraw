@@ -72,8 +72,26 @@ if [ "${LITESTREAM_ENABLED:-}" = "true" ]; then
         INTEGRITY=$(su-exec nodejs sqlite3 /app/prisma/dev.db "PRAGMA integrity_check;" 2>&1)
         if [ "$INTEGRITY" != "ok" ]; then
             echo "ERROR: Database integrity check failed: $INTEGRITY"
-            echo "Removing corrupt database, starting fresh..."
+            echo "Attempting restore from older Litestream generations..."
             rm -f /app/prisma/dev.db /app/prisma/dev.db-wal /app/prisma/dev.db-shm
+            RECOVERED=false
+            GENERATIONS=$(su-exec nodejs litestream generations -config /etc/litestream.yml /app/prisma/dev.db 2>/dev/null | tail -n +2 | awk '{print $1}')
+            for GEN in $GENERATIONS; do
+                echo "Trying generation $GEN..."
+                if su-exec nodejs litestream restore -config /etc/litestream.yml -generation "$GEN" /app/prisma/dev.db 2>&1; then
+                    INTEGRITY=$(su-exec nodejs sqlite3 /app/prisma/dev.db "PRAGMA integrity_check;" 2>&1)
+                    if [ "$INTEGRITY" = "ok" ]; then
+                        echo "Successfully recovered from generation $GEN"
+                        RECOVERED=true
+                        break
+                    fi
+                    rm -f /app/prisma/dev.db /app/prisma/dev.db-wal /app/prisma/dev.db-shm
+                fi
+            done
+            if [ "$RECOVERED" = "false" ]; then
+                echo "All generations corrupt, starting fresh..."
+                rm -f /app/prisma/dev.db /app/prisma/dev.db-wal /app/prisma/dev.db-shm
+            fi
         fi
     fi
 elif [ -n "${S3_BUCKET_NAME:-}" ]; then
