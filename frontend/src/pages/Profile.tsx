@@ -270,7 +270,7 @@ export const Profile: React.FC = () => {
 	                                    disabled={!showEmailForm}
 	                                    className={
 	                                        showEmailForm
-	                                            ? "flex-1 px-4 py-3 bg-white dark:bg-neutral-800 border-2 border-black dark:border-neutral-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 font-medium"
+	                                            ? "flex-1 px-4 py-3 bg-white dark:bg-neutral-800 border-2 border-black dark:border-neutral-700 rounded-xl text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 font-medium"
 	                                            : "flex-1 px-4 py-3 bg-slate-50 dark:bg-neutral-800 border-2 border-slate-200 dark:border-neutral-700 rounded-xl text-slate-600 dark:text-neutral-400 cursor-not-allowed"
 	                                    }
 	                                />
@@ -301,7 +301,7 @@ export const Profile: React.FC = () => {
 	                                            type="password"
 	                                            value={emailCurrentPassword}
 	                                            onChange={(e) => setEmailCurrentPassword(e.target.value)}
-	                                            className="w-full px-4 py-3 bg-white dark:bg-neutral-800 border-2 border-black dark:border-neutral-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 font-medium"
+	                                            className="w-full px-4 py-3 bg-white dark:bg-neutral-800 border-2 border-black dark:border-neutral-700 rounded-xl text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 font-medium"
 	                                            placeholder="Enter current password"
 	                                        />
 	                                    </div>
@@ -346,7 +346,7 @@ export const Profile: React.FC = () => {
                                     type="text"
                                     value={name}
                                     onChange={(e) => setName(e.target.value)}
-                                    className="flex-1 px-4 py-3 bg-white dark:bg-neutral-800 border-2 border-black dark:border-neutral-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 font-medium"
+                                    className="flex-1 px-4 py-3 bg-white dark:bg-neutral-800 border-2 border-black dark:border-neutral-700 rounded-xl text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 font-medium"
                                     placeholder="Your name"
                                 />
 	                                <button
@@ -392,7 +392,7 @@ export const Profile: React.FC = () => {
                                     type="password"
                                     value={currentPassword}
                                     onChange={(e) => setCurrentPassword(e.target.value)}
-                                    className="w-full px-4 py-3 bg-white dark:bg-neutral-800 border-2 border-black dark:border-neutral-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-rose-500 dark:focus:ring-rose-400 font-medium"
+                                    className="w-full px-4 py-3 bg-white dark:bg-neutral-800 border-2 border-black dark:border-neutral-700 rounded-xl text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-rose-500 dark:focus:ring-rose-400 font-medium"
                                     placeholder="Enter current password"
                                 />
                             </div>
@@ -409,7 +409,7 @@ export const Profile: React.FC = () => {
                                     minLength={passwordPolicy.minLength}
                                     maxLength={passwordPolicy.maxLength}
                                     pattern={passwordPolicy.patternHtml}
-                                    className="w-full px-4 py-3 bg-white dark:bg-neutral-800 border-2 border-black dark:border-neutral-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-rose-500 dark:focus:ring-rose-400 font-medium"
+                                    className="w-full px-4 py-3 bg-white dark:bg-neutral-800 border-2 border-black dark:border-neutral-700 rounded-xl text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-rose-500 dark:focus:ring-rose-400 font-medium"
                                     placeholder="Enter new password"
                                 />
                                 <PasswordRequirements
@@ -430,7 +430,7 @@ export const Profile: React.FC = () => {
                                     onChange={(e) => setConfirmPassword(e.target.value)}
                                     minLength={passwordPolicy.minLength}
                                     maxLength={passwordPolicy.maxLength}
-                                    className="w-full px-4 py-3 bg-white dark:bg-neutral-800 border-2 border-black dark:border-neutral-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-rose-500 dark:focus:ring-rose-400 font-medium"
+                                    className="w-full px-4 py-3 bg-white dark:bg-neutral-800 border-2 border-black dark:border-neutral-700 rounded-xl text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-rose-500 dark:focus:ring-rose-400 font-medium"
                                     placeholder="Confirm new password"
                                 />
                             </div>

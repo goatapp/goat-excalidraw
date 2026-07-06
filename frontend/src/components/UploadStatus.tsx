@@ -82,7 +82,7 @@ export const UploadStatus: React.FC = () => {
           <div className="max-h-60 overflow-y-auto no-scrollbar p-1">
             {tasks.map((task) => (
               <div key={task.id} className="group flex items-center gap-3 p-2 hover:bg-slate-50 dark:hover:bg-neutral-800 rounded-lg transition-colors">
-                <div className="flex-shrink-0">
+                <div className="shrink-0">
                   {task.status === 'uploading' && <Loader2 size={18} className="text-indigo-600 animate-spin" />}
                   {task.status === 'processing' && <Loader2 size={18} className="text-indigo-600 animate-spin" />}
                   {task.status === 'success' && <CheckCircle2 size={18} className="text-emerald-500" />}

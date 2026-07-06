@@ -716,7 +716,7 @@ export const Dashboard: React.FC = () => {
               placeholder="Search drawings..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-10 pr-12 py-2.5 bg-white dark:bg-neutral-900 border-2 border-black dark:border-neutral-700 rounded-xl focus:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:focus:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.2)] outline-none transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)] placeholder:text-slate-400 dark:placeholder:text-neutral-500 text-sm text-slate-900 dark:text-white"
+              className="w-full pl-10 pr-12 py-2.5 bg-white dark:bg-neutral-900 border-2 border-black dark:border-neutral-700 rounded-xl focus:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:focus:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.2)] outline-hidden transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)] placeholder:text-slate-400 dark:placeholder:text-neutral-500 text-sm text-slate-900 dark:text-white"
             />
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 dark:text-neutral-500 group-focus-within:text-indigo-500 dark:group-focus-within:text-neutral-300 transition-colors pointer-events-none" size={18} />
             <div className="absolute right-3 top-1/2 transform -translate-y-1/2 -mt-px pointer-events-none">
@@ -737,9 +737,9 @@ export const Dashboard: React.FC = () => {
                   "bg-white dark:bg-neutral-900 text-slate-700 dark:text-neutral-300 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] dark:hover:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.2)] hover:-translate-y-0.5 hover:bg-indigo-50 dark:hover:bg-indigo-900/30"
                 )}
               >
-                <span className="text-indigo-600 dark:text-indigo-400 flex-shrink-0">{currentSortOption.icon}</span>
+                <span className="text-indigo-600 dark:text-indigo-400 shrink-0">{currentSortOption.icon}</span>
                 <span className="whitespace-nowrap flex-1 text-left">{currentSortOption.label}</span>
-                <ChevronDown size={16} className="text-slate-400 dark:text-neutral-500 flex-shrink-0" />
+                <ChevronDown size={16} className="text-slate-400 dark:text-neutral-500 shrink-0" />
               </button>
 
               {showSortMenu && (

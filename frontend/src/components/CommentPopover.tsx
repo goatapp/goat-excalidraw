@@ -318,7 +318,7 @@ export const CommentPopover: React.FC<Props> = ({
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <div
-              className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0"
+              className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
               style={{ backgroundColor: "#6366f1" }}
             >
               {c.user.name
@@ -331,12 +331,12 @@ export const CommentPopover: React.FC<Props> = ({
             <span className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 truncate">
               {c.user.name}
             </span>
-            <span className="text-xs text-neutral-400 dark:text-neutral-500 flex-shrink-0">
+            <span className="text-xs text-neutral-400 dark:text-neutral-500 shrink-0">
               {timeAgo(c.createdAt)}
             </span>
           </div>
           {(canEditThis || canDeleteThis) && (
-            <div className="flex-shrink-0">
+            <div className="shrink-0">
               <button
                 ref={(el) => { if (el) menuBtnRefs.current.set(c.id, el); }}
                 onClick={() => openMenu(c.id)}
