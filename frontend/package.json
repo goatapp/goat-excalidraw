@@ -24,6 +24,7 @@
     "@excalidraw/fractional-indexing": "file:vendor/excalidraw-fractional-indexing-3.3.0.tgz",
     "@excalidraw/math": "file:vendor/excalidraw-math-0.18.0.tgz",
     "@excalidraw/utils": "file:vendor/excalidraw-utils-0.1.2.tgz",
+    "@tailwindcss/postcss": "4.3.2",
     "@types/lodash": "^4.17.24",
     "axios": "^1.18.1",
     "clsx": "^2.1.1",
