@@ -110,7 +110,7 @@ export const Layout: React.FC<LayoutProps> = ({
       {isMobile ? (
         <div className="relative h-full min-w-0">
           <main className="h-full min-w-0 bg-white/40 dark:bg-neutral-900/40 backdrop-blur-sm rounded-2xl border border-white/50 dark:border-neutral-800/50 shadow-sm transition-colors duration-200 overflow-hidden flex flex-col">
-            <div className="h-16 flex-shrink-0 flex items-center px-4 border-b border-black/5 dark:border-white/5 bg-white/50 dark:bg-neutral-900/50 backdrop-blur-md">
+            <div className="h-16 shrink-0 flex items-center px-4 border-b border-black/5 dark:border-white/5 bg-white/50 dark:bg-neutral-900/50 backdrop-blur-md">
               <button
                 type="button"
                 onClick={() => setIsSidebarOpen(v => !v)}
@@ -175,7 +175,7 @@ export const Layout: React.FC<LayoutProps> = ({
         <div className="flex gap-3 sm:gap-4 items-start h-full min-w-0">
           <aside 
             ref={sidebarRef}
-            className="flex-shrink-0 h-full bg-white dark:bg-neutral-900 rounded-2xl border-2 border-black dark:border-neutral-700 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)] overflow-hidden z-20 transition-colors duration-200 relative"
+            className="shrink-0 h-full bg-white dark:bg-neutral-900 rounded-2xl border-2 border-black dark:border-neutral-700 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.2)] overflow-hidden z-20 transition-colors duration-200 relative"
             style={{ width: `${sidebarWidth}px` }}
           >
             <Sidebar

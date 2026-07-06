@@ -126,7 +126,7 @@ export const CommentInput: React.FC<Props> = ({
           placeholder={placeholder}
           autoFocus={autoFocus}
           rows={1}
-          className="w-full px-3 py-2 text-sm bg-transparent text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 dark:placeholder-neutral-500 resize-none outline-none"
+          className="w-full px-3 py-2 text-sm bg-transparent text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 dark:placeholder-neutral-500 resize-none outline-hidden"
         />
         <div className="flex items-center justify-between px-2 pb-1.5">
           <div className="flex items-center gap-1">

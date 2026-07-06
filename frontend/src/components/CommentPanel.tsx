@@ -77,7 +77,7 @@ export const CommentPanelContent: React.FC<ContentProps> = ({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search comments..."
-              className="w-full !pl-9 !pr-3 !py-1.5 text-sm bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 dark:placeholder-neutral-500 outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-400 dark:focus:ring-indigo-500 focus:!border-transparent transition-colors"
+              className="w-full !pl-9 !pr-3 !py-1.5 text-sm bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 dark:placeholder-neutral-500 outline-hidden focus:ring-2 focus:ring-inset focus:ring-indigo-400 dark:focus:ring-indigo-500 focus:!border-transparent transition-colors"
             />
           </div>
         </div>
@@ -120,7 +120,7 @@ export const CommentPanelContent: React.FC<ContentProps> = ({
                 >
                   <div className="flex items-center gap-2 mb-1">
                     <div
-                      className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0"
+                      className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
                       style={{ backgroundColor: "#6366f1" }}
                     >
                       {initials}
@@ -128,7 +128,7 @@ export const CommentPanelContent: React.FC<ContentProps> = ({
                     <span className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 truncate">
                       {comment.user.name}
                     </span>
-                    <span className="text-xs text-neutral-400 dark:text-neutral-500 flex-shrink-0 ml-auto">
+                    <span className="text-xs text-neutral-400 dark:text-neutral-500 shrink-0 ml-auto">
                       {timeAgo(comment.createdAt)}
                     </span>
                   </div>

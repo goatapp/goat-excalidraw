@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 import fs from "fs";
 import path from "path";
 
@@ -27,7 +28,7 @@ export default defineConfig(({ command }) => {
   };
 
   return {
-    plugins: [react()],
+    plugins: [react(), tailwindcss()],
     define: {
       ...processEnvDefines,
       'import.meta.env.VITE_APP_VERSION': JSON.stringify(appVersion),

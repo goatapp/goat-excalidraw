@@ -656,7 +656,7 @@ export const Admin: React.FC = () => {
                 value={createEmail}
                 onChange={e => setCreateEmail(e.target.value)}
                 required
-                className="w-full px-4 py-3 bg-white dark:bg-neutral-800 border-2 border-slate-200 dark:border-neutral-700 rounded-xl text-slate-900 dark:text-white outline-none"
+                className="w-full px-4 py-3 bg-white dark:bg-neutral-800 border-2 border-slate-200 dark:border-neutral-700 rounded-xl text-slate-900 dark:text-white outline-hidden"
               />
             </div>
 
@@ -667,7 +667,7 @@ export const Admin: React.FC = () => {
                 value={createName}
                 onChange={e => setCreateName(e.target.value)}
                 required
-                className="w-full px-4 py-3 bg-white dark:bg-neutral-800 border-2 border-slate-200 dark:border-neutral-700 rounded-xl text-slate-900 dark:text-white outline-none"
+                className="w-full px-4 py-3 bg-white dark:bg-neutral-800 border-2 border-slate-200 dark:border-neutral-700 rounded-xl text-slate-900 dark:text-white outline-hidden"
               />
             </div>
 
@@ -677,7 +677,7 @@ export const Admin: React.FC = () => {
                 type="text"
                 value={createUsername}
                 onChange={e => setCreateUsername(e.target.value)}
-                className="w-full px-4 py-3 bg-white dark:bg-neutral-800 border-2 border-slate-200 dark:border-neutral-700 rounded-xl text-slate-900 dark:text-white outline-none"
+                className="w-full px-4 py-3 bg-white dark:bg-neutral-800 border-2 border-slate-200 dark:border-neutral-700 rounded-xl text-slate-900 dark:text-white outline-hidden"
               />
             </div>
 
@@ -717,7 +717,7 @@ export const Admin: React.FC = () => {
                   maxLength={passwordPolicy.maxLength}
                   pattern={passwordPolicy.patternHtml}
                   required
-                  className="w-full px-4 py-3 bg-white dark:bg-neutral-800 border-2 border-slate-200 dark:border-neutral-700 rounded-xl text-slate-900 dark:text-white outline-none"
+                  className="w-full px-4 py-3 bg-white dark:bg-neutral-800 border-2 border-slate-200 dark:border-neutral-700 rounded-xl text-slate-900 dark:text-white outline-hidden"
                 />
                 <PasswordRequirements
                   password={createPassword}
@@ -732,7 +732,7 @@ export const Admin: React.FC = () => {
               <select
                 value={createRole}
                 onChange={e => setCreateRole(e.target.value as 'ADMIN' | 'USER')}
-                className="w-full px-4 py-3 bg-white dark:bg-neutral-800 border-2 border-slate-200 dark:border-neutral-700 rounded-xl text-slate-900 dark:text-white outline-none"
+                className="w-full px-4 py-3 bg-white dark:bg-neutral-800 border-2 border-slate-200 dark:border-neutral-700 rounded-xl text-slate-900 dark:text-white outline-hidden"
               >
                 <option value="USER">USER</option>
                 <option value="ADMIN">ADMIN</option>

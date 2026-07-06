@@ -194,7 +194,7 @@ export const ImpersonationBanner: React.FC = () => {
     <div className="sticky top-0 z-[45] -mt-2 mb-6 rounded-xl border border-red-200 dark:border-red-800/50 bg-red-50/80 dark:bg-red-950/30 backdrop-blur-md px-3 py-2 shadow-sm transition-all duration-200">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <div className="flex items-center gap-3 min-w-0 flex-1">
-          <div className="flex items-center gap-1.5 text-red-700 dark:text-red-400 flex-shrink-0">
+          <div className="flex items-center gap-1.5 text-red-700 dark:text-red-400 shrink-0">
             <LogIn size={14} strokeWidth={2.5} />
             <span className="text-[10px] font-black uppercase tracking-wider">Impersonating</span>
           </div>
@@ -218,7 +218,7 @@ export const ImpersonationBanner: React.FC = () => {
               void switchTarget(e.target.value);
             }}
             disabled={busy || loadingTargets || options.length === 0}
-            className="h-8 min-w-[140px] max-w-[200px] px-2 rounded-lg border border-red-200 dark:border-red-800/50 bg-white/50 dark:bg-neutral-900/50 text-xs font-bold text-red-900 dark:text-red-100 outline-none hover:border-red-300 dark:hover:border-red-700 transition-colors disabled:opacity-50"
+            className="h-8 min-w-[140px] max-w-[200px] px-2 rounded-lg border border-red-200 dark:border-red-800/50 bg-white/50 dark:bg-neutral-900/50 text-xs font-bold text-red-900 dark:text-red-100 outline-hidden hover:border-red-300 dark:hover:border-red-700 transition-colors disabled:opacity-50"
           >
             {options.map((target) => (
               <option key={target.id} value={target.id}>
