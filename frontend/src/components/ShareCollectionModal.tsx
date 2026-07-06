@@ -53,7 +53,7 @@ const CustomSelect: React.FC<{
           e.stopPropagation();
           setIsOpen(!isOpen);
         }}
-        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-all text-sm font-bold outline-none hover:bg-gray-100 dark:hover:bg-neutral-800 text-slate-700 dark:text-neutral-300"
+        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-all text-sm font-bold outline-hidden hover:bg-gray-100 dark:hover:bg-neutral-800 text-slate-700 dark:text-neutral-300"
       >
         <span>{currentOption.label}</span>
         <ChevronDown size={14} className={clsx("transition-transform duration-200", isOpen && "rotate-180")} />
@@ -235,7 +235,7 @@ export const ShareCollectionModal: React.FC<Props> = ({ collectionId, collection
                 value={userQuery}
                 onChange={(e) => setUserQuery(e.target.value)}
                 placeholder="Add people"
-                className="w-full pl-10 pr-4 py-2 rounded-xl border-2 border-black dark:border-neutral-700 bg-slate-50 dark:bg-neutral-800 text-slate-900 dark:text-neutral-100 focus:outline-none focus:ring-0 focus:border-indigo-600 dark:focus:border-indigo-500 transition-all text-sm font-bold placeholder:text-slate-400 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.05)]"
+                className="w-full pl-10 pr-4 py-2 rounded-xl border-2 border-black dark:border-neutral-700 bg-slate-50 dark:bg-neutral-800 text-slate-900 dark:text-neutral-100 focus:outline-hidden focus:ring-0 focus:border-indigo-600 dark:focus:border-indigo-500 transition-all text-sm font-bold placeholder:text-slate-400 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.05)]"
               />
             </div>
 

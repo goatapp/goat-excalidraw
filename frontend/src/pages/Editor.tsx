@@ -2067,7 +2067,7 @@ export const Editor: React.FC = () => {
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 onBlur={() => setIsRenaming(false)}
-                className="font-medium text-gray-900 dark:text-white bg-transparent px-2 py-1 border-2 border-indigo-500 rounded-md outline-none min-w-[200px]"
+                className="font-medium text-gray-900 dark:text-white bg-transparent px-2 py-1 border-2 border-indigo-500 rounded-md outline-hidden min-w-[200px]"
                 style={{ width: `${Math.max(200, newName.length * 9 + 20)}px` }}
               />
             </form>

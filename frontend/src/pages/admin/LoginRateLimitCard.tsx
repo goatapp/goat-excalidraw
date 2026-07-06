@@ -86,7 +86,7 @@ export const LoginRateLimitCard: React.FC<LoginRateLimitCardProps> = ({
           min={1}
           value={windowMinutes}
           onChange={(event) => onWindowMinutesChange(Number(event.target.value))}
-          className="w-full px-4 py-3 bg-white dark:bg-neutral-800 border-2 border-slate-200 dark:border-neutral-700 rounded-xl text-slate-900 dark:text-white outline-none"
+          className="w-full px-4 py-3 bg-white dark:bg-neutral-800 border-2 border-slate-200 dark:border-neutral-700 rounded-xl text-slate-900 dark:text-white outline-hidden"
         />
       </div>
       <div>
@@ -98,7 +98,7 @@ export const LoginRateLimitCard: React.FC<LoginRateLimitCardProps> = ({
           min={1}
           value={maxAttempts}
           onChange={(event) => onMaxAttemptsChange(Number(event.target.value))}
-          className="w-full px-4 py-3 bg-white dark:bg-neutral-800 border-2 border-slate-200 dark:border-neutral-700 rounded-xl text-slate-900 dark:text-white outline-none"
+          className="w-full px-4 py-3 bg-white dark:bg-neutral-800 border-2 border-slate-200 dark:border-neutral-700 rounded-xl text-slate-900 dark:text-white outline-hidden"
         />
       </div>
     </div>
@@ -113,7 +113,7 @@ export const LoginRateLimitCard: React.FC<LoginRateLimitCardProps> = ({
           value={resetIdentifier}
           onChange={(event) => onResetIdentifierChange(event.target.value)}
           placeholder="user@example.com"
-          className="w-full px-4 py-3 bg-white dark:bg-neutral-800 border-2 border-slate-200 dark:border-neutral-700 rounded-xl text-slate-900 dark:text-white outline-none"
+          className="w-full px-4 py-3 bg-white dark:bg-neutral-800 border-2 border-slate-200 dark:border-neutral-700 rounded-xl text-slate-900 dark:text-white outline-hidden"
         />
         <datalist id="admin-user-identifiers">
           {userEmails.map((email) => (
@@ -121,7 +121,7 @@ export const LoginRateLimitCard: React.FC<LoginRateLimitCardProps> = ({
           ))}
         </datalist>
       </div>
-      <div className="flex items-center gap-3 flex-shrink-0">
+      <div className="flex items-center gap-3 shrink-0">
         <p className="text-xs sm:text-sm font-medium text-slate-500 dark:text-neutral-400">
           {getSaveStatusLabel(saving, autoSaveQueued, dirty)}
         </p>
