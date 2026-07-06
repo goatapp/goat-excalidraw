@@ -1,4 +1,4 @@
-import archiver from "archiver";
+import { ZipArchive } from "archiver";
 import { Prisma } from "../../generated/client/client.js";
 import { logger } from "../../utils/logger.js";
 import {
@@ -113,7 +113,7 @@ export const registerExcalidashExportRoute = (deps: RegisterImportExportDeps) =>
     res.setHeader("Content-Type", "application/zip");
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
 
-    const archive = archiver("zip", { zlib: { level: 9 } });
+    const archive = new ZipArchive({ zlib: { level: 9 } });
     const abortArchive = () => {
       try {
         archive.abort();
@@ -126,7 +126,7 @@ export const registerExcalidashExportRoute = (deps: RegisterImportExportDeps) =>
       abortArchive();
     });
 
-    archive.on("error", (err) => {
+    archive.on("error", (err: Error) => {
       logger.error({ err }, "Archive error");
       abortArchive();
 
