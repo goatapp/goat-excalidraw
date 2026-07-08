@@ -116,7 +116,6 @@ frontend/vendor/.commit
 .env.test
 
 # IDE/Editor files
-.vscode/
 .idea/
 *.swp
 *.swo
