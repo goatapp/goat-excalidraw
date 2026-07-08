@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "build": "prisma generate && tsc --checkers 4",
+    "build": "DATABASE_URL=\"file:./prisma/dev.db\" prisma generate && tsc --checkers 4",
     "predev": "node scripts/predev-migrate.js",
     "dev": "nodemon --exec tsx src/index.ts",
     "start": "node dist/index.js",
