@@ -40,7 +40,7 @@ jobs:
           npm run excalidraw:build-from-source -- --pack-only
 
       - name: Upload vendor tarballs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: excalidraw-vendor
           path: frontend/vendor/*.tgz
@@ -93,7 +93,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Download vendor tarballs
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: excalidraw-vendor
           path: frontend/vendor
@@ -146,7 +146,7 @@ jobs:
           DATABASE_URL: file:${{ github.workspace }}/backend/prisma/e2e-test.db
 
       - name: Download vendor tarballs
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: excalidraw-vendor
           path: frontend/vendor
@@ -220,7 +220,7 @@ jobs:
           DATABASE_URL: file:${{ github.workspace }}/backend/prisma/e2e-test.db
 
       - name: Upload Playwright report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: playwright-report
@@ -228,7 +228,7 @@ jobs:
           retention-days: 7
 
       - name: Upload test results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: test-results
