@@ -52,7 +52,7 @@ COPY backend/prisma ./prisma/
 RUN DATABASE_URL="file:./prisma/dev.db" npx prisma generate
 
 COPY backend/src ./src
-RUN npx tsc
+RUN npx tsc --checkers 4
 
 # Stage 3: Production
 FROM node:26-alpine

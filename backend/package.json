@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "build": "prisma generate && tsc",
+    "build": "prisma generate && tsc --checkers 4",
     "predev": "node scripts/predev-migrate.js",
     "dev": "nodemon --exec tsx src/index.ts",
     "start": "node dist/index.js",
@@ -16,7 +16,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit --checkers 4"
   },
   "keywords": [],
   "author": "",
@@ -68,7 +68,7 @@
     "pino-pretty": "^13.1.3",
     "supertest": "^7.2.2",
     "tsx": "^4.22.3",
-    "typescript": "^6.0.3",
+    "typescript": "^7.0.0",
     "vitest": "^4.1.7"
   }
 }
