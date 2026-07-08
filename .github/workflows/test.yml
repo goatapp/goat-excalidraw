@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Read excalidraw commit SHA
         id: read-commit
@@ -27,7 +27,7 @@ jobs:
 
       - name: Setup Node.js
         if: steps.vendor-cache.outputs.cache-hit != 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '26'
 
@@ -40,7 +40,7 @@ jobs:
           npm run excalidraw:build-from-source -- --pack-only
 
       - name: Upload vendor tarballs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: excalidraw-vendor
           path: frontend/vendor/*.tgz
@@ -51,10 +51,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '26'
           cache: 'npm'
@@ -83,17 +83,17 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '26'
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
       - name: Download vendor tarballs
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: excalidraw-vendor
           path: frontend/vendor
@@ -119,10 +119,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '26'
 
@@ -146,7 +146,7 @@ jobs:
           DATABASE_URL: file:${{ github.workspace }}/backend/prisma/e2e-test.db
 
       - name: Download vendor tarballs
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: excalidraw-vendor
           path: frontend/vendor
@@ -220,7 +220,7 @@ jobs:
           DATABASE_URL: file:${{ github.workspace }}/backend/prisma/e2e-test.db
 
       - name: Upload Playwright report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: playwright-report
@@ -228,7 +228,7 @@ jobs:
           retention-days: 7
 
       - name: Upload test results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: test-results
@@ -241,10 +241,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '26'
           cache: 'npm'
