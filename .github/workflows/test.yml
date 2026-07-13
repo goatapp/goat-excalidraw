@@ -175,7 +175,7 @@ jobs:
         run: |
           # Start backend server in background
           cd backend
-          DATABASE_URL="file:${{ github.workspace }}/backend/prisma/e2e-test.db" FRONTEND_URL="http://localhost:6767" npm run dev &
+          DATABASE_URL="file:${{ github.workspace }}/backend/prisma/e2e-test.db" FRONTEND_URL="http://localhost:6767" RATE_LIMIT_MAX_REQUESTS=0 CSRF_MAX_REQUESTS=10000 npm run dev &
           BACKEND_PID=$!
           cd ..
 
