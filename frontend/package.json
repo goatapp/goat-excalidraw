@@ -4,10 +4,9 @@
   "version": "0.5.0",
   "type": "module",
   "scripts": {
-    "postinstall": "node scripts/patch-eslint-typescript.mjs",
     "dev": "node scripts/copy-excalidraw-assets.mjs --public && vite --port 6767",
     "build": "tsc -b && vite build && node scripts/copy-excalidraw-assets.mjs --dist",
-    "lint": "eslint .",
+    "lint": "oxlint .",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -44,7 +43,6 @@
     "nanoid": ">=3.3.8"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.61.1",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.9.1",
@@ -55,17 +53,12 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
     "autoprefixer": "^10.5.2",
-    "eslint": "^10.6.0",
-    "eslint-plugin-react-hooks": "^7.1.1",
-    "eslint-plugin-react-refresh": "^0.5.3",
-    "globals": "^17.7.0",
     "happy-dom": "^20.10.6",
     "jsdom": "^29.1.1",
+    "oxlint": "1.73.0",
     "postcss": "^8.5.16",
     "tailwindcss": "^4.3.2",
     "typescript": "^7.0.0",
-    "typescript-eslint": "^8.62.1",
-    "typescript6": "npm:typescript@6.0.3",
     "vite": "^8.1.0",
     "vitest": "^4.1.9"
   }
