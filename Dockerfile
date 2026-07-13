@@ -6,6 +6,7 @@ RUN apk add --no-cache git bash && npm install -g yarn
 WORKDIR /app/frontend
 
 COPY frontend/package*.json ./
+COPY frontend/.npmrc ./
 COPY frontend/.excalidraw-commit ./
 COPY frontend/scripts ./scripts/
 COPY frontend/vendor* ./vendor/

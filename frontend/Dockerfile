@@ -7,6 +7,7 @@ WORKDIR /app/frontend
 
 # Copy package files first for better caching
 COPY frontend/package*.json ./
+COPY frontend/.npmrc ./
 COPY frontend/.excalidraw-commit ./
 COPY frontend/scripts ./scripts/
 COPY frontend/vendor* ./vendor/
