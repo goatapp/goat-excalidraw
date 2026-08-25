@@ -1,7 +1,6 @@
 import { useEffect, useRef, useCallback, type MutableRefObject } from "react";
 import * as api from "../../api";
-import { reconcileElements } from "../../utils/sync";
-import { buildRemoteSceneUpdate } from "./shared";
+import { reconcileRemoteScene } from "./reconcileRemoteScene";
 
 const HEARTBEAT_INTERVAL_MS = 45_000;
 const VISIBILITY_COOLDOWN_MS = 2_000;
@@ -56,34 +55,26 @@ export function useStalenessRecovery({
         return;
       }
 
-      const freshDrawing = await api.getDrawing(drawingId);
-      const remoteElements = freshDrawing.elements || [];
-      const remoteFiles = await resolveS3Files(freshDrawing.files || {});
-
-      const localElements = latestElementsRef.current;
-      const { sceneUpdate, mergedElements, nextFiles } = buildRemoteSceneUpdate({
-        localElements,
-        pendingElements: remoteElements,
-        lastSyncedFiles: lastSyncedFilesRef.current,
-        incomingFiles: remoteFiles,
+      const { elements: merged, files: nextFiles, version } = await reconcileRemoteScene({
+        drawingId,
+        getAPI,
+        currentDrawingVersionRef,
+        latestElementsRef,
+        latestFilesRef,
+        lastSyncedFilesRef,
+        lastSyncedElementOrderSigRef,
+        recordElementVersion,
+        computeElementOrderSig,
+        resolveS3Files,
       });
 
-      const merged = mergedElements ?? reconcileElements(localElements, remoteElements);
-
-      const excalidraw = getAPI();
-      if (excalidraw && sceneUpdate) {
-        excalidraw.updateScene(sceneUpdate);
+      if (version === null) {
+        currentDrawingVersionRef.current = serverVersion;
       }
-
-      currentDrawingVersionRef.current =
-        typeof freshDrawing.version === "number" ? freshDrawing.version : serverVersion;
-      latestElementsRef.current = merged;
-      latestFilesRef.current = nextFiles;
-      lastSyncedFilesRef.current = nextFiles;
+      // Everything merged in here came from the server, so it is already
+      // persisted — unlike the save-conflict path, which still owes the server
+      // its local files.
       lastPersistedFilesRef.current = nextFiles;
-      lastSyncedElementOrderSigRef.current = computeElementOrderSig(merged);
-
-      merged.forEach(recordElementVersion);
       lastRecoveryAtRef.current = Date.now();
 
       console.log("[Editor] Staleness recovery complete", {

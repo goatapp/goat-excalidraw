@@ -40,6 +40,9 @@ import type { ElementVersionInfo } from './editor/shared';
 import { useEditorChrome } from './editor/useEditorChrome';
 import { useEditorIdentity } from './editor/useEditorIdentity';
 import { useStalenessRecovery } from './editor/useStalenessRecovery';
+import { reconcileRemoteScene } from './editor/reconcileRemoteScene';
+import { useUnloadSave } from './editor/useUnloadSave';
+import { DrawingSaveConflictError, saveWithConflictRetry } from './editor/saveConflictRetry';
 import { ShareModal } from '../components/ShareModal';
 import { HistoryPanelContent } from '../components/HistoryPanel';
 import { CommentPanelContent } from '../components/CommentPanel';
@@ -241,13 +244,6 @@ const getElementContentSig = (element: any): string => {
 
   return `${type}|${isDeleted}|${status}|${x}|${y}|${w}|${h}|${angle}|${pointsSig}|${fileId}|${textSig}`;
 };
-
-class DrawingSaveConflictError extends Error {
-  constructor(message = "Drawing version conflict") {
-    super(message);
-    this.name = "DrawingSaveConflictError";
-  }
-}
 
 export const Editor: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -976,6 +972,14 @@ export const Editor: React.FC = () => {
   });
   stalenessRecoveryRef.current = triggerStalenessRecovery;
 
+  useUnloadSave({
+    drawingId: id,
+    latestElementsRef,
+    latestAppStateRef,
+    lastPersistedElementsRef,
+    currentDrawingVersionRef,
+  });
+
   const handleNewCommentDragStart = useCallback((e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest("button, textarea")) return;
     e.preventDefault();
@@ -1234,9 +1238,6 @@ export const Editor: React.FC = () => {
             });
           }
         }
-        const filesChangedSincePersist =
-          Object.keys(getFilesDelta(lastPersistedFilesRef.current || {}, persistableFiles || {}))
-            .length > 0;
         const normalizedElements = normalizeImageElementStatus(
           persistableElements,
           persistableFiles
@@ -1250,48 +1251,59 @@ export const Editor: React.FC = () => {
           appState: persistableAppState,
         });
 
-        const persistScene = async (attempt: number): Promise<void> => {
-          try {
-            const updated = await api.updateDrawing(drawingId, {
-              elements: normalizedElementsForSave,
-              appState: persistableAppState,
-              ...(filesChangedSincePersist ? { files: persistableFiles } : {}),
-              version: currentDrawingVersionRef.current ?? undefined,
-            });
-            if (typeof updated.version === "number") {
-              currentDrawingVersionRef.current = updated.version;
-            }
-            lastPersistedElementsRef.current = normalizedElementsForSave;
-            if (filesChangedSincePersist) {
-              const serverFiles = updated.files || persistableFiles;
-              lastPersistedFilesRef.current = serverFiles;
-            }
-            console.log("[Editor] Save complete", { drawingId });
-          } catch (err) {
-            if (api.isAxiosError(err) && err.response?.status === 409) {
-              const reportedVersion = Number(err.response?.data?.currentVersion);
-              const hasReportedVersion = Number.isInteger(reportedVersion) && reportedVersion > 0;
-              if (hasReportedVersion) {
-                currentDrawingVersionRef.current = reportedVersion;
-              }
-
-              if (attempt === 0 && hasReportedVersion) {
-                console.warn("[Editor] Version conflict while saving drawing, retrying once", {
-                  drawingId,
-                  currentVersion: reportedVersion,
-                });
-                await persistScene(1);
-                return;
-              }
-
-              throw new DrawingSaveConflictError();
-            }
-
-            throw err;
+        const persistScene = async (
+          elementsToSave: readonly any[],
+          filesToSave: Record<string, any>
+        ) => {
+          const filesChanged =
+            Object.keys(getFilesDelta(lastPersistedFilesRef.current || {}, filesToSave || {}))
+              .length > 0;
+          const elementsForSave = Array.from(elementsToSave);
+          const updated = await api.updateDrawing(drawingId, {
+            elements: elementsForSave,
+            appState: persistableAppState,
+            ...(filesChanged ? { files: filesToSave } : {}),
+            version: currentDrawingVersionRef.current ?? undefined,
+          });
+          if (typeof updated.version === "number") {
+            currentDrawingVersionRef.current = updated.version;
           }
+          lastPersistedElementsRef.current = elementsForSave;
+          if (filesChanged) {
+            lastPersistedFilesRef.current = updated.files || filesToSave;
+          }
+          console.log("[Editor] Save complete", { drawingId });
         };
 
-        await persistScene(0);
+        await saveWithConflictRetry({
+          save: persistScene,
+          // A conflict means another client committed a newer version. Merge
+          // their scene into ours before retrying — re-sending our stale scene
+          // under their version number would silently discard their work.
+          reconcile: async () => {
+            console.warn("[Editor] Version conflict while saving drawing, reconciling", {
+              drawingId,
+            });
+            const { elements, files } = await reconcileRemoteScene({
+              drawingId,
+              getAPI,
+              currentDrawingVersionRef,
+              latestElementsRef,
+              latestFilesRef,
+              lastSyncedFilesRef,
+              lastSyncedElementOrderSigRef,
+              recordElementVersion,
+              computeElementOrderSig,
+              resolveS3Files,
+            });
+            return {
+              elements: normalizeImageElementStatus(elements, files),
+              files,
+            };
+          },
+          elements: normalizedElementsForSave,
+          files: persistableFiles,
+        });
       } catch (err) {
         if (err instanceof DrawingSaveConflictError) {
           console.warn("[Editor] Version conflict while saving drawing", { drawingId });

@@ -61,6 +61,14 @@ export const clearCsrfToken = (): void => {
   csrfToken = null;
 };
 
+/**
+ * Current CSRF header for callers that bypass the axios instance (and therefore
+ * its request interceptor) — notably the `fetch(..., { keepalive: true })`
+ * unload save. Returns null when no token has been fetched yet.
+ */
+export const getCsrfHeader = (): { name: string; token: string } | null =>
+  csrfToken ? { name: csrfHeaderName, token: csrfToken } : null;
+
 export interface AuthStatusResponse {
   authEnabled?: boolean;
   enabled?: boolean;
