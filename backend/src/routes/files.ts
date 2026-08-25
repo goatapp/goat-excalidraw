@@ -52,8 +52,16 @@ export const registerFileRoutes = (
       }
 
       const { body, contentType } = await downloadObject(fileRecord.s3Key);
-      if (contentType) {
-        res.setHeader("Content-Type", contentType);
+      // An object stored without (or with a generic) Content-Type would reach
+      // the client as application/octet-stream, which makes the re-inlined
+      // data: URL undecodable as an image. The stored mimeType is authoritative.
+      const isImageContentType = /^image\//i.test(contentType || "");
+      const resolvedContentType =
+        !isImageContentType && /^image\//i.test(fileRecord.mimeType || "")
+          ? fileRecord.mimeType
+          : contentType;
+      if (resolvedContentType) {
+        res.setHeader("Content-Type", resolvedContentType);
       }
       res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
       return body.pipe(res);

@@ -22,6 +22,11 @@ import type { UserIdentity } from '../utils/identity';
 import { useAuth } from '../context/AuthContext';
 import { exportFromEditor } from '../utils/exportUtils';
 import { compressDroppedImagePayload, compressExcalidrawFiles } from '../utils/imageCompression';
+import {
+  normalizeSvgDataUrls,
+  rehydrateFilesFromRefs,
+  rehydrateFilesProgressive,
+} from '../utils/rehydrateFiles';
 import * as api from '../api';
 import { io, type Socket } from 'socket.io-client';
 import { useTheme } from '../context/ThemeContext';
@@ -65,28 +70,6 @@ type DroppedImageData = {
   height: number;
 };
 
-const normalizeSvgDataUrls = (files: Record<string, any>): Record<string, any> => {
-  let changed = false;
-  const result = { ...files };
-  for (const [key, file] of Object.entries(result)) {
-    if (
-      typeof file?.dataURL === "string" &&
-      file.dataURL.startsWith("data:image/svg+xml;utf8,")
-    ) {
-      try {
-        const encoded = file.dataURL.slice(file.dataURL.indexOf(",") + 1);
-        const svgContent = decodeURIComponent(encoded);
-        const base64 = btoa(unescape(encodeURIComponent(svgContent)));
-        result[key] = { ...file, dataURL: `data:image/svg+xml;base64,${base64}` };
-        changed = true;
-      } catch {
-        // leave as-is
-      }
-    }
-  }
-  return changed ? result : files;
-};
-
 const blobToDataUrl = (blob: Blob): Promise<string> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -95,32 +78,7 @@ const blobToDataUrl = (blob: Blob): Promise<string> =>
     reader.readAsDataURL(blob);
   });
 
-const resolveS3Files = async (
-  files: Record<string, any>,
-): Promise<Record<string, any>> => {
-  const normalized = normalizeSvgDataUrls(files);
-  const entries = Object.entries(normalized);
-  const needsFetch = entries.filter(
-    ([, f]) => typeof f?.dataURL === "string" && f.dataURL.startsWith("/api/files/"),
-  );
-  if (needsFetch.length === 0) return normalized;
-
-  const resolved = { ...normalized };
-  await Promise.all(
-    needsFetch.map(async ([key, file]) => {
-      try {
-        const path = file.dataURL.replace(/^\/api\//, "/");
-        const resp = await api.api.get(path, { responseType: "blob" });
-        const blob = resp.data as Blob;
-        const dataUrl = await blobToDataUrl(blob);
-        resolved[key] = { ...file, dataURL: dataUrl };
-      } catch {
-        // leave as-is — image will fail to render but drawing still loads
-      }
-    }),
-  );
-  return resolved;
-};
+const resolveS3Files = rehydrateFilesFromRefs;
 
 
 const toFiniteNumber = (value: any): number => {
@@ -343,6 +301,8 @@ export const Editor: React.FC = () => {
   const hasHydratedInitialScene = useRef(false);
   const isUnmounting = useRef(false);
   const isSyncing = useRef(false);
+  /** Rehydrated images awaiting an Excalidraw API to push them into. */
+  const pendingHydratedFilesRef = useRef<Record<string, any>>({});
   const cursorBuffer = useRef<Map<string, any>>(new Map());
   const animationFrameId = useRef<number>(0);
   const latestElementsRef = useRef<readonly any[]>([]);
@@ -1077,6 +1037,18 @@ export const Editor: React.FC = () => {
         }
       };
     }
+    // Images that finished rehydrating before Excalidraw handed back its API.
+    const pendingHydrated = Object.values(pendingHydratedFilesRef.current);
+    if (pendingHydrated.length > 0 && typeof api.addFiles === "function") {
+      pendingHydratedFilesRef.current = {};
+      isSyncing.current = true;
+      try {
+        api.addFiles(pendingHydrated);
+      } finally {
+        isSyncing.current = false;
+      }
+    }
+
     setIsReady(true);
   }, [emitFilesDeltaIfNeeded, id]);
 
@@ -1545,9 +1517,11 @@ export const Editor: React.FC = () => {
   /* eslint-enable react-hooks/refs */
 
   useEffect(() => {
+    let cancelled = false;
     isBootstrappingScene.current = true;
     hasHydratedInitialScene.current = false;
     elementVersionMap.current.clear();
+    pendingHydratedFilesRef.current = {};
     saveQueueRef.current = Promise.resolve();
     latestElementsRef.current = [];
     initialSceneElementsRef.current = [];
@@ -1598,7 +1572,10 @@ export const Editor: React.FC = () => {
         );
 
         const elements = data.elements || [];
-        const files = await resolveS3Files(data.files || {});
+        // Paint with the stored file references and stream the images in as
+        // they download (below). Awaiting every image here meant a drawing with
+        // several photos showed a blank canvas until the slowest one landed.
+        const files = normalizeSvgDataUrls(data.files || {});
         const hasPreview = typeof data.preview === "string" && data.preview.trim().length > 0;
         const loadedRenderable = hasRenderableElements(elements);
         suspiciousBlankLoadRef.current = !loadedRenderable && hasPreview;
@@ -1641,6 +1618,33 @@ export const Editor: React.FC = () => {
           scrollToContent: true,
           libraryItems,
         });
+
+        // Inline each stored file reference as it arrives. `isSyncing` keeps the
+        // patched `addFiles` from treating a rehydrated image as a local edit
+        // and rebroadcasting it. Files that land before Excalidraw hands back
+        // its API are held and flushed by `setExcalidrawAPI`.
+        void rehydrateFilesProgressive(
+          files,
+          (fileId, file) => {
+            const hydrated = { ...latestFilesRef.current, [fileId]: file };
+            latestFilesRef.current = hydrated;
+            lastSyncedFilesRef.current = hydrated;
+            lastPersistedFilesRef.current = hydrated;
+
+            const excalidraw = getAPI();
+            if (excalidraw && typeof excalidraw.addFiles === "function") {
+              isSyncing.current = true;
+              try {
+                excalidraw.addFiles([file]);
+              } finally {
+                isSyncing.current = false;
+              }
+            } else {
+              pendingHydratedFilesRef.current[fileId] = file;
+            }
+          },
+          () => cancelled
+        );
 
         // Load comments and collaborators for @mentions
         api.getComments(id).then(({ comments: c }) => {
@@ -1698,6 +1702,9 @@ export const Editor: React.FC = () => {
       }
     };
     loadData();
+    return () => {
+      cancelled = true;
+    };
   }, [
     id,
     recordElementVersion,
