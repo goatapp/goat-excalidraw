@@ -57,7 +57,9 @@ RUN npx tsc --checkers 4
 # Stage 3: Production
 FROM node:26-alpine
 
-RUN apk add --no-cache openssl su-exec && \
+COPY --from=litestream/litestream:0.5.12-scratch /usr/local/bin/litestream /usr/local/bin/litestream
+
+RUN apk add --no-cache openssl su-exec sqlite && \
     addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
 
@@ -81,6 +83,7 @@ COPY --from=frontend-builder /app/frontend/dist ./public
 COPY --from=frontend-builder /app/VERSION ./VERSION
 
 COPY scripts/s3-sync.mjs ./scripts/s3-sync.mjs
+COPY litestream.yml /etc/litestream.yml
 COPY docker-entrypoint.combined.sh ./docker-entrypoint.combined.sh
 RUN chmod +x docker-entrypoint.combined.sh
 
