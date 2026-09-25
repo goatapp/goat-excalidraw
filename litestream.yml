@@ -1,0 +1,17 @@
+logging:
+  level: $LOG_LEVEL
+
+dbs:
+  - path: /app/prisma/dev.db
+    replicas:
+      - type: s3
+        bucket: $S3_BUCKET_NAME
+        path: ${LITESTREAM_S3_PATH}
+        endpoint: $AWS_ENDPOINT_URL
+        region: $AWS_REGION
+        force-path-style: $S3_FORCE_PATH_STYLE
+        access-key-id: $AWS_ACCESS_KEY_ID
+        secret-access-key: $AWS_SECRET_ACCESS_KEY
+        sync-interval: ${LITESTREAM_SYNC_INTERVAL}
+        snapshot-interval: ${LITESTREAM_SNAPSHOT_INTERVAL}
+        retention: ${LITESTREAM_RETENTION}
