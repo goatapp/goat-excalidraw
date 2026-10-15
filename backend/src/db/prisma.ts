@@ -12,6 +12,7 @@ function configureSqlitePragmas(url: string): void {
   const filePath = url.replace(/^file:/, "");
   const db = new Database(filePath);
   db.pragma("journal_mode=WAL");
+  db.pragma("busy_timeout=5000");
   db.pragma("synchronous=NORMAL");
   db.pragma("journal_size_limit=67108864");
   db.close();
