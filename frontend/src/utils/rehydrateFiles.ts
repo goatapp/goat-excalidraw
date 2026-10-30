@@ -4,7 +4,7 @@
  * In S3 storage mode a drawing's `files[fileId].dataURL` is not an inline
  * base64 `data:` URL but a same-origin `/api/files/<drawingId>/<fileId>`
  * reference. Excalidraw can render a raster `<img>` from such a reference, but
- * SVG image elements fail, and `exportToSvg` embeds the bare reference as the
+ * SVG image elements fail, and `exportScene` embeds the bare reference as the
  * `<image href>` — which the backend preview sanitizer drops, so thumbnails
  * lose every image. Each reference is therefore fetched and re-inlined as a
  * base64 `data:` URL before the files reach Excalidraw.

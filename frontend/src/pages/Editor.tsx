@@ -11,7 +11,7 @@ import {
   MainMenu,
   Sidebar,
   convertToExcalidrawElements,
-  exportToBlob,
+  exportScene,
   viewportCoordsToSceneCoords,
 } from '@excalidraw/excalidraw';
 import { getInitialLangCode, LanguageSelector } from '../components/LanguageSelector';
@@ -1354,17 +1354,21 @@ export const Editor: React.FC = () => {
         }
 
         const visibleElements = normalizedSnapshot.filter((el: any) => !el.isDeleted);
-        const blob = await exportToBlob({
-          elements: visibleElements,
-          appState: {
-            ...appState,
-            exportBackground: true,
-            viewBackgroundColor: appState.viewBackgroundColor || '#ffffff',
+        // exportScene only encodes png/jpeg, so render to a canvas and encode webp ourselves.
+        const canvas = await exportScene({
+          type: 'canvas',
+          data: { elements: visibleElements, appState, files: currentFiles },
+          config: {
+            canvasBackgroundColor: appState.viewBackgroundColor || '#ffffff',
+            maxWidthOrHeight: 600,
           },
-          files: currentFiles,
-          maxWidthOrHeight: 600,
-          mimeType: 'image/webp',
-          quality: 0.75,
+        });
+        const blob = await new Promise<Blob>((resolve, reject) => {
+          canvas.toBlob(
+            (b) => (b ? resolve(b) : reject(new Error('Failed to encode preview'))),
+            'image/webp',
+            0.75,
+          );
         });
         const preview = await blobToDataUrl(blob);
         await api.updateDrawing(drawingId, { preview });

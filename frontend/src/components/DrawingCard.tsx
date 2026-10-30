@@ -147,19 +147,21 @@ export const DrawingCard: React.FC<DrawingCardProps> = ({
         if (cancelled) return;
         if (!data?.elements || !data?.appState) return;
 
-        const { exportToSvg } = await import("@excalidraw/excalidraw");
+        const { exportScene } = await import("@excalidraw/excalidraw");
         
         if (cancelled) return;
 
-        const svg = await exportToSvg({
-          elements: normalizeImageElementsForPreview(data.elements, data.files || {}),
-          appState: {
-            ...data.appState,
-            exportBackground: true,
-            viewBackgroundColor: data.appState.viewBackgroundColor || "#ffffff"
+        const svg = await exportScene({
+          type: "svg",
+          data: {
+            elements: normalizeImageElementsForPreview(data.elements, data.files || {}),
+            appState: data.appState,
+            files: data.files || {},
           },
-          files: data.files || {},
-          exportPadding: 10
+          config: {
+            canvasBackgroundColor: data.appState.viewBackgroundColor || "#ffffff",
+            padding: 10
+          }
         });
         if (cancelled) return;
         const previewHtml = svg.outerHTML;
