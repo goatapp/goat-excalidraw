@@ -1,4 +1,4 @@
-import { exportToSvg } from "@excalidraw/excalidraw";
+import { exportScene } from "@excalidraw/excalidraw";
 import { api } from "../api";
 import { type UploadStatus } from "../context/UploadContext";
 
@@ -93,15 +93,13 @@ const makeSvgPreview = async (
   appState: Record<string, any>,
   files: Record<string, any>
 ) => {
-  return exportToSvg({
-    elements,
-    appState: {
-      ...appState,
-      exportBackground: true,
-      viewBackgroundColor: appState.viewBackgroundColor || "#ffffff",
+  return exportScene({
+    type: "svg",
+    data: { elements, appState, files: files || {} },
+    config: {
+      canvasBackgroundColor: appState.viewBackgroundColor || "#ffffff",
+      padding: 10,
     },
-    files: files || {},
-    exportPadding: 10,
   });
 };
 
@@ -460,16 +458,18 @@ export const importLegacyFiles = async (
               collectionId = null;
             }
 
-            const svg = await exportToSvg({
-              elements: extracted.elements,
-              appState: {
-                ...extracted.appState,
-                exportBackground: true,
-                viewBackgroundColor:
-                  (extracted.appState as any).viewBackgroundColor || "#ffffff",
+            const svg = await exportScene({
+              type: "svg",
+              data: {
+                elements: extracted.elements,
+                appState: extracted.appState,
+                files: extracted.files,
               },
-              files: extracted.files,
-              exportPadding: 10,
+              config: {
+                canvasBackgroundColor:
+                  (extracted.appState as any).viewBackgroundColor || "#ffffff",
+                padding: 10,
+              },
             });
 
             const payload = {

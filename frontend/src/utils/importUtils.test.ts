@@ -10,9 +10,9 @@ vi.mock("../api", () => ({
   },
 }));
 
-const exportToSvg = vi.fn(async () => ({ outerHTML: "<svg />" }));
+const exportScene = vi.fn(async () => ({ outerHTML: "<svg />" }));
 vi.mock("@excalidraw/excalidraw", () => ({
-  exportToSvg: (...args: any[]) => exportToSvg(...args),
+  exportScene: (...args: any[]) => exportScene(...args),
 }));
 
 import { importLegacyFiles } from "./importUtils";
@@ -75,7 +75,7 @@ describe("importLegacyFiles", () => {
   beforeEach(() => {
     apiGet.mockReset();
     apiPost.mockReset();
-    exportToSvg.mockClear();
+    exportScene.mockClear();
   });
 
   it("imports a legacy ExcaliDash export JSON ({ drawings: [...] }) and maps collectionName → collectionId", async () => {
@@ -133,7 +133,7 @@ describe("importLegacyFiles", () => {
     expect(drawCalls[1][1].collectionId).toBe("col-new");
     expect(drawCalls[2][1].collectionId).toBe("trash");
 
-    expect(exportToSvg).toHaveBeenCalledTimes(3);
+    expect(exportScene).toHaveBeenCalledTimes(3);
   });
 
   it("honors targetCollectionId override for legacy export JSON", async () => {
@@ -188,7 +188,7 @@ describe("importLegacyFiles", () => {
     const drawCalls = apiPost.mock.calls.filter((c) => c[0] === "/drawings");
     expect(drawCalls).toHaveLength(1);
     expect(drawCalls[0][1].name).toBe("hello");
-    expect(exportToSvg).toHaveBeenCalledTimes(1);
+    expect(exportScene).toHaveBeenCalledTimes(1);
   });
 
   it("imports a v0.3.x Export Data (JSON) zip (/export/json) into collections by folder", async () => {
