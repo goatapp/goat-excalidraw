@@ -227,6 +227,26 @@ export const getFilesDelta = (
   return delta;
 };
 
+// The minimap is a per-user viewing preference, so it lives in localStorage
+// rather than in the drawing's persisted appState (which collaborators share).
+export const MINIMAP_STORAGE_KEY = "excalidash-minimap";
+
+export const getStoredMinimapEnabled = (): boolean => {
+  try {
+    return localStorage.getItem(MINIMAP_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+};
+
+export const setStoredMinimapEnabled = (enabled: boolean): void => {
+  try {
+    localStorage.setItem(MINIMAP_STORAGE_KEY, String(enabled));
+  } catch {
+    // ignore localStorage errors in restricted environments
+  }
+};
+
 export const UIOptions = {
   canvasActions: {
     saveToActiveFile: false,

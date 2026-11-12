@@ -33,6 +33,8 @@ import { useTheme } from '../context/ThemeContext';
 import {
   buildRemoteSceneUpdate,
   getPersistedAppState,
+  getStoredMinimapEnabled,
+  setStoredMinimapEnabled,
   UIOptions,
   getFilesDelta,
   hasRenderableElements,
@@ -226,6 +228,7 @@ export const Editor: React.FC = () => {
   const [isRenaming, setIsRenaming] = useState(false);
   const [newName, setNewName] = useState('');
   const [initialData, setInitialData] = useState<any>(null);
+  const minimapEnabledRef = useRef<boolean>(getStoredMinimapEnabled());
   const [isSceneLoading, setIsSceneLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isSavingOnLeave, setIsSavingOnLeave] = useState(false);
@@ -1143,6 +1146,7 @@ export const Editor: React.FC = () => {
     appState: {
       viewBackgroundColor: '#ffffff',
       gridSize: null,
+      minimapEnabled: minimapEnabledRef.current,
       collaborators: new Map(),
     },
     files: {},
@@ -1611,6 +1615,7 @@ export const Editor: React.FC = () => {
         const persistedAppState = getPersistedAppState(data.appState || {});
         const hydratedAppState = {
           ...persistedAppState,
+          minimapEnabled: minimapEnabledRef.current,
           collaborators: new Map(),
         };
         latestAppStateRef.current = hydratedAppState;
@@ -2274,6 +2279,13 @@ export const Editor: React.FC = () => {
                 const next = { scrollX: nextScrollX, scrollY: nextScrollY, zoom: nextZoom };
                 commentAppStateRef.current = next;
                 setCommentAppState(next);
+              }
+              // Persist the minimap toggle per user (before handleCanvasChange,
+              // which bails out for viewers who can still toggle it).
+              const nextMinimapEnabled = Boolean(appState.minimapEnabled);
+              if (nextMinimapEnabled !== minimapEnabledRef.current) {
+                minimapEnabledRef.current = nextMinimapEnabled;
+                setStoredMinimapEnabled(nextMinimapEnabled);
               }
               handleCanvasChange(elements, appState, files);
             }}
